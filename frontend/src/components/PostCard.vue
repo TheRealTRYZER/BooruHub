@@ -1,0 +1,101 @@
+<template>
+  <div class="post-card" @click="$router.push({ name: 'post', query: { id: post.id, site: post.source_site } })">
+    <div class="post-card-media" :style="mediaStyle">
+      <img class="post-card-img"
+           :src="loaded ? currentUrl : placeholder"
+           :alt="'Post ' + post.id"
+           loading="lazy"
+           :style="{ opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease-in-out', width: '100%', height: '100%', objectFit: 'cover' }"
+           @load="loaded = true"
+           @error="onError" />
+    </div>
+    <div class="post-card-overlay">
+      <div class="post-card-meta">
+        <span class="post-card-badge" :class="post.source_site">{{ post.source_site }}</span>
+        <span class="post-card-rating" :class="ratingClass">{{ ratingLabel }}</span>
+        <span v-if="isAnimated" class="post-card-badge" style="background:#ff4757;color:white;">▶</span>
+        <span v-if="post.score !== undefined" class="post-card-score">★ {{ post.score }}</span>
+      </div>
+    </div>
+    <button class="post-card-fav" :class="{ active: isFav }"
+            @click.stop="toggleFav"
+            :title="lang.t('nav_favorites')">
+      {{ isFav ? '❤️' : '🤍' }}
+    </button>
+  </div>
+</template>
+
+<script setup>
+import { ref, computed } from 'vue'
+import { useAuthStore } from '../stores/auth.js'
+import { useToastStore } from '../stores/toast.js'
+import { useLangStore } from '../stores/lang.js'
+import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite } from '../api.js'
+
+const props = defineProps({
+  post: { type: Object, required: true },
+  favorite: { type: Boolean, default: false },
+})
+
+const auth = useAuthStore()
+const toast = useToastStore()
+const lang = useLangStore()
+const loaded = ref(false)
+const isFav = ref(props.favorite)
+const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="10" height="10"%3E%3C/svg%3E'
+
+const currentUrl = ref(props.post.sample_url || props.post.preview_url || '')
+const isAnimated = computed(() =>
+  ['gif', 'webm', 'mp4', 'm4v', 'mov', 'mkv'].includes((props.post.file_ext || '').toLowerCase())
+)
+
+const ratingMap = { g: 'safe', general: 'safe', s: 'safe', q: 'questionable', questionable: 'questionable', e: 'explicit', explicit: 'explicit' }
+const ratingLabels = { safe: 'S', questionable: 'Q', explicit: 'E', unknown: '?' }
+
+const ratingClass = computed(() => ratingMap[(props.post.rating || '').toLowerCase()] || 'unknown')
+const ratingLabel = computed(() => ratingLabels[ratingClass.value] || '?')
+
+const mediaStyle = computed(() => {
+  const p = props.post
+  if (p.width && p.height) {
+    return { aspectRatio: `${p.width} / ${p.height}`, background: 'var(--bg-secondary)', overflow: 'hidden' }
+  }
+  return { minHeight: '200px', background: 'var(--bg-secondary)', overflow: 'hidden' }
+})
+
+function onError(e) {
+  // If sample failed, try preview
+  if (currentUrl.value !== props.post.preview_url && props.post.preview_url) {
+    console.log('Sample failed, falling back to preview:', props.post.id)
+    currentUrl.value = props.post.preview_url
+    return
+  }
+  
+  e.target.style.minHeight = '200px'
+  e.target.style.opacity = '1'
+  e.target.style.background = 'var(--bg-secondary)'
+  loaded.value = true
+}
+
+function toggleFav() {
+  if (!auth.isAuthenticated) {
+    toast.show(lang.t('login_to_fav'), 'error')
+    return
+  }
+  try {
+    if (isFav.value) {
+      apiCheckFavorite(props.post.source_site, props.post.id).then(check => {
+          if (check.favorite_id) apiRemoveFavorite(check.favorite_id)
+      })
+      isFav.value = false
+      toast.show(lang.t('removed_fav'), 'info')
+    } else {
+      apiAddFavorite(props.post)
+      isFav.value = true
+      toast.show(lang.t('added_fav'), 'success')
+    }
+  } catch (e) {
+    toast.show(e.message, 'error')
+  }
+}
+</script>
