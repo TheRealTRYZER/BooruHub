@@ -11,7 +11,7 @@
         </div>
         <div class="input-group">
           <label class="input-label">Email</label>
-          <input type="email" class="input" v-model="email" placeholder="you@example.com" required autocomplete="email">
+          <input type="email" class="input" v-model="email" placeholder="tryzer07@gmail.com" required autocomplete="email">
         </div>
         <div class="input-group">
           <label class="input-label">{{ lang.t('password') }}</label>

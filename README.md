@@ -12,11 +12,11 @@
 - **Secure Store**: All API keys are stored **encrypted (AES-256)** on the backend.
 - **Full Localization**: Seamlessly switch between **English** and **Russian** languages.
 
-## ⚖Disclaimer
+## Disclaimer
 
-⚠️ **18+ only.** This project aggregates content from adult-oriented imageboards. No third-party content is hosted or stored by this application. Use at your own risk and according to the laws of your jurisdiction.
+**18+ only.** This project aggregates content from adult-oriented imageboards. No third-party content is hosted or stored by this application. Use at your own risk and according to the laws of your jurisdiction.
 
 ---
 
 ## License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.s
