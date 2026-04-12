@@ -249,16 +249,19 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .post-card-rating.questionable { background: #f39c12; color: #fff; }
 .post-card-rating.explicit { background: #e74c3c; color: #fff; }
 
-.post-card-fav {
-  position: absolute; top: 8px; right: 8px;
+.post-card-fav, .post-card-dislike {
+  position: absolute; right: 8px;
   width: 32px; height: 32px; border-radius: 50%;
   background: rgba(0,0,0,0.5); color: #fff; border: none;
   display: flex; align-items: center; justify-content: center;
   font-size: 14px; cursor: pointer; opacity: 0; transition: all 0.2s;
 }
-.post-card:hover .post-card-fav { opacity: 1; }
-.post-card-fav:hover { background: rgba(0,0,0,0.8); transform: scale(1.1); }
-.post-card-fav.active { opacity: 1; background: rgba(0,0,0,0.8); }
+.post-card-fav { top: 8px; }
+.post-card-dislike { top: 48px; }
+
+.post-card:hover .post-card-fav, .post-card:hover .post-card-dislike { opacity: 1; }
+.post-card-fav:hover, .post-card-dislike:hover { background: rgba(0,0,0,0.8); transform: scale(1.1); }
+.post-card-fav.active, .post-card-dislike.active { opacity: 1; background: rgba(0,0,0,0.8); }
 
 .like-animation {
   position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%) scale(0);

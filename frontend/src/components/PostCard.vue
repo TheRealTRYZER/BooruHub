@@ -24,6 +24,11 @@
             :title="lang.t('nav_favorites')">
       {{ isFav ? '❤️' : '🤍' }}
     </button>
+    <button class="post-card-dislike"
+            @click.stop="doDislike"
+            :title="lang.t('dislikes_tab') || 'Dislike'">
+      👎
+    </button>
     <div v-if="showLikeAnimation" class="like-animation">❤️</div>
   </div>
 </template>
@@ -102,6 +107,17 @@ function toggleFav() {
   } catch (e) {
     toast.show(e.message, 'error')
   }
+}
+
+function doDislike() {
+  if (!auth.isAuthenticated) {
+    toast.show(lang.t('login_to_fav'), 'error')
+    return
+  }
+  // Immediately add as dislike
+  apiAddFavorite(props.post, true).catch(() => {})
+  isFav.value = false
+  hidden.value = true
 }
 
 const hidden = ref(false)
