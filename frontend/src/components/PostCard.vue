@@ -1,5 +1,7 @@
 <template>
-  <div v-if="!hidden" class="post-card" @click="handleCardClick" @touchstart="onTouchStart" @touchend="onTouchEnd">
+  <div v-show="!hidden" class="post-card" @click="handleCardClick" 
+       @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"
+       :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200) }">
     <div class="post-card-media" :style="mediaStyle">
       <img class="post-card-img"
            :src="loaded ? currentUrl : placeholder"
@@ -104,6 +106,9 @@ function toggleFav() {
 
 const hidden = ref(false)
 const showLikeAnimation = ref(false)
+const swipeDiff = ref(0)
+const swiping = ref(false)
+
 let touchStartX = 0
 let touchStartY = 0
 let tapTimeout = null
@@ -115,7 +120,6 @@ function doLikeAnimation() {
 }
 
 function handleCardClick() {
-  // on mobile/touch screens, dbclick relies on timing
   const now = Date.now()
   if (now - lastTapTime < 300) {
     clearTimeout(tapTimeout)
@@ -126,23 +130,40 @@ function handleCardClick() {
     lastTapTime = now
     tapTimeout = setTimeout(() => {
       router.push({ name: 'post', query: { id: props.post.id, site: props.post.source_site } })
-    }, 300) // slight delay to allow double click capture
+    }, 300)
   }
 }
 
 function onTouchStart(e) {
   touchStartX = e.changedTouches[0].screenX
   touchStartY = e.changedTouches[0].screenY
+  swiping.value = true
 }
 
-function onTouchEnd(e) {
+function onTouchMove(e) {
+  if (!swiping.value) return
   const diffX = e.changedTouches[0].screenX - touchStartX
   const diffY = e.changedTouches[0].screenY - touchStartY
   
-  if (Math.abs(diffX) > 60 && Math.abs(diffY) < 40) {
-    // Swipe horizontal detected - hide post and remove from fav if applicable
-    if (isFav.value) toggleFav()
-    hidden.value = true
+  if (Math.abs(diffX) > Math.abs(diffY)) {
+    swipeDiff.value = diffX
+  } else {
+    swiping.value = false
+    swipeDiff.value = 0
+  }
+}
+
+function onTouchEnd(e) {
+  swiping.value = false
+  if (Math.abs(swipeDiff.value) > 80) {
+    const dir = swipeDiff.value > 0 ? 1 : -1
+    swipeDiff.value = dir * window.innerWidth 
+    setTimeout(() => {
+      if (isFav.value) toggleFav()
+      hidden.value = true
+    }, 300)
+  } else {
+    swipeDiff.value = 0
   }
 }
 </script>
