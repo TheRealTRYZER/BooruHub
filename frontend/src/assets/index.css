@@ -224,12 +224,15 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .post-card-img { width: 100%; display: block; object-fit: cover; }
 .post-card-overlay {
   position: absolute; bottom: 0; left: 0; right: 0;
-  padding: 20px 12px 12px;
+  padding: 30px 12px 12px;
   background: linear-gradient(transparent, rgba(0,0,0,0.9));
-  opacity: 0; transition: opacity 0.2s;
+  opacity: 1; transition: opacity 0.2s;
   pointer-events: none;
 }
-.post-card:hover .post-card-overlay { opacity: 1; }
+@media (max-width: 768px) {
+  .post-card-overlay { opacity: 0; }
+  .post-card:hover .post-card-overlay { opacity: 1; }
+}
 .post-card-meta { display: flex; gap: 6px; flex-wrap: wrap; }
 .post-card-badge {
   padding: 2px 6px; font-size: 10px; font-weight: 700; border-radius: 4px;
