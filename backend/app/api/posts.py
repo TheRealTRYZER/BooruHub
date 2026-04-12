@@ -125,11 +125,9 @@ async def get_feed(
     blacklist_rules: List[BlacklistRule] = []
     dislikes_set = set()
     if user:
-        mappings, blacklist_rules, dislikes_set = await asyncio.gather(
-            get_user_mappings(user.id, db),
-            _get_user_blacklist(user.id, db),
-            _get_user_dislikes(user.id, db),
-        )
+        mappings = await get_user_mappings(user.id, db)
+        blacklist_rules = await _get_user_blacklist(user.id, db)
+        dislikes_set = await _get_user_dislikes(user.id, db)
 
     # Build site-specific queries
     overrides = {"danbooru": danbooru_tags, "e621": e621_tags, "rule34": rule34_tags}
@@ -185,11 +183,9 @@ async def search(
     blacklist_rules: List[BlacklistRule] = []
     dislikes_set = set()
     if user:
-        mappings, blacklist_rules, dislikes_set = await asyncio.gather(
-            get_user_mappings(user.id, db),
-            _get_user_blacklist(user.id, db),
-            _get_user_dislikes(user.id, db),
-        )
+        mappings = await get_user_mappings(user.id, db)
+        blacklist_rules = await _get_user_blacklist(user.id, db)
+        dislikes_set = await _get_user_dislikes(user.id, db)
 
     lookup = build_lookup(mappings)
     query_str = translate_tags(tag_list, site, lookup)
