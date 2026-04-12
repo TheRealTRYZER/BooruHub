@@ -98,7 +98,6 @@ let observer = null
 let searchTimeout = null
 let suggestTimeout = null
 let loadGeneration = 0  // Increments on each reload() to cancel stale requests
-let emptyPageCount = 0  // Consecutive empty pages counter
 
 function toggleSite(site) {
   feed.toggleSite(site)
@@ -154,7 +153,6 @@ function selectSuggestion(tag) {
 
 function reload() {
   loadGeneration++  // Invalidates any in-flight loadMore calls
-  emptyPageCount = 0
   feed.resetFeed()
   loadMore()
 }
@@ -211,8 +209,10 @@ async function loadMore() {
 
     const totalNew = results.reduce((acc, val) => acc + val, 0)
     
+    // A site is "exhausted" when the API returned fewer posts than requested (last page)
+    const allSitesExhausted = activeSites.every(s => pagePayloads[s].length < limitPerSite)
+    
     if (totalNew > 0) {
-      emptyPageCount = 0
       // Mix results: interleave posts from all sites
       const mixed = []
       const maxLen = Math.max(...activeSites.map(s => pagePayloads[s].length))
@@ -223,27 +223,20 @@ async function loadMore() {
       }
       feed.posts = [...basePosts, ...mixed]
       skeletonCount.value = 0
-      feed.page++
+    }
 
-      // If still at bottom, load next page after short delay
+    if (allSitesExhausted) {
+      // All sites returned incomplete pages — API has no more pages
+      feed.hasMore = false
+    } else {
+      // At least one site has more pages — keep going
+      feed.page++
       setTimeout(() => {
         if (gen === loadGeneration && sentinel.value && !loading.value && feed.hasMore) {
           const rect = sentinel.value.getBoundingClientRect()
           if (rect.top <= window.innerHeight + 800) loadMore()
         }
       }, 500)
-    } else {
-      // Only stop if we get 2 consecutive empty pages (avoids stopping on sparse pages)
-      emptyPageCount++
-      if (emptyPageCount >= 2) {
-        feed.hasMore = false
-      } else {
-        // Try next page before giving up
-        feed.page++
-        setTimeout(() => {
-          if (gen === loadGeneration && !loading.value && feed.hasMore) loadMore()
-        }, 200)
-      }
     }
   } catch (e) {
     if (gen === loadGeneration) {
