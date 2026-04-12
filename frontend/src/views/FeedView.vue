@@ -14,7 +14,7 @@
           <button class="btn btn-secondary btn-icon" @click="feed.toggleSplit()" :title="lang.t('advanced_search')">
             {{ feed.isSplit ? '⬅️ ' + lang.t('collapse') : '🔀 ' + lang.t('split_search') }}
           </button>
-          <button class="btn btn-primary" @click="reload" v-show="!feed.isSplit" :disabled="loading" style="padding:0 24px;">
+          <button class="btn btn-primary" @click="reload" v-show="!feed.isSplit" style="padding:0 24px;">
             {{ loading ? '...' : '🔍 ' + lang.t('search_btn') }}
           </button>
         </div>
@@ -36,7 +36,7 @@
                :placeholder="lang.t('tags_for') + ' ' + site + '...'"
                v-model="feed.siteTags[site]"
                @keydown.enter="reload">
-        <button class="btn btn-primary btn-sm" @click="reload" :disabled="loading">🔍</button>
+        <button class="btn btn-primary btn-sm" @click="reload">🔍</button>
         <div class="ratio-slider-container">
           <input type="range" class="ratio-slider"
                  min="0" max="10" step="1"
@@ -97,6 +97,8 @@ const skeletonCount = ref(0)
 let observer = null
 let searchTimeout = null
 let suggestTimeout = null
+let loadGeneration = 0  // Increments on each reload() to cancel stale requests
+let emptyPageCount = 0  // Consecutive empty pages counter
 
 function toggleSite(site) {
   feed.toggleSite(site)
@@ -151,6 +153,8 @@ function selectSuggestion(tag) {
 }
 
 function reload() {
+  loadGeneration++  // Invalidates any in-flight loadMore calls
+  emptyPageCount = 0
   feed.resetFeed()
   loadMore()
 }
@@ -159,6 +163,7 @@ async function loadMore() {
   if (loading.value || !feed.hasMore) return
   loading.value = true
   skeletonCount.value = 12
+  const gen = loadGeneration  // Capture current generation
 
   const activeSites = feed.sites.length > 0 ? feed.sites : availableSites
   const limitPerSite = Math.ceil(45 / activeSites.length)
@@ -175,8 +180,8 @@ async function loadMore() {
   try {
     const fetchPromises = activeSites.map(async (site, idx) => {
       try {
-        // Very tiny stagger for smooth rendering, sites will fetch nearly in parallel
         if (idx > 0) await new Promise(r => setTimeout(r, idx * 50));
+        if (gen !== loadGeneration) return 0  // Aborted by reload()
         
         const options = {}
         if (feed.isSplit) {
@@ -190,25 +195,10 @@ async function loadMore() {
           limit: limitPerSite,
           ...options
         })
-        const newPosts = data.posts || []
+        if (gen !== loadGeneration) return 0  // Aborted after fetch
         
-        if (newPosts.length > 0) {
-          pagePayloads[site] = newPosts;
-          
-          // Mix the results for the current page (1 from A, 1 from B, 1 from C...)
-          const mixed = [];
-          const maxLen = Math.max(...activeSites.map(s => pagePayloads[s].length));
-          for (let i = 0; i < maxLen; i++) {
-            for (const activeSite of activeSites) {
-              if (pagePayloads[activeSite][i]) {
-                mixed.push(pagePayloads[activeSite][i]);
-              }
-            }
-          }
-          
-          feed.posts = [...basePosts, ...mixed];
-          skeletonCount.value = 0
-        }
+        const newPosts = data.posts || []
+        pagePayloads[site] = newPosts
         return newPosts.length
       } catch (siteErr) {
         console.error(`Error loading ${site}:`, siteErr)
@@ -217,27 +207,53 @@ async function loadMore() {
     })
 
     const results = await Promise.all(fetchPromises)
+    if (gen !== loadGeneration) return  // Aborted - another reload() happened
+
     const totalNew = results.reduce((acc, val) => acc + val, 0)
     
-    if (totalNew === 0 && feed.page > 1) {
-      feed.hasMore = false
-    } else if (totalNew > 0) {
-      feed.page++
-      // If we are still at the bottom, trigger next page after short delay
-      setTimeout(() => {
-        if (sentinel.value && !loading.value && feed.hasMore) {
-          const rect = sentinel.value.getBoundingClientRect();
-          if (rect.top <= window.innerHeight + 800) {
-            loadMore();
-          }
+    if (totalNew > 0) {
+      emptyPageCount = 0
+      // Mix results: interleave posts from all sites
+      const mixed = []
+      const maxLen = Math.max(...activeSites.map(s => pagePayloads[s].length))
+      for (let i = 0; i < maxLen; i++) {
+        for (const activeSite of activeSites) {
+          if (pagePayloads[activeSite][i]) mixed.push(pagePayloads[activeSite][i])
         }
-      }, 500);
+      }
+      feed.posts = [...basePosts, ...mixed]
+      skeletonCount.value = 0
+      feed.page++
+
+      // If still at bottom, load next page after short delay
+      setTimeout(() => {
+        if (gen === loadGeneration && sentinel.value && !loading.value && feed.hasMore) {
+          const rect = sentinel.value.getBoundingClientRect()
+          if (rect.top <= window.innerHeight + 800) loadMore()
+        }
+      }, 500)
+    } else {
+      // Only stop if we get 2 consecutive empty pages (avoids stopping on sparse pages)
+      emptyPageCount++
+      if (emptyPageCount >= 2) {
+        feed.hasMore = false
+      } else {
+        // Try next page before giving up
+        feed.page++
+        setTimeout(() => {
+          if (gen === loadGeneration && !loading.value && feed.hasMore) loadMore()
+        }, 200)
+      }
     }
   } catch (e) {
-    toast.show(lang.t('failed_load') + ': ' + e.message, 'error')
+    if (gen === loadGeneration) {
+      toast.show(lang.t('failed_load') + ': ' + e.message, 'error')
+    }
   } finally {
-    loading.value = false
-    skeletonCount.value = 0
+    if (gen === loadGeneration) {
+      loading.value = false
+      skeletonCount.value = 0
+    }
   }
 }
 
