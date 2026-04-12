@@ -87,6 +87,7 @@ async function loadMore() {
       tags: fav.tags || [],
       rating: fav.rating,
       score: fav.score,
+      is_dislike: showDislikes.value,
     }))
 
     posts.value.push(...mapped)

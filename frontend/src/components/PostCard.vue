@@ -24,7 +24,7 @@
             :title="lang.t('nav_favorites')">
       {{ isFav ? '❤️' : '🤍' }}
     </button>
-    <button class="post-card-dislike"
+    <button class="post-card-dislike" :class="{ active: isDisliked }"
             @click.stop="doDislike"
             :title="lang.t('dislikes_tab') || 'Dislike'">
       👎
@@ -102,6 +102,7 @@ function toggleFav() {
     } else {
       apiAddFavorite(props.post)
       isFav.value = true
+      isDisliked.value = false
       toast.show(lang.t('added_fav'), 'success')
     }
   } catch (e) {
@@ -109,15 +110,28 @@ function toggleFav() {
   }
 }
 
+const isDisliked = ref(props.post.is_dislike || false)
+
 function doDislike() {
   if (!auth.isAuthenticated) {
     toast.show(lang.t('login_to_fav'), 'error')
     return
   }
-  // Immediately add as dislike
-  apiAddFavorite(props.post, true).catch(() => {})
-  isFav.value = false
-  hidden.value = true
+  
+  if (isDisliked.value) {
+    apiCheckFavorite(props.post.source_site, props.post.id).then(check => {
+        if (check.favorite_id) apiRemoveFavorite(check.favorite_id)
+    })
+    isDisliked.value = false
+    hidden.value = true
+    toast.show(lang.t('removed_fav') || 'Removed', 'info')
+  } else {
+    // Immediately add as dislike
+    apiAddFavorite(props.post, true).catch(() => {})
+    isDisliked.value = true
+    isFav.value = false
+    hidden.value = true
+  }
 }
 
 const hidden = ref(false)
