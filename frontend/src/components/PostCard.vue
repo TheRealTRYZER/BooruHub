@@ -1,5 +1,5 @@
 <template>
-  <div class="post-card" @click="$router.push({ name: 'post', query: { id: post.id, site: post.source_site } })">
+  <div v-if="!hidden" class="post-card" @click="handleCardClick" @touchstart="onTouchStart" @touchend="onTouchEnd">
     <div class="post-card-media" :style="mediaStyle">
       <img class="post-card-img"
            :src="loaded ? currentUrl : placeholder"
@@ -22,11 +22,13 @@
             :title="lang.t('nav_favorites')">
       {{ isFav ? '❤️' : '🤍' }}
     </button>
+    <div v-if="showLikeAnimation" class="like-animation">❤️</div>
   </div>
 </template>
 
 <script setup>
 import { ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { useToastStore } from '../stores/toast.js'
 import { useLangStore } from '../stores/lang.js'
@@ -37,6 +39,7 @@ const props = defineProps({
   favorite: { type: Boolean, default: false },
 })
 
+const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
@@ -96,6 +99,50 @@ function toggleFav() {
     }
   } catch (e) {
     toast.show(e.message, 'error')
+  }
+}
+
+const hidden = ref(false)
+const showLikeAnimation = ref(false)
+let touchStartX = 0
+let touchStartY = 0
+let tapTimeout = null
+let lastTapTime = 0
+
+function doLikeAnimation() {
+  showLikeAnimation.value = true
+  setTimeout(() => { showLikeAnimation.value = false }, 800)
+}
+
+function handleCardClick() {
+  // on mobile/touch screens, dbclick relies on timing
+  const now = Date.now()
+  if (now - lastTapTime < 300) {
+    clearTimeout(tapTimeout)
+    lastTapTime = 0
+    if (!isFav.value) toggleFav()
+    doLikeAnimation()
+  } else {
+    lastTapTime = now
+    tapTimeout = setTimeout(() => {
+      router.push({ name: 'post', query: { id: props.post.id, site: props.post.source_site } })
+    }, 300) // slight delay to allow double click capture
+  }
+}
+
+function onTouchStart(e) {
+  touchStartX = e.changedTouches[0].screenX
+  touchStartY = e.changedTouches[0].screenY
+}
+
+function onTouchEnd(e) {
+  const diffX = e.changedTouches[0].screenX - touchStartX
+  const diffY = e.changedTouches[0].screenY - touchStartY
+  
+  if (Math.abs(diffX) > 60 && Math.abs(diffY) < 40) {
+    // Swipe horizontal detected - hide post and remove from fav if applicable
+    if (isFav.value) toggleFav()
+    hidden.value = true
   }
 }
 </script>
