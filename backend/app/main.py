@@ -5,6 +5,7 @@ from contextlib import asynccontextmanager
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
+from sqlalchemy import text
 from app.core.config import get_settings
 from app.db.database import engine
 from app.db.models import Base
@@ -26,6 +27,13 @@ async def lifespan(app: FastAPI):
     """Startup / shutdown events."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Apply rudimentary schema updates safely
+        try:
+            await conn.execute(text("ALTER TABLE favorites ADD COLUMN is_dislike BOOLEAN DEFAULT FALSE;"))
+        except Exception:
+            pass  # Ignore if it already exists or isn't supported
+            
     logger.info("Database tables ready")
     yield
     await engine.dispose()
