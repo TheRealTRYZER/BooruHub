@@ -8,16 +8,20 @@
     </div>
     <template v-else>
       <div class="page-header">
-        <h1 class="page-title">❤️ {{ lang.t('favorites_title') }}</h1>
-        <p class="page-subtitle">{{ lang.t('favorites_subtitle') }}</p>
+        <h1 class="page-title">{{ showDislikes ? '💔' : '❤️' }} {{ showDislikes ? (lang.t('dislikes_title') || 'Dislikes') : lang.t('favorites_title') }}</h1>
+        <p class="page-subtitle">{{ showDislikes ? (lang.t('dislikes_subtitle') || 'Hidden from feed') : lang.t('favorites_subtitle') }}</p>
+      </div>
+
+      <div class="tabs">
+        <button class="tab-btn" :class="{active: !showDislikes}" @click="switchTab(false)">👍 {{ lang.t('likes_tab') || 'Likes' }}</button>
+        <button class="tab-btn" :class="{active: showDislikes}" @click="switchTab(true)">👎 {{ lang.t('dislikes_tab') || 'Dislikes' }}</button>
       </div>
 
       <PostGrid :posts="posts" :skeletonCount="loading ? 15 : 0" />
 
       <div v-if="!loading && posts.length === 0" class="empty-state">
         <div class="empty-state-icon">💫</div>
-        <div class="empty-state-title">{{ lang.t('no_favorites') }}</div>
-        <div class="empty-state-text">{{ lang.t('add_favorites_hint') }}</div>
+        <div class="empty-state-title">{{ lang.t('empty_list') || 'Empty' }}</div>
       </div>
 
       <button v-if="hasMore" class="btn btn-secondary" @click="loadMore" style="display:block; margin:24px auto;">
@@ -26,6 +30,19 @@
     </template>
   </div>
 </template>
+
+<style scoped>
+.tabs {
+  display: flex; gap: 12px; margin-bottom: 24px;
+}
+.tab-btn {
+  padding: 8px 16px; background: rgba(255,255,255,0.05); border-radius: 20px;
+  color: var(--text-muted); font-weight: 600; font-size: 14px; transition: all 0.2s;
+}
+.tab-btn.active {
+  background: var(--bg-card); color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+}
+</style>
 
 <script setup>
 import { ref, onMounted } from 'vue'
@@ -42,13 +59,23 @@ const posts = ref([])
 const page = ref(1)
 const loading = ref(false)
 const hasMore = ref(false)
+const showDislikes = ref(false)
+
+function switchTab(isDislike) {
+  if (showDislikes.value === isDislike) return
+  showDislikes.value = isDislike
+  posts.value = []
+  page.value = 1
+  hasMore.value = false
+  loadMore()
+}
 
 async function loadMore() {
   if (loading.value) return
   loading.value = true
 
   try {
-    const data = await apiGetFavorites(page.value, 40)
+    const data = await apiGetFavorites(page.value, 40, showDislikes.value)
     const favs = data.favorites || []
 
     const mapped = favs.map(fav => ({

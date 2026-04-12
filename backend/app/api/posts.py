@@ -9,7 +9,7 @@ from sqlalchemy import select, update
 from sqlalchemy.dialects.sqlite import insert
 
 from app.db.database import get_db
-from app.db.models import User, BlacklistRule, CachedTag
+from app.db.models import User, BlacklistRule, CachedTag, Favorite
 from app.api.deps import get_current_user
 from app.services.booru_client import search_posts, search_multi_site
 from app.services.blacklist import parse_blacklist, filter_posts
@@ -38,7 +38,19 @@ async def _get_user_blacklist(user_id: int, db: AsyncSession) -> List[BlacklistR
     return result.scalars().all()
 
 
-def _apply_blacklist(posts: List[dict], rules: List[BlacklistRule]) -> List[dict]:
+async def _get_user_dislikes(user_id: int, db: AsyncSession) -> set:
+    result = await db.execute(
+        select(Favorite.source_site, Favorite.post_id).where(
+            Favorite.user_id == user_id,
+            Favorite.is_dislike == True,  # noqa: E712
+        )
+    )
+    return set((row[0], str(row[1])) for row in result.all())
+
+
+def _apply_blacklist(posts: List[dict], rules: List[BlacklistRule], dislikes: set = None) -> List[dict]:
+    if dislikes:
+        posts = [p for p in posts if (p.get("source_site"), str(p.get("id"))) not in dislikes]
     if not rules:
         return posts
     bl_text = "\n".join(r.rule_line for r in rules)
@@ -111,10 +123,12 @@ async def get_feed(
     # Load user data in parallel
     mappings = []
     blacklist_rules: List[BlacklistRule] = []
+    dislikes_set = set()
     if user:
-        mappings, blacklist_rules = await asyncio.gather(
+        mappings, blacklist_rules, dislikes_set = await asyncio.gather(
             get_user_mappings(user.id, db),
             _get_user_blacklist(user.id, db),
+            _get_user_dislikes(user.id, db),
         )
 
     # Build site-specific queries
@@ -141,7 +155,7 @@ async def get_feed(
     # Post-processing
     if mappings:
         apply_reverse_mapping(posts, mappings)
-    posts = _apply_blacklist(posts, blacklist_rules)
+    posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
 
     # Cache ALL tags from results + query tags (deduplicated)
     unique_tags = set(tag_list)
@@ -169,10 +183,12 @@ async def search(
 
     mappings = []
     blacklist_rules: List[BlacklistRule] = []
+    dislikes_set = set()
     if user:
-        mappings, blacklist_rules = await asyncio.gather(
+        mappings, blacklist_rules, dislikes_set = await asyncio.gather(
             get_user_mappings(user.id, db),
             _get_user_blacklist(user.id, db),
+            _get_user_dislikes(user.id, db),
         )
 
     lookup = build_lookup(mappings)
@@ -188,7 +204,7 @@ async def search(
         if mappings:
             apply_reverse_mapping(posts, mappings)
 
-    posts = _apply_blacklist(posts, blacklist_rules)
+    posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
     
     # Cache ALL tags from results + query tags (deduplicated)
     unique_tags = set(tag_list)

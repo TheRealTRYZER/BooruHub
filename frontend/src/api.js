@@ -92,22 +92,23 @@ export async function apiSuggestTags(q, limit = 15) {
 }
 
 // Favorites
-export async function apiGetFavorites(page = 1, limit = 40) {
-  return _fetch(`/favorites?page=${page}&limit=${limit}`)
+export async function apiGetFavorites(page = 1, limit = 40, isDislike = false) {
+  return _fetch(`/favorites?page=${page}&limit=${limit}&is_dislike=${isDislike}`)
 }
 
-export async function apiAddFavorite(post) {
+export async function apiAddFavorite(post, isDislike = false) {
   return _fetch('/favorites', {
     method: 'POST',
     body: JSON.stringify({
       source_site: post.source_site,
-      post_id: post.id,
+      post_id: String(post.id || post.post_id),
       preview_url: post.preview_url,
       file_url: post.file_url,
       sample_url: post.sample_url,
       tags: post.tags || [],
       rating: post.rating,
       score: post.score || 0,
+      is_dislike: isDislike,
     }),
   })
 }

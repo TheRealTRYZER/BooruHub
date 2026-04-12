@@ -37,7 +37,12 @@ export const useLangStore = defineStore('lang', () => {
       // Favorites
       favorites_title: "Favorites",
       favorites_subtitle: "Your favorite posts",
+      dislikes_title: "Dislikes",
+      dislikes_subtitle: "Hidden from feed",
+      likes_tab: "Likes",
+      dislikes_tab: "Dislikes",
       no_favorites: "No favorites",
+      empty_list: "List is empty",
       add_favorites_hint: "Add posts to favorites to see them here",
       error_load_favorites: "Error loading favorites",
       // Settings
@@ -139,9 +144,14 @@ export const useLangStore = defineStore('lang', () => {
       // Избранное
       favorites_title: "Избранное",
       favorites_subtitle: "Ваши любимые посты",
+      dislikes_title: "Дизлайки",
+      dislikes_subtitle: "Скрыты из ленты",
+      likes_tab: "Лайки",
+      dislikes_tab: "Дизлайки",
       no_favorites: "Нет избранного",
+      empty_list: "Список пуст",
       add_favorites_hint: "Добавляйте посты в избранное, чтобы увидеть их здесь",
-      error_load_favorites: "Ошибка загрузки избранного",
+      error_load_favorites: "Ошибка загрузки списков",
       // Настройки
       settings_title: "Настройки",
       settings_subtitle: "Управление аккаунтом и фильтрами",

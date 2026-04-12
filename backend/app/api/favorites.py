@@ -21,6 +21,7 @@ class FavoriteAdd(BaseModel):
     tags: List[str] = Field(default_factory=list)
     rating: Optional[str] = "g"
     score: int = 0
+    is_dislike: bool = False
 
 
 class FavoriteResponse(BaseModel):
@@ -33,25 +34,33 @@ class FavoriteResponse(BaseModel):
     tags: List[str]
     rating: Optional[str]
     score: int
+    is_dislike: bool
 
 
 @router.get("")
 async def list_favorites(
     page: int = 1,
     limit: int = 40,
+    is_dislike: bool = False,
     user: User = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
     offset = (page - 1) * limit
     
     # 1. Get total count
-    count_q = await db.execute(select(func.count()).where(Favorite.user_id == user.id))
+    count_q = await db.execute(select(func.count()).where(
+        Favorite.user_id == user.id,
+        Favorite.is_dislike == is_dislike
+    ))
     total_count = count_q.scalar() or 0
 
     # 2. Get subset
     result = await db.execute(
         select(Favorite)
-        .where(Favorite.user_id == user.id)
+        .where(
+            Favorite.user_id == user.id,
+            Favorite.is_dislike == is_dislike
+        )
         .order_by(Favorite.created_at.desc())
         .offset(offset)
         .limit(limit)
@@ -92,11 +101,17 @@ async def add_favorite(
             Favorite.post_id == body.post_id,
         )
     )
-    if existing.scalar_one_or_none():
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, 
-            detail="Item already in favorites"
-        )
+    fav = existing.scalar_one_or_none()
+    if fav:
+        if fav.is_dislike == body.is_dislike:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, 
+                detail="Item already in this list"
+            )
+        else:
+            fav.is_dislike = body.is_dislike
+            await db.commit()
+            return {"id": fav.id, "message": "Updated item type"}
 
     fav = Favorite(
         user_id=user.id,
@@ -108,11 +123,12 @@ async def add_favorite(
         tags=body.tags,
         rating=body.rating,
         score=body.score,
+        is_dislike=body.is_dislike,
     )
     db.add(fav)
     await db.commit()
     await db.refresh(fav)
-    return {"id": fav.id, "message": "Added to favorites"}
+    return {"id": fav.id, "message": "Added item"}
 
 
 @router.delete("/{fav_id}")
@@ -142,11 +158,15 @@ async def check_favorite(
 ):
     """Instant check for PostGrid items."""
     result = await db.execute(
-        select(Favorite.id).where(
+        select(Favorite).where(
             Favorite.user_id == user.id,
             Favorite.source_site == source_site,
             Favorite.post_id == post_id,
         )
     )
-    fid = result.scalar_one_or_none()
-    return {"is_favorite": fid is not None, "favorite_id": fid}
+    f = result.scalar_one_or_none()
+    return {
+        "is_favorite": f is not None and not f.is_dislike,
+        "is_dislike": f is not None and f.is_dislike,
+        "favorite_id": f.id if f else None
+    }

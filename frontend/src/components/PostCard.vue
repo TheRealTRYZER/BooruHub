@@ -159,7 +159,11 @@ function onTouchEnd(e) {
     const dir = swipeDiff.value > 0 ? 1 : -1
     swipeDiff.value = dir * window.innerWidth 
     setTimeout(() => {
-      if (isFav.value) toggleFav()
+      // Swipe dislikes the post
+      if (auth.isAuthenticated) {
+        apiAddFavorite(props.post, true).catch(() => {})
+      }
+      isFav.value = false
       hidden.value = true
     }, 300)
   } else {

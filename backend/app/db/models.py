@@ -78,6 +78,7 @@ class Favorite(Base):
     tags = Column(ARRAY(Text), default=list)
     rating = Column(String(5))
     score = Column(Integer, default=0)
+    is_dislike = Column(Boolean, default=False, nullable=False, server_default='false')
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
