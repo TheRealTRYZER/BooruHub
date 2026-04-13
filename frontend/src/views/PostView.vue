@@ -7,7 +7,7 @@
   <div v-else class="post-detail">
     <div class="post-detail-image">
       <video v-if="isVideo" :src="mediaUrl" controls loop autoplay muted style="width:100%;max-height:85vh;"></video>
-      <img v-else :src="mediaUrl" :alt="'Post ' + post.id" @click="openOriginal" style="cursor:zoom-in;" referrerpolicy="no-referrer">
+      <img v-else :src="mediaUrl" :alt="'Post ' + post.id" @click="openOriginal" style="cursor:zoom-in;">
     </div>
     
     <div class="post-detail-sidebar">

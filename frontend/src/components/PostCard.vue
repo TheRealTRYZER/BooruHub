@@ -7,7 +7,6 @@
            :src="loaded ? currentUrl : placeholder"
            :alt="'Post ' + post.id"
            loading="lazy"
-           referrerpolicy="no-referrer"
            :style="{ opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease-in-out', width: '100%', height: '100%', objectFit: 'cover' }"
            @load="loaded = true"
            @error="onError" />
