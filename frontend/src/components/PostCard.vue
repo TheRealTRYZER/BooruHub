@@ -6,6 +6,7 @@
       <img class="post-card-img"
            :src="activeSrc"
            :alt="'Post ' + post.id"
+           referrerpolicy="no-referrer"
            :style="{ opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease-in-out', width: '100%', height: '100%', objectFit: 'cover' }"
            @load="onLoad"
            @error="onError" />
@@ -86,18 +87,29 @@ function onLoad() {
 function onError() {
   const p = props.post
   errorCount++
-  // Stage 1: sample → preview
-  if (errorCount === 1 && p.preview_url && activeSrc.value !== p.preview_url) {
-    activeSrc.value = p.preview_url
-    return
-  }
-  // Stage 2: preview → file_url
-  if (errorCount === 2 && p.file_url && activeSrc.value !== p.file_url) {
-    activeSrc.value = p.file_url
-    return
-  }
-  // Stage 3: all variants failed — show broken state
-  loaded.value = true
+  
+  setTimeout(() => {
+    // Stage 1: sample → preview
+    if (errorCount === 1 && p.preview_url && activeSrc.value !== p.preview_url) {
+      activeSrc.value = p.preview_url
+      return
+    }
+    // Stage 2: preview → file_url
+    if (errorCount === 2 && p.file_url && activeSrc.value !== p.file_url) {
+      activeSrc.value = p.file_url
+      return
+    }
+    // Stage 3: all direct variants failed — try PROXY
+    if (errorCount === 3) {
+      console.log('Final fallback — using server proxy for:', p.id)
+      const proxyBase = window.location.origin
+      activeSrc.value = `${proxyBase}/api/posts/proxy?url=${encodeURIComponent(p.sample_url || p.file_url)}`
+      return
+    }
+
+    // Stage 4: truly dead
+    loaded.value = true
+  }, 150)
 }
 
 function activate() {
