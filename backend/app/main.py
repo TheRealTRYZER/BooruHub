@@ -50,14 +50,32 @@ async def lifespan(app: FastAPI):
                     md5 VARCHAR(32),
                     tags_str TEXT DEFAULT '',
                     created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    CONSTRAINT uq_postindex_site_post UNIQUE (source_site, post_id),
-                    CONSTRAINT uq_postindex_md5 UNIQUE (md5)
-                );
-                CREATE INDEX IF NOT EXISTS ix_postindex_site ON post_index (source_site);
-                CREATE INDEX IF NOT EXISTS ix_postindex_md5 ON post_index (md5);
+                    CONSTRAINT uq_postindex_site_post UNIQUE (source_site, post_id)
+                )
             """))
         except Exception as e:
-            logger.warning(f"Manual post_index creation skipped: {e}")
+            logger.warning(f"post_index table creation skipped: {e}")
+
+        try:
+            await conn.execute(text(
+                "ALTER TABLE post_index ADD COLUMN IF NOT EXISTS md5 VARCHAR(32);"
+            ))
+        except Exception:
+            pass
+
+        try:
+            await conn.execute(text(
+                "CREATE UNIQUE INDEX IF NOT EXISTS uq_postindex_md5 ON post_index (md5) WHERE md5 IS NOT NULL;"
+            ))
+        except Exception:
+            pass
+
+        try:
+            await conn.execute(text(
+                "CREATE INDEX IF NOT EXISTS ix_postindex_site ON post_index (source_site);"
+            ))
+        except Exception:
+            pass
             
     logger.info("Database tables ready")
     yield
