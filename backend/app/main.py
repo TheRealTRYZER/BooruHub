@@ -40,6 +40,25 @@ async def lifespan(app: FastAPI):
         except Exception:
             pass
             
+        # Force create post_index if create_all skipped it
+        try:
+            await conn.execute(text("""
+                CREATE TABLE IF NOT EXISTS post_index (
+                    id SERIAL PRIMARY KEY,
+                    source_site VARCHAR(20) NOT NULL,
+                    post_id VARCHAR(50) NOT NULL,
+                    md5 VARCHAR(32),
+                    tags_str TEXT DEFAULT '',
+                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                    CONSTRAINT uq_postindex_site_post UNIQUE (source_site, post_id),
+                    CONSTRAINT uq_postindex_md5 UNIQUE (md5)
+                );
+                CREATE INDEX IF NOT EXISTS ix_postindex_site ON post_index (source_site);
+                CREATE INDEX IF NOT EXISTS ix_postindex_md5 ON post_index (md5);
+            """))
+        except Exception as e:
+            logger.warning(f"Manual post_index creation skipped: {e}")
+            
     logger.info("Database tables ready")
     yield
     await engine.dispose()
