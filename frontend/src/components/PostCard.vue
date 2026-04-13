@@ -15,7 +15,8 @@
       <div class="post-card-meta">
         <span class="post-card-badge" :class="post.source_site">{{ post.source_site }}</span>
         <span class="post-card-rating" :class="ratingClass">{{ ratingLabel }}</span>
-        <span v-if="isAnimated" class="post-card-badge" style="background:#ff4757;color:white;">▶</span>
+        <span v-if="isAnimated && !isFlash" class="post-card-badge" style="background:#ff4757;color:white;">▶</span>
+        <span v-if="isFlash" class="post-card-badge" style="background:#f1c40f;color:black;font-weight:bold;">FLASH</span>
         <span v-if="post.score !== undefined" class="post-card-score">★ {{ post.score }}</span>
       </div>
     </div>
@@ -56,8 +57,10 @@ const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg
 
 const currentUrl = ref(props.post.sample_url || props.post.preview_url || '')
 const isAnimated = computed(() =>
-  ['gif', 'webm', 'mp4', 'm4v', 'mov', 'mkv'].includes((props.post.file_ext || '').toLowerCase())
+  ['gif', 'webm', 'mp4', 'm4v', 'mov', 'mkv', 'swf'].includes((props.post.file_ext || '').toLowerCase())
 )
+
+const isFlash = computed(() => (props.post.file_ext || '').toLowerCase() === 'swf')
 
 const ratingMap = { g: 'safe', general: 'safe', s: 'safe', q: 'questionable', questionable: 'questionable', e: 'explicit', explicit: 'explicit' }
 const ratingLabels = { safe: 'S', questionable: 'Q', explicit: 'E', unknown: '?' }
