@@ -74,17 +74,26 @@ const mediaStyle = computed(() => {
 })
 
 function onError(e) {
-  // If sample failed, try preview
-  if (currentUrl.value !== props.post.preview_url && props.post.preview_url) {
-    console.log('Sample failed, falling back to preview:', props.post.id)
-    currentUrl.value = props.post.preview_url
+  const p = props.post
+  // 1. If sample fails, try preview
+  if (currentUrl.value === p.sample_url && p.preview_url) {
+    console.log('Sample failed, trying preview:', p.id)
+    loaded.value = false
+    currentUrl.value = p.preview_url
     return
   }
   
-  e.target.style.minHeight = '200px'
-  e.target.style.opacity = '1'
-  e.target.style.background = 'var(--bg-secondary)'
-  loaded.value = true
+  // 2. If preview fails, try direct file_url
+  if ((currentUrl.value === p.preview_url || currentUrl.value === p.sample_url) && p.file_url && currentUrl.value !== p.file_url) {
+    console.log('Fallback to file_url:', p.id)
+    loaded.value = false
+    currentUrl.value = p.file_url
+    return
+  }
+  
+  // 3. Everything failed
+  console.error('All image variants failed for post:', p.id)
+  loaded.value = true // Show broken state finally
 }
 
 function toggleFav() {
