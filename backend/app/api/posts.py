@@ -207,6 +207,7 @@ async def get_feed(
         apply_reverse_mapping(posts, mappings)
 
     # Index raw posts BEFORE filtering (captures everything the API returns)
+    unfiltered_count = len(posts)
     background_tasks.add_task(_index_posts_task, list(posts), db)
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
@@ -220,7 +221,7 @@ async def get_feed(
     if unique_tags:
         background_tasks.add_task(_cache_tags_task, list(unique_tags), db)
 
-    return {"posts": posts, "page": page, "total": len(posts), "resolved_tags": tags}
+    return {"posts": posts, "page": page, "total": len(posts), "unfiltered_count": unfiltered_count, "resolved_tags": tags}
 
 
 @router.get("/search")
@@ -258,6 +259,7 @@ async def search(
             apply_reverse_mapping(posts, mappings)
 
     # Index raw posts BEFORE filtering (captures everything the API returns)
+    unfiltered_count = len(posts)
     if posts:
         background_tasks.add_task(_index_posts_task, list(posts), db)
 
@@ -272,7 +274,7 @@ async def search(
     if unique_tags:
         background_tasks.add_task(_cache_tags_task, list(unique_tags), db)
     
-    return {"posts": posts, "page": page, "total": len(posts), "resolved_tags": tags}
+    return {"posts": posts, "page": page, "total": len(posts), "unfiltered_count": unfiltered_count, "resolved_tags": tags}
 
 
 @router.get("/tags/suggest")

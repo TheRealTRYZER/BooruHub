@@ -172,46 +172,47 @@ async function loadMore() {
 
   // Track the posts array before this page load begins
   const basePosts = [...feed.posts];
-  const pagePayloads = {};
-  activeSites.forEach(s => pagePayloads[s] = []);
+    const unfilteredCounts = {};
+    activeSites.forEach(s => unfilteredCounts[s] = 0);
 
-  try {
-    const fetchPromises = activeSites.map(async (site, idx) => {
-      try {
-        if (idx > 0) await new Promise(r => setTimeout(r, idx * 50));
-        if (gen !== loadGeneration) return 0  // Aborted by reload()
-        
-        const options = {}
-        if (feed.isSplit) {
-          if (feed.siteTags[site]) options[`${site}_tags`] = feed.siteTags[site]
+    try {
+      const fetchPromises = activeSites.map(async (site, idx) => {
+        try {
+          if (idx > 0) await new Promise(r => setTimeout(r, idx * 50));
+          if (gen !== loadGeneration) return 0  // Aborted by reload()
+          
+          const options = {}
+          if (feed.isSplit) {
+            if (feed.siteTags[site]) options[`${site}_tags`] = feed.siteTags[site]
+          }
+          
+          const data = await apiFeed({
+            tags: feed.tags,
+            sites: site,
+            page: feed.page,
+            limit: limitPerSite,
+            ...options
+          })
+          if (gen !== loadGeneration) return 0  // Aborted after fetch
+          
+          const newPosts = data.posts || []
+          pagePayloads[site] = newPosts
+          unfilteredCounts[site] = data.unfiltered_count || 0
+          return newPosts.length
+        } catch (siteErr) {
+          console.error(`Error loading ${site}:`, siteErr)
+          return 0
         }
-        
-        const data = await apiFeed({
-          tags: feed.tags,
-          sites: site,
-          page: feed.page,
-          limit: limitPerSite,
-          ...options
-        })
-        if (gen !== loadGeneration) return 0  // Aborted after fetch
-        
-        const newPosts = data.posts || []
-        pagePayloads[site] = newPosts
-        return newPosts.length
-      } catch (siteErr) {
-        console.error(`Error loading ${site}:`, siteErr)
-        return 0
-      }
-    })
+      })
 
-    const results = await Promise.all(fetchPromises)
-    if (gen !== loadGeneration) return  // Aborted - another reload() happened
+      const results = await Promise.all(fetchPromises)
+      if (gen !== loadGeneration) return  // Aborted - another reload() happened
 
-    const totalNew = results.reduce((acc, val) => acc + val, 0)
-    
-    // A site is truly exhausted ONLY when it returns exactly zero. 
-    // Sometimes they return 29 instead of 30 due to internal site filtering/deleted posts.
-    const allSitesExhausted = activeSites.every(s => pagePayloads[s].length === 0)
+      const totalNew = results.reduce((acc, val) => acc + val, 0)
+      const totalUnfiltered = Object.values(unfilteredCounts).reduce((acc, val) => acc + val, 0)
+      
+      // A site is exhausted only when the API ITSELF returns 0 (before filtering)
+      const allSitesExhausted = activeSites.every(s => unfilteredCounts[s] === 0)
     
     if (totalNew > 0) {
       // Mix results: interleave posts from all sites
@@ -227,17 +228,21 @@ async function loadMore() {
     }
 
     if (allSitesExhausted) {
-      // All sites returned incomplete pages — API has no more pages
       feed.hasMore = false
     } else {
-      // At least one site has more pages — keep going
       feed.page++
-      setTimeout(() => {
-        if (gen === loadGeneration && sentinel.value && !loading.value && feed.hasMore) {
-          const rect = sentinel.value.getBoundingClientRect()
-          if (rect.top <= window.innerHeight + 800) loadMore()
-        }
-      }, 500)
+      // If everything was filtered out on this page, but sites still have data, auto-trigger next page
+      if (totalNew === 0 && feed.hasMore && gen === loadGeneration) {
+        // Wait bit to avoid tight loop in case of many empty pages
+        setTimeout(() => { if (gen === loadGeneration) loadMore() }, 50)
+      } else {
+        setTimeout(() => {
+          if (gen === loadGeneration && sentinel.value && !loading.value && feed.hasMore) {
+            const rect = sentinel.value.getBoundingClientRect()
+            if (rect.top <= window.innerHeight + 800) loadMore()
+          }
+        }, 500)
+      }
     }
   } catch (e) {
     if (gen === loadGeneration) {
