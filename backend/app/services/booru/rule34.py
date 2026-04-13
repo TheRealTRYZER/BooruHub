@@ -80,11 +80,18 @@ class Rule34(BaseBooru):
                 return []
 
             text = resp.text.strip()
+            if not text:
+                return []
+
             if "Missing authentication" in text:
                 logger.error(
                     "[rule34] API requires authentication. "
                     "Set User ID and API Key in Settings → Rule34."
                 )
+                return []
+
+            # Safety check: if it looks like XML or not like JSON, skip
+            if text.startswith("<") or not (text.startswith("[") or text.startswith("{")):
                 return []
 
             data = resp.json()
@@ -93,7 +100,7 @@ class Rule34(BaseBooru):
 
             return [p for p in (self.normalize_post(r) for r in data) if p][:limit]
 
-        except (httpx.RequestError, ValueError) as e:
+        except (httpx.RequestError, ValueError, Exception) as e:
             logger.error(f"[rule34] Request failed: {e}")
             return []
 

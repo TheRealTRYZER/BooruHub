@@ -15,7 +15,7 @@
             {{ feed.isSplit ? '⬅️ ' + lang.t('collapse') : '🔀 ' + lang.t('split_search') }}
           </button>
           <button class="btn btn-primary" @click="reload" v-show="!feed.isSplit" style="padding:0 24px;">
-            {{ loading ? '...' : '🔍 ' + lang.t('search_btn') }}
+            🔍 {{ lang.t('search_btn') }}
           </button>
         </div>
       </div>
@@ -209,8 +209,9 @@ async function loadMore() {
 
     const totalNew = results.reduce((acc, val) => acc + val, 0)
     
-    // A site is "exhausted" when the API returned fewer posts than requested (last page)
-    const allSitesExhausted = activeSites.every(s => pagePayloads[s].length < limitPerSite)
+    // A site is truly exhausted ONLY when it returns exactly zero. 
+    // Sometimes they return 29 instead of 30 due to internal site filtering/deleted posts.
+    const allSitesExhausted = activeSites.every(s => pagePayloads[s].length === 0)
     
     if (totalNew > 0) {
       // Mix results: interleave posts from all sites
