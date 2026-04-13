@@ -102,8 +102,9 @@ function onError() {
     // Stage 3: all direct variants failed — try PROXY
     if (errorCount === 3) {
       console.log('Final fallback — using server proxy for:', p.id)
-      const proxyBase = window.location.origin
-      activeSrc.value = `${proxyBase}/api/posts/proxy?url=${encodeURIComponent(p.sample_url || p.file_url)}`
+      // Use the same logic as in api.js to find the backend
+      const apiBase = import.meta.env.VITE_API_URL || ''
+      activeSrc.value = `${apiBase}/api/posts/proxy?url=${encodeURIComponent(p.sample_url || p.file_url)}`
       return
     }
 
