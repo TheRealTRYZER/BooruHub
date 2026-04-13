@@ -172,8 +172,12 @@ async function loadMore() {
 
   // Track the posts array before this page load begins
   const basePosts = [...feed.posts];
+    const pagePayloads = {};
     const unfilteredCounts = {};
-    activeSites.forEach(s => unfilteredCounts[s] = 0);
+    activeSites.forEach(s => {
+      pagePayloads[s] = [];
+      unfilteredCounts[s] = 0;
+    });
 
     try {
       const fetchPromises = activeSites.map(async (site, idx) => {
