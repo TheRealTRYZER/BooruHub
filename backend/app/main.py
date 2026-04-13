@@ -25,55 +25,48 @@ logger = logging.getLogger(__name__)
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown events."""
+    # 1. Standard creation
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
-        
-        # Apply rudimentary schema updates safely
+    
+    # 2. Manual schema checks/updates in separate transactions
+    async with engine.connect() as conn:
+        # Add is_dislike to favorites
         try:
-            await conn.execute(text("ALTER TABLE favorites ADD COLUMN is_dislike BOOLEAN DEFAULT FALSE;"))
-        except Exception:
-            pass  # Ignore if it already exists
-
-        try:
-            await conn.execute(text("ALTER TABLE post_index ADD COLUMN md5 VARCHAR(32);"))
-            await conn.execute(text("CREATE UNIQUE INDEX uq_postindex_md5 ON post_index (md5);"))
-        except Exception:
-            pass
-            
-        # Force create post_index if create_all skipped it
-        try:
-            await conn.execute(text("""
-                CREATE TABLE IF NOT EXISTS post_index (
-                    id SERIAL PRIMARY KEY,
-                    source_site VARCHAR(20) NOT NULL,
-                    post_id VARCHAR(50) NOT NULL,
-                    md5 VARCHAR(32),
-                    tags_str TEXT DEFAULT '',
-                    created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
-                    CONSTRAINT uq_postindex_site_post UNIQUE (source_site, post_id)
-                )
-            """))
-        except Exception as e:
-            logger.warning(f"post_index table creation skipped: {e}")
-
-        try:
-            await conn.execute(text(
-                "ALTER TABLE post_index ADD COLUMN IF NOT EXISTS md5 VARCHAR(32);"
-            ))
+            async with conn.begin():
+                await conn.execute(text("ALTER TABLE favorites ADD COLUMN IF NOT EXISTS is_dislike BOOLEAN DEFAULT FALSE;"))
         except Exception:
             pass
 
+        # Force create post_index (as fallback)
         try:
-            await conn.execute(text(
-                "CREATE UNIQUE INDEX IF NOT EXISTS uq_postindex_md5 ON post_index (md5) WHERE md5 IS NOT NULL;"
-            ))
+            async with conn.begin():
+                await conn.execute(text("""
+                    CREATE TABLE IF NOT EXISTS post_index (
+                        id SERIAL PRIMARY KEY,
+                        source_site VARCHAR(20) NOT NULL,
+                        post_id VARCHAR(50) NOT NULL,
+                        md5 VARCHAR(32),
+                        tags_str TEXT DEFAULT '',
+                        created_at TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
+                        CONSTRAINT uq_postindex_site_post UNIQUE (source_site, post_id)
+                    )
+                """))
         except Exception:
             pass
 
+        # Add md5 column if missing
         try:
-            await conn.execute(text(
-                "CREATE INDEX IF NOT EXISTS ix_postindex_site ON post_index (source_site);"
-            ))
+            async with conn.begin():
+                await conn.execute(text("ALTER TABLE post_index ADD COLUMN IF NOT EXISTS md5 VARCHAR(32);"))
+        except Exception:
+            pass
+
+        # Create indices
+        try:
+            async with conn.begin():
+                await conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS uq_postindex_md5 ON post_index (md5) WHERE md5 IS NOT NULL;"))
+                await conn.execute(text("CREATE INDEX IF NOT EXISTS ix_postindex_site ON post_index (source_site);"))
         except Exception:
             pass
             
