@@ -4,9 +4,8 @@
        :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200) }">
     <div class="post-card-media" :style="mediaStyle">
       <img class="post-card-img"
-           :src="loaded ? currentUrl : placeholder"
+           :src="currentUrl"
            :alt="'Post ' + post.id"
-           loading="lazy"
            :style="{ opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease-in-out', width: '100%', height: '100%', objectFit: 'cover' }"
            @load="loaded = true"
            @error="onError" />
