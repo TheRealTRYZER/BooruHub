@@ -47,11 +47,16 @@ class E621(BaseBooru):
         raw_score = raw.get("score", 0)
         score = raw_score.get("total", 0) if isinstance(raw_score, dict) else raw_score
 
+        def make_absolute(url: str | None) -> str:
+            if url and url.startswith("/"):
+                return f"https://e621.net{url}"
+            return url or ""
+
         return {
             "id": str(raw["id"]),
             "source_site": "e621",
-            "preview_url": preview_data.get("url", ""),
-            "sample_url": sample_data.get("url") or file_url,
+            "preview_url": make_absolute(preview_data.get("url")),
+            "sample_url": make_absolute(sample_data.get("url")) or file_url,
             "file_url": file_url,
             "tags": tags,
             "rating": _RATING_MAP.get(raw.get("rating", "s"), "g"),
