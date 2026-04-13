@@ -2,13 +2,14 @@
   <div v-show="!hidden" class="post-card" @click="handleCardClick" 
        @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"
        :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200) }">
-    <div class="post-card-media" :style="mediaStyle" ref="cardEl">
+    <div class="post-card-media" :style="mediaStyle">
       <img class="post-card-img"
-           :src="activeSrc"
+           :src="loaded ? currentUrl : placeholder"
            :alt="'Post ' + post.id"
+           loading="lazy"
            referrerpolicy="no-referrer"
            :style="{ opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease-in-out', width: '100%', height: '100%', objectFit: 'cover' }"
-           @load="onLoad"
+           @load="loaded = true"
            @error="onError" />
     </div>
     <div class="post-card-overlay">
@@ -34,7 +35,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth.js'
 import { useToastStore } from '../stores/toast.js'
@@ -50,17 +51,11 @@ const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
-
 const loaded = ref(false)
 const isFav = ref(props.favorite)
-const cardEl = ref(null)
+const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="10" height="10"%3E%3C/svg%3E'
 
-// activeSrc starts empty — IntersectionObserver sets it when card enters viewport
-const activeSrc = ref('')
 const currentUrl = ref(props.post.sample_url || props.post.preview_url || '')
-let observer = null
-let errorCount = 0
-
 const isAnimated = computed(() =>
   ['gif', 'webm', 'mp4', 'm4v', 'mov', 'mkv'].includes((props.post.file_ext || '').toLowerCase())
 )
@@ -79,59 +74,38 @@ const mediaStyle = computed(() => {
   return { minHeight: '200px', background: 'var(--bg-secondary)', overflow: 'hidden' }
 })
 
-function onLoad() {
-  loaded.value = true
-  errorCount = 0
-}
-
-function onError() {
+function onError(e) {
   const p = props.post
-  errorCount++
+  // 1. If sample fails, try preview
+  if (currentUrl.value === p.sample_url && p.preview_url) {
+    console.log('Sample failed, trying preview:', p.id)
+    loaded.value = false
+    currentUrl.value = p.preview_url
+    return
+  }
   
-  setTimeout(() => {
-    // Stage 1: sample → preview
-    if (errorCount === 1 && p.preview_url && activeSrc.value !== p.preview_url) {
-      activeSrc.value = p.preview_url
-      return
-    }
-    // Stage 2: preview → file_url
-    if (errorCount === 2 && p.file_url && activeSrc.value !== p.file_url) {
-      activeSrc.value = p.file_url
-      return
-    }
-    // Stage 3: all variants failed — show broken state
-    loaded.value = true
-  }, 150)
+  // 2. If preview fails, try direct file_url
+  if ((currentUrl.value === p.preview_url || currentUrl.value === p.sample_url) && p.file_url && currentUrl.value !== p.file_url) {
+    console.log('Fallback to file_url:', p.id)
+    loaded.value = false
+    currentUrl.value = p.file_url
+    return
+  }
+  
+  // 3. Everything failed
+  console.error('All image variants failed for post:', p.id)
+  loaded.value = true // Show broken state finally
 }
-
-function activate() {
-  if (activeSrc.value) return
-  activeSrc.value = currentUrl.value
-}
-
-onMounted(() => {
-  if (!cardEl.value) { activate(); return }
-  observer = new IntersectionObserver(
-    (entries) => {
-      if (entries[0].isIntersecting) {
-        activate()
-        observer?.disconnect()
-        observer = null
-      }
-    },
-    { rootMargin: '600px' }
-  )
-  observer.observe(cardEl.value)
-})
-
-onUnmounted(() => { observer?.disconnect() })
 
 function toggleFav() {
-  if (!auth.isAuthenticated) { toast.show(lang.t('login_to_fav'), 'error'); return }
+  if (!auth.isAuthenticated) {
+    toast.show(lang.t('login_to_fav'), 'error')
+    return
+  }
   try {
     if (isFav.value) {
       apiCheckFavorite(props.post.source_site, props.post.id).then(check => {
-        if (check.favorite_id) apiRemoveFavorite(check.favorite_id)
+          if (check.favorite_id) apiRemoveFavorite(check.favorite_id)
       })
       isFav.value = false
       toast.show(lang.t('removed_fav'), 'info')
@@ -141,16 +115,22 @@ function toggleFav() {
       isDisliked.value = false
       toast.show(lang.t('added_fav'), 'success')
     }
-  } catch (e) { toast.show(e.message, 'error') }
+  } catch (e) {
+    toast.show(e.message, 'error')
+  }
 }
 
 const isDisliked = ref(props.post.is_dislike || false)
 
 function doDislike() {
-  if (!auth.isAuthenticated) { toast.show(lang.t('login_to_fav'), 'error'); return }
+  if (!auth.isAuthenticated) {
+    toast.show(lang.t('login_to_fav'), 'error')
+    return
+  }
+  
   if (isDisliked.value) {
     apiCheckFavorite(props.post.source_site, props.post.id).then(check => {
-      if (check.favorite_id) apiRemoveFavorite(check.favorite_id)
+        if (check.favorite_id) apiRemoveFavorite(check.favorite_id)
     })
     isDisliked.value = false
     hidden.value = true
@@ -167,6 +147,7 @@ const hidden = ref(false)
 const showLikeAnimation = ref(false)
 const swipeDiff = ref(0)
 const swiping = ref(false)
+
 let touchStartX = 0
 let touchStartY = 0
 let tapTimeout = null
@@ -202,6 +183,7 @@ function onTouchMove(e) {
   if (!swiping.value) return
   const diffX = e.changedTouches[0].screenX - touchStartX
   const diffY = e.changedTouches[0].screenY - touchStartY
+  
   if (Math.abs(diffX) > Math.abs(diffY)) {
     swipeDiff.value = diffX
   } else {
@@ -210,13 +192,15 @@ function onTouchMove(e) {
   }
 }
 
-function onTouchEnd() {
+function onTouchEnd(e) {
   swiping.value = false
   if (Math.abs(swipeDiff.value) > 80) {
     const dir = swipeDiff.value > 0 ? 1 : -1
-    swipeDiff.value = dir * window.innerWidth
+    swipeDiff.value = dir * window.innerWidth 
     setTimeout(() => {
-      if (auth.isAuthenticated) apiAddFavorite(props.post, true).catch(() => {})
+      if (auth.isAuthenticated) {
+        apiAddFavorite(props.post, true).catch(() => {})
+      }
       isFav.value = false
       hidden.value = true
     }, 300)
