@@ -59,6 +59,20 @@ def _apply_blacklist(posts: List[dict], rules: List[BlacklistRule], dislikes: se
     return filter_posts(posts, groups)
 
 
+def _deduplicate_by_md5(posts: List[dict]) -> List[dict]:
+    """Remove duplicate posts from the list based on MD5 hash."""
+    seen_md5 = set()
+    unique_posts = []
+    for post in posts:
+        md5 = post.get("md5")
+        if md5:
+            if md5 in seen_md5:
+                continue
+            seen_md5.add(md5)
+        unique_posts.append(post)
+    return unique_posts
+
+
 async def _cache_tags_task(tags: List[str], db: AsyncSession):
     if not tags:
         return
@@ -196,6 +210,7 @@ async def get_feed(
     background_tasks.add_task(_index_posts_task, list(posts), db)
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
+    posts = _deduplicate_by_md5(posts)
 
     # Cache ALL tags from results + query tags (deduplicated)
     unique_tags = set(tag_list)
@@ -247,6 +262,7 @@ async def search(
         background_tasks.add_task(_index_posts_task, list(posts), db)
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
+    posts = _deduplicate_by_md5(posts)
 
     # Cache ALL tags from results + query tags (deduplicated)
     unique_tags = set(tag_list)
