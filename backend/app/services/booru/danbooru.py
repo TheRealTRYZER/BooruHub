@@ -164,5 +164,6 @@ class Danbooru(BaseBooru):
             "width": raw.get("image_width", 0),
             "height": raw.get("image_height", 0),
             "file_ext": raw.get("file_ext", ""),
+            "md5": raw.get("md5", ""),
             "created_at": raw.get("created_at", ""),
         }

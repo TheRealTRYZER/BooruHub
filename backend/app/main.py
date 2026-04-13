@@ -32,7 +32,13 @@ async def lifespan(app: FastAPI):
         try:
             await conn.execute(text("ALTER TABLE favorites ADD COLUMN is_dislike BOOLEAN DEFAULT FALSE;"))
         except Exception:
-            pass  # Ignore if it already exists or isn't supported
+            pass  # Ignore if it already exists
+
+        try:
+            await conn.execute(text("ALTER TABLE post_index ADD COLUMN md5 VARCHAR(32);"))
+            await conn.execute(text("CREATE UNIQUE INDEX uq_postindex_md5 ON post_index (md5);"))
+        except Exception:
+            pass
             
     logger.info("Database tables ready")
     yield

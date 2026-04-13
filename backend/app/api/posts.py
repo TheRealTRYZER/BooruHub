@@ -98,15 +98,26 @@ async def _index_posts_task(posts: List[dict], db: AsyncSession):
     for post in posts:
         post_id = str(post.get("id", "")).strip()
         source_site = str(post.get("source_site", "")).strip()
+        md5 = str(post.get("md5", "")).strip().lower()
         if not post_id or not source_site:
             continue
+            
         tags = post.get("tags", [])
         tags_str = " ".join(tags) if isinstance(tags, list) else str(tags)
+        
         stmt = pg_insert(PostIndex).values(
             source_site=source_site,
             post_id=post_id,
+            md5=md5 if md5 else None,
             tags_str=tags_str,
-        ).on_conflict_do_nothing(constraint="uq_postindex_site_post")
+        )
+        
+        # Deduplicate by MD5 if available, otherwise by site/id
+        if md5:
+            stmt = stmt.on_conflict_do_nothing(index_elements=['md5'])
+        else:
+            stmt = stmt.on_conflict_do_nothing(index_elements=['source_site', 'post_id'])
+            
         try:
             await db.execute(stmt)
         except Exception:

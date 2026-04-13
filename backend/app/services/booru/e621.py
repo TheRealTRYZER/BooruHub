@@ -59,5 +59,6 @@ class E621(BaseBooru):
             "width": file_data.get("width", 0),
             "height": file_data.get("height", 0),
             "file_ext": file_data.get("ext", ""),
+            "md5": file_data.get("md5", ""),
             "created_at": raw.get("created_at", ""),
         }

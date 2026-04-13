@@ -135,12 +135,15 @@ class PostIndex(Base):
     __tablename__ = "post_index"
     __table_args__ = (
         UniqueConstraint("source_site", "post_id", name="uq_postindex_site_post"),
+        UniqueConstraint("md5", name="uq_postindex_md5"),
         Index("ix_postindex_site", "source_site"),
+        Index("ix_postindex_md5", "md5"),
     )
 
     id = Column(Integer, primary_key=True, autoincrement=True)
     source_site = Column(String(20), nullable=False)
     post_id = Column(String(50), nullable=False)
+    md5 = Column(String(32), nullable=True)
     tags_str = Column(Text, default="")
     created_at = Column(
         DateTime(timezone=True),
