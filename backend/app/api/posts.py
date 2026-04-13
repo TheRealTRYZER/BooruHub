@@ -7,9 +7,10 @@ from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.database import get_db
-from app.db.models import User, BlacklistRule, CachedTag, Favorite
+from app.db.models import User, BlacklistRule, CachedTag, Favorite, PostIndex
 from app.api.deps import get_current_user
 from app.services.booru_client import search_posts, search_multi_site
 from app.services.blacklist import parse_blacklist, filter_posts
@@ -90,6 +91,32 @@ async def _cache_tags_task(tags: List[str], db: AsyncSession):
         await db.rollback()
 
 
+async def _index_posts_task(posts: List[dict], db: AsyncSession):
+    """Save all seen posts (id, source_site, tags) to the global post index."""
+    if not posts:
+        return
+    for post in posts:
+        post_id = str(post.get("id", "")).strip()
+        source_site = str(post.get("source_site", "")).strip()
+        if not post_id or not source_site:
+            continue
+        tags = post.get("tags", [])
+        tags_str = " ".join(tags) if isinstance(tags, list) else str(tags)
+        stmt = pg_insert(PostIndex).values(
+            source_site=source_site,
+            post_id=post_id,
+            tags_str=tags_str,
+        ).on_conflict_do_nothing(constraint="uq_postindex_site_post")
+        try:
+            await db.execute(stmt)
+        except Exception:
+            pass
+    try:
+        await db.commit()
+    except Exception:
+        await db.rollback()
+
+
 # ------------------------------------------------------------------ #
 #  Endpoints                                                          #
 # ------------------------------------------------------------------ #
@@ -153,6 +180,10 @@ async def get_feed(
     # Post-processing
     if mappings:
         apply_reverse_mapping(posts, mappings)
+
+    # Index raw posts BEFORE filtering (captures everything the API returns)
+    background_tasks.add_task(_index_posts_task, list(posts), db)
+
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
 
     # Cache ALL tags from results + query tags (deduplicated)
@@ -200,8 +231,12 @@ async def search(
         if mappings:
             apply_reverse_mapping(posts, mappings)
 
+    # Index raw posts BEFORE filtering (captures everything the API returns)
+    if posts:
+        background_tasks.add_task(_index_posts_task, list(posts), db)
+
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
-    
+
     # Cache ALL tags from results + query tags (deduplicated)
     unique_tags = set(tag_list)
     for p in posts:

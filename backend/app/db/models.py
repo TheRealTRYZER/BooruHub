@@ -128,3 +128,21 @@ class CachedTag(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc)
     )
+
+
+class PostIndex(Base):
+    """Global index of all posts seen by the system."""
+    __tablename__ = "post_index"
+    __table_args__ = (
+        UniqueConstraint("source_site", "post_id", name="uq_postindex_site_post"),
+        Index("ix_postindex_site", "source_site"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source_site = Column(String(20), nullable=False)
+    post_id = Column(String(50), nullable=False)
+    tags_str = Column(Text, default="")
+    created_at = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+    )
