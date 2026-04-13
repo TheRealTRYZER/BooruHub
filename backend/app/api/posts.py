@@ -3,9 +3,7 @@ import asyncio
 import logging
 from typing import List, Optional
 
-from fastapi import APIRouter, Depends, Query, BackgroundTasks, Response
-from fastapi.responses import StreamingResponse
-import httpx
+from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update
 from sqlalchemy.dialects.sqlite import insert
@@ -25,6 +23,7 @@ from app.services.tag_mapping import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/posts", tags=["posts"])
+
 
 
 # ------------------------------------------------------------------ #
@@ -327,29 +326,3 @@ async def suggest_tags(
 
     return {"suggestions": suggestions[:limit]}
 
-@router.get("/proxy")
-async def proxy_image(url: str = Query(...)):
-    """Proxy image request to bypass hotlinking protection."""
-    # Safety check: only allow known booru domains
-    allowed_domains = ["donmai.us", "e621.net", "rule34.xxx"]
-    if not any(domain in url for domain in allowed_domains):
-        return Response(status_code=403)
-
-    async with httpx.AsyncClient() as client:
-        try:
-            # We must use a browser-like UA and no referer
-            headers = {
-                "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
-                "Referer": "https://danbooru.donmai.us/" if "donmai.us" in url else ""
-            }
-            resp = await client.get(url, headers=headers, follow_redirects=True, timeout=10.0)
-            resp.raise_for_status()
-            
-            return Response(
-                content=resp.content,
-                media_type=resp.headers.get("Content-Type", "image/jpeg"),
-                headers={"Cache-Control": "public, max-age=86400"}
-            )
-        except Exception as e:
-            logging.error(f"Proxy error for {url}: {e}")
-            return Response(status_code=404)

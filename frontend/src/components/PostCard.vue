@@ -99,16 +99,7 @@ function onError() {
       activeSrc.value = p.file_url
       return
     }
-    // Stage 3: all direct variants failed — try PROXY
-    if (errorCount === 3) {
-      console.log('Final fallback — using server proxy for:', p.id)
-      // Use the same logic as in api.js to find the backend
-      const apiBase = import.meta.env.VITE_API_URL || ''
-      activeSrc.value = `${apiBase}/api/posts/proxy?url=${encodeURIComponent(p.sample_url || p.file_url)}`
-      return
-    }
-
-    // Stage 4: truly dead
+    // Stage 3: all variants failed — show broken state
     loaded.value = true
   }, 150)
 }
