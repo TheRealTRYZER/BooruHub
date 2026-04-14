@@ -19,8 +19,8 @@ depends_on: Union[str, Sequence[str], None] = None
 
 
 def upgrade() -> None:
-    # Add data_consent to users
-    op.add_column('users', sa.Column('data_consent', sa.Boolean(), nullable=False, server_default='false'))
+    # Add data_consent to users (commented out because it already exists on server)
+    # op.add_column('users', sa.Column('data_consent', sa.Boolean(), nullable=False, server_default='false'))
     
     # Create user_events table
     op.create_table('user_events',
