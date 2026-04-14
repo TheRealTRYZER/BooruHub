@@ -15,35 +15,57 @@ logger = logging.getLogger(__name__)
 
 
 def _derive_fernet_key(secret: str) -> bytes:
-    """Legacy 32-byte padding for backward compatibility with existing DB keys."""
+    """Legacy 32-byte padding for backward compatibility."""
     key = secret.encode()
     if len(key) < 32:
         key = key.ljust(32, b"0")
     return base64.urlsafe_b64encode(key[:32])
 
 
-def _get_fernet() -> Fernet:
+def _derive_fernet_key_secure(secret: str) -> bytes:
+    """Secure derivation using PBKDF2."""
+    # We use a static salt because this is derived from a global secret (JWT_SECRET)
+    # for system-wide encryption of user API keys.
+    salt = b"booruhub_crypto_salt_2024" 
+    key = hashlib.pbkdf2_hmac('sha256', secret.encode(), salt, 100000)
+    return base64.urlsafe_b64encode(key)
+
+
+def _get_fernets():
     settings = get_settings()
-    # Prefer dedicated ENCRYPTION_KEY if set, else derive from JWT_SECRET
     key_source = settings.ENCRYPTION_KEY or settings.JWT_SECRET
-    return Fernet(_derive_fernet_key(key_source))
+    secure_f = Fernet(_derive_fernet_key_secure(key_source))
+    legacy_f = Fernet(_derive_fernet_key(key_source))
+    return secure_f, legacy_f
 
 
 # --------------- API-key encryption ---------------
 
 def encrypt_key(plain_text: str) -> str:
-    """Encrypt an API key for storage in the database."""
+    """Encrypt an API key for storage in the database using the secure key."""
     if not plain_text:
         return ""
-    return _get_fernet().encrypt(plain_text.encode()).decode()
+    secure_f, _ = _get_fernets()
+    return secure_f.encrypt(plain_text.encode()).decode()
 
 
 def decrypt_key(encrypted_text: str) -> str:
-    """Decrypt an API key retrieved from the database."""
+    """Decrypt an API key, trying the secure key first, then falling back to legacy."""
     if not encrypted_text:
         return ""
+    
+    secure_f, legacy_f = _get_fernets()
+    encoded_text = encrypted_text.encode()
+
+    # 1. Try secure key
     try:
-        return _get_fernet().decrypt(encrypted_text.encode()).decode()
+        return secure_f.decrypt(encoded_text).decode()
+    except InvalidToken:
+        pass
+    
+    # 2. Try legacy fallback
+    try:
+        return legacy_f.decrypt(encoded_text).decode()
     except InvalidToken:
         logger.warning("Failed to decrypt API key — token invalid or key rotated")
         return ""
