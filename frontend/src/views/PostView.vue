@@ -68,6 +68,7 @@ import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
 import { apiCheckFavorite, apiAddFavorite, apiRemoveFavorite, apiSearch } from '../api'
+import { useEventLogger } from '../composables/useEventLogger'
 import TagChip from '../components/TagChip.vue'
 import { Post, SiteName, RATING_MAP, RATING_LABELS } from '../types'
 
@@ -75,6 +76,7 @@ const route = useRoute()
 const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
+const { logView, logFavourite } = useEventLogger()
 
 const post = ref<Post | null>(null)
 const isFav = ref(false)
@@ -132,6 +134,7 @@ async function toggleFavorite() {
     } else {
       await apiAddFavorite(post.value)
       isFav.value = true
+      logFavourite(post.value)
       toast.show(lang.t('added_fav'), 'success')
       await checkFav()
     }
@@ -149,6 +152,7 @@ onMounted(async () => {
     const data = await apiSearch(`id:${id}`, site, 1, 1)
     if (data.posts && data.posts.length > 0) {
       post.value = data.posts[0]
+      logView(post.value)
       await checkFav()
     }
   } catch(e) {

@@ -18,6 +18,14 @@
           <input type="password" class="input" v-model="password" :placeholder="lang.t('password')" required minlength="6" autocomplete="new-password">
         </div>
         
+        <div class="input-group" style="flex-direction:row;align-items:center;gap:8px;">
+          <input type="checkbox" id="consent" v-model="consent" style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;flex-shrink:0;">
+          <label for="consent" style="font-size:var(--font-sm);color:var(--text-secondary);cursor:pointer;line-height:1.4;">
+            {{ lang.t('consent_label') }}
+            <a href="#/privacy" target="_blank" style="color:var(--primary);">{{ lang.t('privacy_policy') }}</a>
+          </label>
+        </div>
+        
         <div v-show="errorMsg" style="color:var(--danger);font-size:var(--font-sm);">{{ errorMsg }}</div>
         
         <button type="submit" class="btn btn-primary" :disabled="loading">
@@ -47,6 +55,7 @@ const lang = useLangStore()
 const username = ref('')
 const email = ref('')
 const password = ref('')
+const consent = ref(false)
 const loading = ref(false)
 const errorMsg = ref('')
 
@@ -59,7 +68,7 @@ async function submit() {
 
   loading.value = true
   try {
-    await auth.register(username.value, email.value, password.value)
+    await auth.register(username.value, email.value, password.value, consent.value)
     toast.show(lang.t('logged_in_msg'), 'success')
     router.push('/')
   } catch(e: any) {

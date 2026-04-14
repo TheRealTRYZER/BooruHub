@@ -1,7 +1,9 @@
 <template>
   <div class="post-grid" ref="gridEl">
     <div v-for="(col, ci) in columns" :key="ci" class="post-column">
-      <component v-for="item in col" :key="item.key" :is="item.component" v-bind="item.props" />
+      <div v-for="item in col" :key="item.key" :data-post-key="item.key">
+        <component :is="item.component" v-bind="item.props" />
+      </div>
     </div>
   </div>
 </template>
@@ -10,6 +12,7 @@
 import { ref, watch, onMounted, onUnmounted, markRaw } from 'vue'
 import PostCard from './PostCard.vue'
 import SkeletonCard from './SkeletonCard.vue'
+import { useEventLogger } from '../composables/useEventLogger'
 import type { Post } from '../types'
 
 interface GridItem {
@@ -104,6 +107,7 @@ function addSkeletons(count: number) {
 watch(() => props.posts.length, () => {
   removeSkeletons()
   placeNewPosts()
+  setTimeout(observeNewCards, 100)
 })
 
 // Watch loading state for skeletons
@@ -132,13 +136,40 @@ function onResize() {
   }
 }
 
+// Impression tracking
+const { createImpressionObserver } = useEventLogger()
+let impressionTracker: ReturnType<typeof createImpressionObserver> | null = null
+
+function observeNewCards() {
+  if (!gridEl.value || !impressionTracker) return
+  const cards = gridEl.value.querySelectorAll('.post-card:not([data-observed])')
+  cards.forEach((el) => {
+    const key = (el as HTMLElement).closest('[data-post-key]')?.getAttribute('data-post-key') || ''
+    // Find the post by parsing the key (format: site-id)
+    const sep = key.indexOf('-')
+    if (sep > 0) {
+      const site = key.substring(0, sep)
+      const id = key.substring(sep + 1)
+      const post = props.posts.find(p => String(p.id) === id && p.source_site === site)
+      if (post) {
+        impressionTracker!.observe(el as HTMLElement, post)
+        el.setAttribute('data-observed', '1')
+      }
+    }
+  })
+}
+
 onMounted(() => {
   initColumns()
   placeNewPosts()
   window.addEventListener('resize', onResize)
+  impressionTracker = createImpressionObserver()
+  // Observe initially rendered cards after next tick
+  setTimeout(observeNewCards, 100)
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', onResize)
+  if (impressionTracker) impressionTracker.disconnect()
 })
 </script>

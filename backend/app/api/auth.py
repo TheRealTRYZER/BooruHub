@@ -24,6 +24,7 @@ class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     email: EmailStr
     password: str = Field(min_length=6, max_length=128)
+    data_consent: bool = False
 
 
 class LoginRequest(BaseModel):
@@ -55,6 +56,7 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
         email=req.email,
         password_hash=hash_password(req.password),
         default_tags=DEFAULT_USER_TAGS,
+        data_consent=req.data_consent,
     )
     db.add(user)
     await db.flush()  # Get ID without committing whole transaction

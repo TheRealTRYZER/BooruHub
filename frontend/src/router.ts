@@ -9,6 +9,7 @@ import LoginView from './views/LoginView.vue'
 import RegisterView from './views/RegisterView.vue'
 import SettingsView from './views/SettingsView.vue'
 import GuidesView from './views/GuidesView.vue'
+import PrivacyView from './views/PrivacyView.vue'
 
 const routes: RouteRecordRaw[] = [
   { path: '/', name: 'feed', component: FeedView },
@@ -19,6 +20,7 @@ const routes: RouteRecordRaw[] = [
   { path: '/register', name: 'register', component: RegisterView },
   { path: '/settings', name: 'settings', component: SettingsView },
   { path: '/guides', name: 'guides', component: GuidesView },
+  { path: '/privacy', name: 'privacy', component: PrivacyView },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 

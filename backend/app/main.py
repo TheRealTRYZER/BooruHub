@@ -17,6 +17,7 @@ from app.api.bookmarks import router as bookmarks_router
 from app.api.blacklist_api import router as blacklist_router
 from app.api.mappings import router as mappings_router
 from app.api.users import router as users_router
+from app.api.events import router as events_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -64,6 +65,7 @@ app.include_router(bookmarks_router)
 app.include_router(blacklist_router)
 app.include_router(mappings_router)
 app.include_router(users_router)
+app.include_router(events_router)
 
 
 @app.get("/api/health")

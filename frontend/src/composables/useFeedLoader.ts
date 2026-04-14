@@ -1,5 +1,6 @@
 import { ref } from 'vue'
 import { apiFeed } from '../api'
+import { useEventLogger } from './useEventLogger'
 import type { SiteName, Post } from '../types'
 
 export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: SiteName[]) {
@@ -113,6 +114,8 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
   }
 
   function reload(sentinel?: HTMLElement | null) {
+    const { logSearch } = useEventLogger()
+    if (feed.tags) logSearch(feed.tags)
     feed.resetFeed()
     correctedTags.value = null
     loadMore(sentinel)

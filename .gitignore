@@ -1,5 +1,6 @@
 .env
 .env.local
+req.md
 
 __pycache__/
 *.pyc

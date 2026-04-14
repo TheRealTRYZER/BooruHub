@@ -33,12 +33,15 @@ class User(Base):
     search_timeout = Column(Float, default=30.0)
     search_interval = Column(Float, default=0.0)
 
+    data_consent = Column(Boolean, default=False, nullable=False, server_default='false')
+
     created_at = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),
     )
 
     favorites = relationship("Favorite", back_populates="user", cascade="all, delete-orphan")
+    events = relationship("UserEvent", back_populates="user", cascade="all, delete-orphan")
     bookmarks = relationship("Bookmark", back_populates="user", cascade="all, delete-orphan")
     blacklist_rules = relationship("BlacklistRule", back_populates="user", cascade="all, delete-orphan")
     tag_mappings = relationship("UserTagMapping", back_populates="user", cascade="all, delete-orphan")
@@ -128,6 +131,31 @@ class CachedTag(Base):
         default=lambda: datetime.now(timezone.utc),
         onupdate=lambda: datetime.now(timezone.utc)
     )
+
+
+class UserEvent(Base):
+    """Tracks user interactions for the recommendation system."""
+    __tablename__ = "user_events"
+    __table_args__ = (
+        Index("ix_events_user_ts", "user_id", "ts"),
+        Index("ix_events_type_ts", "type", "ts"),
+    )
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    ts = Column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc),
+        nullable=False,
+    )
+    user_id = Column(Integer, ForeignKey("users.id", ondelete="CASCADE"), nullable=False)
+    type = Column(String(16), nullable=False)  # impression, view, like, favourite, search
+    query = Column(Text, nullable=True)  # search query text
+    source = Column(String(32), nullable=True)  # danbooru, e621, rule34
+    post_id = Column(String(50), nullable=True)
+    tags = Column(ARRAY(Text), nullable=True)  # tags at time of event (denormalized)
+    duration_sec = Column(Integer, nullable=True)  # viewport time for impressions
+
+    user = relationship("User", back_populates="events")
 
 
 class PostIndex(Base):

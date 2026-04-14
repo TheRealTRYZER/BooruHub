@@ -85,4 +85,22 @@ async def get_keys_status(user: User = Depends(require_user)):
         "rule34_user_id": user.rule34_user_id or "",
         "search_limit": user.search_limit,
         "search_interval": user.search_interval,
+        "data_consent": user.data_consent,
     }
+
+
+class ConsentUpdate(BaseModel):
+    data_consent: bool
+
+
+@router.put("/consent")
+async def update_consent(
+    body: ConsentUpdate,
+    user: User = Depends(require_user),
+    db: AsyncSession = Depends(get_db),
+):
+    """Toggle data collection consent."""
+    user.data_consent = body.data_consent
+    await db.commit()
+    logger.info(f"User {user.id} consent set to {body.data_consent}")
+    return {"data_consent": user.data_consent}

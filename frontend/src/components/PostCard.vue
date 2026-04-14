@@ -1,5 +1,5 @@
 <template>
-  <div v-show="!hidden" class="post-card" @click="handleCardClick"
+  <div ref="cardRef" v-show="!hidden" class="post-card" @click="handleCardClick"
        @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"
        :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200) }">
     <div class="post-card-media" :style="mediaStyle">
@@ -41,6 +41,7 @@ import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
 import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite } from '../api'
+import { useEventLogger } from '../composables/useEventLogger'
 import { RATING_MAP, RATING_LABELS } from '../types'
 import type { Post, RatingClass } from '../types'
 
@@ -53,7 +54,9 @@ const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
+const { logLike, logFavourite } = useEventLogger()
 const loaded = ref(false)
+const cardRef = ref<HTMLElement | null>(null)
 const isFav = ref(props.favorite ?? false)
 const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="10" height="10"%3E%3C/svg%3E'
 
@@ -107,6 +110,7 @@ async function toggleFav() {
       await apiAddFavorite(props.post)
       isFav.value = true
       isDisliked.value = false
+      logFavourite(props.post)
       toast.show(lang.t('added_fav'), 'success')
     }
   } catch (e) {
@@ -159,6 +163,7 @@ function handleCardClick() {
     if (tapTimeout) clearTimeout(tapTimeout)
     lastTapTime = 0
     if (!isFav.value) toggleFav()
+    logLike(props.post)
     doLikeAnimation()
   } else {
     lastTapTime = now
@@ -203,4 +208,6 @@ function onTouchEnd() {
     swipeDiff.value = 0
   }
 }
+
+defineExpose({ cardRef, post: props.post })
 </script>

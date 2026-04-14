@@ -26,6 +26,18 @@ export interface User {
   username: string
   email: string
   default_tags: string | null
+  data_consent?: boolean
+}
+
+export type EventType = 'impression' | 'view' | 'like' | 'favourite' | 'search'
+
+export interface UserEventPayload {
+  type: EventType
+  source?: string
+  post_id?: string
+  tags?: string[]
+  query?: string
+  duration_sec?: number
 }
 
 export interface AuthResponse {

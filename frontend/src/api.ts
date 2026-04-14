@@ -78,10 +78,10 @@ export async function apiLogin(loginStr: string, password: string): Promise<Auth
   })
 }
 
-export async function apiRegister(username: string, email: string, password: string): Promise<AuthResponse> {
+export async function apiRegister(username: string, email: string, password: string, dataConsent = false): Promise<AuthResponse> {
   return _fetch<AuthResponse>('/auth/register', {
     method: 'POST',
-    body: JSON.stringify({ username, email, password }),
+    body: JSON.stringify({ username, email, password, data_consent: dataConsent }),
   })
 }
 
@@ -239,4 +239,18 @@ export async function apiUpdateApiKeys(data: ApiKeysUpdate): Promise<unknown> {
 
 export async function apiGetApiKeysStatus(): Promise<ApiKeysStatus> {
   return _fetch<ApiKeysStatus>('/user/keys/status')
+}
+
+// Events (recommendation system data collection)
+export async function apiLogEvents(events: import('./types').UserEventPayload[]): Promise<unknown> {
+  if (events.length === 0) return { accepted: 0 }
+  return _fetch('/events/batch', {
+    method: 'POST',
+    body: JSON.stringify({ events }),
+  }).catch(() => {}) // Fire-and-forget, never block UI
+}
+
+// GDPR: delete all user event history
+export async function apiDeleteHistory(): Promise<{ deleted: number }> {
+  return _fetch('/events/history', { method: 'DELETE' })
 }

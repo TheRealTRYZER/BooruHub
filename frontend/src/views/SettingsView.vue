@@ -83,6 +83,26 @@
             <div style="font-size:10px;color:var(--text-muted);margin-top:4px;" v-html="keysStatusStr"></div>
           </div>
         </div>
+
+        <div class="settings-section">
+          <div class="settings-title">🛡️ {{ lang.t('privacy_title') }}</div>
+          <p style="font-size:var(--font-sm);color:var(--text-muted);margin-bottom:12px;">
+            {{ lang.t('privacy_desc') }}
+            <a href="#/privacy" style="color:var(--primary);">{{ lang.t('privacy_policy') }}</a>
+          </p>
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+            <input type="checkbox" id="dataConsent" v-model="dataConsent" @change="toggleConsent" style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;flex-shrink:0;">
+            <label for="dataConsent" style="font-size:var(--font-sm);color:var(--text-secondary);cursor:pointer;">{{ lang.t('consent_label') }}</label>
+          </div>
+          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
+            <span style="font-size:var(--font-sm);color:var(--text-secondary);">
+              {{ lang.t('events_collected') }}: <strong>{{ eventCount }}</strong>
+            </span>
+          </div>
+          <button class="btn btn-danger btn-sm" @click="deleteHistory" :disabled="deletingHistory">
+            🗑️ {{ lang.t('delete_history') }}
+          </button>
+        </div>
       </div>
 
       <div class="settings-col">
@@ -142,7 +162,8 @@ import { useLangStore } from '../stores/lang'
 import {
   apiUpdateDefaultTags, apiGetApiKeysStatus, apiUpdateApiKeys,
   apiGetMappings, apiCreateMapping, apiUpdateMapping, apiDeleteMapping,
-  apiGetBlacklist, apiAddBlacklistRule, apiUpdateBlacklistRule, apiDeleteBlacklistRule
+  apiGetBlacklist, apiAddBlacklistRule, apiUpdateBlacklistRule, apiDeleteBlacklistRule,
+  apiDeleteHistory as apiDeleteHistoryFn
 } from '../api'
 import type { TagMapping, BlacklistRule, ApiKeysStatus, ApiKeysUpdate } from '../types'
 
@@ -169,6 +190,9 @@ const mapForm = ref({ unitag: '', danbooru: '', e621: '', rule34: '' })
 
 const rules = ref<BlacklistRule[]>([])
 const newRule = ref('')
+const eventCount = ref(0)
+const deletingHistory = ref(false)
+const dataConsent = ref(false)
 
 async function saveDefaultTags() {
   savingTags.value = true
@@ -203,6 +227,7 @@ async function loadKeysStatus() {
     statusFlags.value.danbooru = status.danbooru
     statusFlags.value.e621 = status.e621
     statusFlags.value.rule34 = status.rule34
+    dataConsent.value = !!(status as any).data_consent
   } catch (e) {
     keysStatusStr.value = lang.t('api_error')
   }
@@ -321,14 +346,55 @@ async function deleteRule(id: number) {
   } catch(e: any) { toast.show(e.message || e, 'error') }
 }
 
-onMounted(() => {
+onMounted(async () => {
   if (auth.isAuthenticated && auth.user) {
     defaultTags.value = auth.user.default_tags || ''
     loadKeysStatus()
     loadMappings()
     loadRules()
+    loadEventCount()
   }
 })
+
+async function loadEventCount() {
+  try {
+    const resp = await fetch('/api/events/count', { headers: { Authorization: `Bearer ${localStorage.getItem('booruhub_token')}` } })
+    if (resp.ok) {
+      const data = await resp.json()
+      eventCount.value = data.total || 0
+    }
+  } catch {}
+}
+
+async function toggleConsent() {
+  try {
+    await fetch('/api/user/consent', {
+      method: 'PUT',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${localStorage.getItem('booruhub_token')}`
+      },
+      body: JSON.stringify({ data_consent: dataConsent.value })
+    })
+    toast.show(lang.t('settings_saved'), 'success')
+  } catch {
+    toast.show('Error', 'error')
+  }
+}
+
+async function deleteHistory() {
+  if (!confirm(lang.t('confirm_delete_history'))) return
+  deletingHistory.value = true
+  try {
+    const result = await apiDeleteHistoryFn()
+    eventCount.value = 0
+    toast.show(lang.t('history_deleted').replace('{n}', String(result.deleted)), 'success')
+  } catch (e: any) {
+    toast.show(e.message || 'Error', 'error')
+  } finally {
+    deletingHistory.value = false
+  }
+}
 </script>
 
 <style scoped>
