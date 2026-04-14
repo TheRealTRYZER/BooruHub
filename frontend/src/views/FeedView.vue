@@ -59,6 +59,11 @@
       </label>
     </div>
 
+    <div v-if="correctedTags" class="suggestion-banner">
+      <span>{{ lang.t('did_you_mean') }}: </span>
+      <a href="#" @click.prevent="applyCorrection(correctedTags)">{{ correctedTags }}</a>
+    </div>
+
     <PostGrid :posts="feed.posts" :skeletonCount="skeletonCount" />
     <div v-if="loading" class="loading-spinner" style="margin: 20px auto;"></div>
     <div v-if="!feed.hasMore && feed.posts.length > 0" class="loading-text" style="text-align:center; padding:40px; color:var(--text-muted); width:100%;">
@@ -98,9 +103,14 @@ const suggestions = ref<string[]>([])
 let observer: IntersectionObserver | null = null
 let suggestTimeout: any = null
 
-const { loading, skeletonCount, loadMore, reload } = useFeedLoader(feed, toast, lang, availableSites)
+const { loading, skeletonCount, correctedTags, loadMore, reload } = useFeedLoader(feed, toast, lang, availableSites)
 
 const handleReload = () => reload(sentinel.value)
+
+function applyCorrection(newTags: string) {
+  feed.tags = newTags
+  handleReload()
+}
 
 function toggleSite(site: SiteName) {
   feed.toggleSite(site)

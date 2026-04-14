@@ -401,6 +401,20 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   .site-filter { padding: 4px 10px; font-size: 11px; }
 }
 
+.suggestion-banner {
+  background: rgba(139, 92, 246, 0.1);
+  border: 1px solid rgba(139, 92, 246, 0.2);
+  padding: 12px 16px;
+  border-radius: var(--border-radius);
+  margin-bottom: var(--sp-6);
+  font-size: 14px;
+  color: var(--text-primary);
+}
+.suggestion-banner a {
+  font-weight: 700;
+  text-decoration: underline;
+}
+
 @media (max-width: 480px) {
   /* Extra tight for very small phones */
   .search-bar > div:first-child button { flex: 1; }

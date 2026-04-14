@@ -36,12 +36,14 @@ export interface AuthResponse {
 
 export interface FeedResponse {
   posts: Post[]
+  page: number
+  total: number
   unfiltered_count: number
+  resolved_tags: string
+  corrected_tags?: string | null
 }
 
-export interface SearchResponse {
-  posts: Post[]
-}
+export interface SearchResponse extends FeedResponse {}
 
 export interface TagSuggestResponse {
   suggestions: string[]

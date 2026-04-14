@@ -106,6 +106,7 @@ const translations: Record<Locale, TranslationDict> = {
     delete: "Delete",
     confirm_delete: "Are you sure you want to delete this?",
     save: "Save",
+    did_you_mean: "Did you mean",
   },
   ru: {
     search_placeholder: "Поиск по тегам... (напр. cat_ears 1girl)",
@@ -208,6 +209,7 @@ const translations: Record<Locale, TranslationDict> = {
     delete: "Удалить",
     confirm_delete: "Вы уверены, что хотите это удалить?",
     save: "Сохранить",
+    did_you_mean: "Возможно, вы имели в виду",
   },
 }
 

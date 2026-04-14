@@ -5,6 +5,7 @@ import type { SiteName, Post } from '../types'
 export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: SiteName[]) {
   const loading = ref(false)
   const skeletonCount = ref(0)
+  const correctedTags = ref<string | null>(null)
   let loadGeneration = 0
 
   async function loadMore(sentinel?: HTMLElement | null) {
@@ -47,6 +48,10 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
           })
           if (gen !== loadGeneration) return 0
           
+          if (data.corrected_tags && !correctedTags.value) {
+            correctedTags.value = data.corrected_tags
+          }
+
           const newPosts = data.posts || []
           pagePayloads[site] = newPosts
           unfilteredCounts[site] = data.unfiltered_count || 0
@@ -104,8 +109,9 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
 
   function reload(sentinel?: HTMLElement | null) {
     feed.resetFeed()
+    correctedTags.value = null
     loadMore(sentinel)
   }
 
-  return { loading, skeletonCount, loadMore, reload }
+  return { loading, skeletonCount, correctedTags, loadMore, reload }
 }

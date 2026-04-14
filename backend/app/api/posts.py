@@ -5,6 +5,7 @@ from typing import List, Optional, Union, Dict
 from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, update, insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -47,6 +48,7 @@ class FeedResponse(BaseModel):
     total: int
     unfiltered_count: int
     resolved_tags: str
+    corrected_tags: Optional[str] = None
 
 
 class TagSuggestionResponse(BaseModel):
@@ -188,6 +190,42 @@ async def _index_posts_task(posts: List[dict], db: AsyncSession):
         await db.rollback()
 
 
+async def get_similar_tags(tags_str: str, db: AsyncSession) -> Optional[str]:
+    """Try to find similar tags for a search query if zero results found."""
+    if not tags_str:
+        return None
+        
+    parts = tags_str.split()
+    corrected = []
+    changed = False
+    
+    for part in parts:
+        # Skip metatags like order:, rating:, etc.
+        if ":" in part or len(part) < 3:
+            corrected.append(part)
+            continue
+            
+        # Search for a similar tag in cached_tags using pg_trgm similarity
+        # We only accept a high similarity threshold
+        stmt = select(CachedTag.tag).where(
+            func.similarity(CachedTag.tag, part) > 0.4
+        ).order_by(
+            func.similarity(CachedTag.tag, part).desc(),
+            CachedTag.usage_count.desc()
+        ).limit(1)
+        
+        result = await db.execute(stmt)
+        match = result.scalar_one_or_none()
+        
+        if match and match != part:
+            corrected.append(match)
+            changed = True
+        else:
+            corrected.append(part)
+            
+    return " ".join(corrected) if changed else None
+
+
 # ------------------------------------------------------------------ #
 #  Endpoints                                                          #
 # ------------------------------------------------------------------ #
@@ -267,7 +305,18 @@ async def get_feed(
     if unique_tags:
         background_tasks.add_task(_cache_tags_task, list(unique_tags), db)
 
-    return {"posts": posts, "page": page, "total": len(posts), "unfiltered_count": unfiltered_count, "resolved_tags": tags}
+    corrected_tags = None
+    if not posts and tags:
+        corrected_tags = await get_similar_tags(tags, db)
+
+    return {
+        "posts": posts, 
+        "page": page, 
+        "total": len(posts), 
+        "unfiltered_count": unfiltered_count, 
+        "resolved_tags": tags,
+        "corrected_tags": corrected_tags
+    }
 
 
 @router.get("/search", response_model=FeedResponse)
@@ -320,7 +369,18 @@ async def search(
     if unique_tags:
         background_tasks.add_task(_cache_tags_task, list(unique_tags), db)
     
-    return {"posts": posts, "page": page, "total": len(posts), "unfiltered_count": unfiltered_count, "resolved_tags": tags}
+    corrected_tags = None
+    if not posts and tags:
+        corrected_tags = await get_similar_tags(tags, db)
+
+    return {
+        "posts": posts, 
+        "page": page, 
+        "total": len(posts), 
+        "unfiltered_count": unfiltered_count, 
+        "resolved_tags": tags,
+        "corrected_tags": corrected_tags
+    }
 
 
 @router.get("/tags/suggest", response_model=TagSuggestionResponse)
