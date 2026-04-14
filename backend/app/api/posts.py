@@ -269,16 +269,22 @@ async def get_feed(
     overrides = {"danbooru": danbooru_tags, "e621": e621_tags, "rule34": rule34_tags}
     lookup = build_lookup(mappings)
     tag_list = tags.split() if tags else []
+    
+    # Enforce rating:general for guests (override any provided rating)
+    if not user:
+        tag_list = [t for t in tag_list if not t.startswith("rating:")]
+        tag_list.append("rating:general")
 
     site_queries = {}
     for site in site_list:
         if overrides.get(site):
             site_queries[site] = overrides[site]
         else:
-            query = translate_tags(tag_list, site, lookup) if tags else ""
+            query = translate_tags(tag_list, site, lookup) if tag_list else ""
             if query is not None:
                 site_queries[site] = query
-                logger.info(f"[MAP] {site}: '{query}' (from '{tags}')")
+                if tags or not user:
+                    logger.info(f"[MAP] {site}: '{query}' (from '{tags}')")
 
     # Fetch
     posts, site_counts = await search_multi_site(
@@ -331,6 +337,11 @@ async def search(
     db: AsyncSession = Depends(get_db),
 ):
     tag_list = tags.split() if tags else []
+    
+    # Enforce rating:general for guests (override any provided rating)
+    if not user:
+        tag_list = [t for t in tag_list if not t.startswith("rating:")]
+        tag_list.append("rating:general")
 
     mappings = []
     blacklist_rules: List[BlacklistRule] = []
