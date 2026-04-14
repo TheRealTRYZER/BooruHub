@@ -9,7 +9,7 @@ STARTER_MAPPINGS = [
         "unitag": "order:score",
         "danbooru_tags": "order:score",
         "e621_tags": "order:score",
-        "rule34_tags": "sort:score:desc"
+        "rule34_tags": "sort:score"
     },
     {
         "unitag": "rating:general",
@@ -45,6 +45,6 @@ STARTER_MAPPINGS = [
         "unitag": "order:hot",
         "danbooru_tags": "order:rank",
         "e621_tags": "order:hot",
-        "rule34_tags": "sort:score:desc"
+        "rule34_tags": "sort:score"
     }
 ]
