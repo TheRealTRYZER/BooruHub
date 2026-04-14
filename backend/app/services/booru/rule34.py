@@ -102,7 +102,8 @@ class Rule34(BaseBooru):
             if not isinstance(data, list):
                 return [], 0
 
-            return [p for p in (self.normalize_post(r) for r in data) if p][:limit]
+            posts = [p for p in (self.normalize_post(r) for r in data) if p][:limit]
+            return posts, 0
 
         except (httpx.RequestError, ValueError, Exception) as e:
             logger.error(f"[rule34] Request failed: {e}")
