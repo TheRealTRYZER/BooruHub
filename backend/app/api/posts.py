@@ -312,8 +312,8 @@ async def get_feed(
     return {
         "posts": posts, 
         "page": page, 
-        "total": len(posts), 
-        "unfiltered_count": unfiltered_count, 
+        "total": unfiltered_total, 
+        "unfiltered_count": unfiltered_total, 
         "resolved_tags": tags,
         "corrected_tags": corrected_tags
     }
