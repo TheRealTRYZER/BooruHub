@@ -297,8 +297,8 @@ async def get_feed(
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
     posts = _deduplicate_by_md5(posts)
 
-    # Cache ALL tags from results + query tags (deduplicated)
-    unique_tags = set(tag_list)
+    # Cache ONLY tags from results to avoid saving typos
+    unique_tags = set()
     for p in posts:
         unique_tags.update(p.get("tags", []))
     
@@ -361,8 +361,8 @@ async def search(
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
     posts = _deduplicate_by_md5(posts)
 
-    # Cache ALL tags from results + query tags (deduplicated)
-    unique_tags = set(tag_list)
+    # Cache ONLY tags from results to avoid saving typos
+    unique_tags = set()
     for p in posts:
         unique_tags.update(p.get("tags", []))
         
