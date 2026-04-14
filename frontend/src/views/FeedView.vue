@@ -73,15 +73,16 @@
   </div>
 </template>
 
-<script setup>
-import { ref, onMounted, onUnmounted, watch } from 'vue'
+<script setup lang="ts">
+import { ref, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { useAuthStore } from '../stores/auth.js'
-import { useFeedStore } from '../stores/feed.js'
-import { useToastStore } from '../stores/toast.js'
-import { useLangStore } from '../stores/lang.js'
-import { apiFeed, apiSuggestTags, apiAddBookmark } from '../api.js'
+import { useAuthStore } from '../stores/auth'
+import { useFeedStore } from '../stores/feed'
+import { useToastStore } from '../stores/toast'
+import { useLangStore } from '../stores/lang'
+import { apiFeed, apiSuggestTags, apiAddBookmark } from '../api'
 import PostGrid from '../components/PostGrid.vue'
+import type { SiteName, Post } from '../types'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -89,19 +90,17 @@ const feed = useFeedStore()
 const toast = useToastStore()
 const lang = useLangStore()
 
-const availableSites = ['danbooru', 'e621', 'rule34']
+const availableSites: SiteName[] = ['danbooru', 'e621', 'rule34']
 const loading = ref(false)
-const sentinel = ref(null)
-const suggestions = ref([])
+const sentinel = ref<HTMLElement | null>(null)
+const suggestions = ref<string[]>([])
 const skeletonCount = ref(0)
-let observer = null
-let searchTimeout = null
-let suggestTimeout = null
+let observer: IntersectionObserver | null = null
+let suggestTimeout: any = null
 let loadGeneration = 0  // Increments on each reload() to cancel stale requests
 
-function toggleSite(site) {
+function toggleSite(site: SiteName) {
   feed.toggleSite(site)
-  // No auto-reload on site toggle
 }
 
 async function saveBookmark() {
@@ -113,17 +112,16 @@ async function saveBookmark() {
   try {
     await apiAddBookmark(tags, tags, feed.sites)
     toast.show('Запрос сохранён в закладки', 'success')
-  } catch (e) {
-    toast.show(e.message, 'error')
+  } catch (e: any) {
+    toast.show(e.message || e, 'error')
   }
 }
 
 function onSearchInput() {
-  // Clear suggestions timeout
   clearTimeout(suggestTimeout)
   const val = feed.tags.trim()
   const lastTag = val.split(/\s+/).pop()
-  if (lastTag.length >= 2) {
+  if (lastTag && lastTag.length >= 2) {
     suggestTimeout = setTimeout(async () => {
       try {
         const data = await apiSuggestTags(lastTag)
@@ -141,14 +139,12 @@ function onSearchBlur() {
   setTimeout(() => { suggestions.value = [] }, 200)
 }
 
-function selectSuggestion(tag) {
+function selectSuggestion(tag: string) {
   const parts = feed.tags.trim().split(/\s+/)
   parts[parts.length - 1] = tag
-  // Don't add space if it's a prefix like "order:" or "rating:"
   const endsWithColon = tag.endsWith(':')
   feed.tags = parts.join(' ') + (endsWithColon ? '' : ' ')
   suggestions.value = []
-  // If it ended with colon, focus might be needed to continue typing
 }
 
 function reload() {
@@ -161,66 +157,60 @@ async function loadMore() {
   if (loading.value || !feed.hasMore) return
   loading.value = true
   skeletonCount.value = 12
-  const gen = loadGeneration  // Capture current generation
+  const gen = loadGeneration
 
-  const activeSites = feed.sites.length > 0 ? feed.sites : availableSites
+  const activeSites = (feed.sites.length > 0 ? feed.sites : availableSites) as SiteName[]
   const limitPerSite = Math.ceil(45 / activeSites.length)
   
-  // Update signature to match this exact fetch parameters
   const siteTagSig = feed.isSplit ? JSON.stringify(feed.siteTags) : ''
   feed.lastSearchSignature = `${feed.tags}|${feed.sites.join(',')}|${feed.isSplit}|${siteTagSig}`
 
-  // Track the posts array before this page load begins
   const basePosts = [...feed.posts];
-    const pagePayloads = {};
-    const unfilteredCounts = {};
-    activeSites.forEach(s => {
-      pagePayloads[s] = [];
-      unfilteredCounts[s] = 0;
-    });
+  const pagePayloads: Record<string, Post[]> = {};
+  const unfilteredCounts: Record<string, number> = {};
+  activeSites.forEach(s => {
+    pagePayloads[s] = [];
+    unfilteredCounts[s] = 0;
+  });
 
-    try {
-      const fetchPromises = activeSites.map(async (site, idx) => {
-        try {
-          if (idx > 0) await new Promise(r => setTimeout(r, idx * 50));
-          if (gen !== loadGeneration) return 0  // Aborted by reload()
-          
-          const options = {}
-          if (feed.isSplit) {
-            if (feed.siteTags[site]) options[`${site}_tags`] = feed.siteTags[site]
-          }
-          
-          const data = await apiFeed({
-            tags: feed.tags,
-            sites: site,
-            page: feed.page,
-            limit: limitPerSite,
-            ...options
-          })
-          if (gen !== loadGeneration) return 0  // Aborted after fetch
-          
-          const newPosts = data.posts || []
-          pagePayloads[site] = newPosts
-          unfilteredCounts[site] = data.unfiltered_count || 0
-          return newPosts.length
-        } catch (siteErr) {
-          console.error(`Error loading ${site}:`, siteErr)
-          return 0
+  try {
+    const fetchPromises = activeSites.map(async (site, idx) => {
+      try {
+        if (idx > 0) await new Promise(r => setTimeout(r, idx * 50));
+        if (gen !== loadGeneration) return 0
+        
+        const options: Record<string, any> = {}
+        if (feed.isSplit) {
+          if (feed.siteTags[site]) options[`${site}_tags`] = feed.siteTags[site]
         }
-      })
+        
+        const data = await apiFeed({
+          tags: feed.tags,
+          sites: site,
+          page: feed.page,
+          limit: limitPerSite,
+          ...options
+        })
+        if (gen !== loadGeneration) return 0
+        
+        const newPosts = data.posts || []
+        pagePayloads[site] = newPosts
+        unfilteredCounts[site] = data.unfiltered_count || 0
+        return newPosts.length
+      } catch (siteErr) {
+        console.error(`Error loading ${site}:`, siteErr)
+        return 0
+      }
+    })
 
-      const results = await Promise.all(fetchPromises)
-      if (gen !== loadGeneration) return  // Aborted - another reload() happened
+    const results = await Promise.all(fetchPromises)
+    if (gen !== loadGeneration) return
 
-      const totalNew = results.reduce((acc, val) => acc + val, 0)
-      const totalUnfiltered = Object.values(unfilteredCounts).reduce((acc, val) => acc + val, 0)
-      
-      // A site is exhausted only when the API ITSELF returns 0 (before filtering)
-      const allSitesExhausted = activeSites.every(s => unfilteredCounts[s] === 0)
+    const totalNew = results.reduce((acc, val) => acc + val, 0)
+    const allSitesExhausted = activeSites.every(s => unfilteredCounts[s] === 0)
     
     if (totalNew > 0) {
-      // Mix results: interleave posts from all sites
-      const mixed = []
+      const mixed: Post[] = []
       const maxLen = Math.max(...activeSites.map(s => pagePayloads[s].length))
       for (let i = 0; i < maxLen; i++) {
         for (const activeSite of activeSites) {
@@ -235,9 +225,7 @@ async function loadMore() {
       feed.hasMore = false
     } else {
       feed.page++
-      // If everything was filtered out on this page, but sites still have data, auto-trigger next page
       if (totalNew === 0 && feed.hasMore && gen === loadGeneration) {
-        // Wait bit to avoid tight loop in case of many empty pages
         setTimeout(() => { if (gen === loadGeneration) loadMore() }, 50)
       } else {
         setTimeout(() => {
@@ -248,9 +236,9 @@ async function loadMore() {
         }, 500)
       }
     }
-  } catch (e) {
+  } catch (e: any) {
     if (gen === loadGeneration) {
-      toast.show(lang.t('failed_load') + ': ' + e.message, 'error')
+      toast.show(lang.t('failed_load') + ': ' + (e.message || e), 'error')
     }
   } finally {
     if (gen === loadGeneration) {
@@ -265,9 +253,8 @@ onMounted(() => {
   const hasVisited = sessionStorage.getItem('booruhub_visited')
   
   if (route.query.tags) {
-    feed.tags = route.query.tags
+    feed.tags = route.query.tags as string
   } else if (!feed.tags && !hasVisited) {
-    // Only apply default tags on the very first visit of this session
     sessionStorage.setItem('booruhub_visited', 'true')
     if (auth.isAuthenticated && auth.user?.default_tags) {
       feed.tags = auth.user.default_tags
@@ -284,7 +271,6 @@ onMounted(() => {
 
   if (sentinel.value) observer.observe(sentinel.value)
 
-  // Verify if we should fetch new posts OR restore from cache
   const currentSig = feed.isSplit ? `${feed.tags}|${feed.sites.join(',')}|${feed.isSplit}|${JSON.stringify(feed.siteTags)}` : `${feed.tags}|${feed.sites.join(',')}|${feed.isSplit}|`
   
   if (feed.posts.length === 0 || feed.lastSearchSignature !== currentSig) {

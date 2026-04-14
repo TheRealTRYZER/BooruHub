@@ -4,8 +4,8 @@
   </span>
 </template>
 
-<script setup>
-defineProps({
-  tag: { type: String, required: true },
-})
+<script setup lang="ts">
+defineProps<{
+  tag: string
+}>()
 </script>

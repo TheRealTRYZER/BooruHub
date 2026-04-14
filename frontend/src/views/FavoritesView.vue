@@ -44,24 +44,25 @@
 }
 </style>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useAuthStore } from '../stores/auth.js'
-import { useToastStore } from '../stores/toast.js'
-import { useLangStore } from '../stores/lang.js'
-import { apiGetFavorites } from '../api.js'
+import { useAuthStore } from '../stores/auth'
+import { useToastStore } from '../stores/toast'
+import { useLangStore } from '../stores/lang'
+import { apiGetFavorites } from '../api'
 import PostGrid from '../components/PostGrid.vue'
+import type { Post } from '../types'
 
 const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
-const posts = ref([])
+const posts = ref<Post[]>([])
 const page = ref(1)
 const loading = ref(false)
 const hasMore = ref(false)
 const showDislikes = ref(false)
 
-function switchTab(isDislike) {
+function switchTab(isDislike: boolean) {
   if (showDislikes.value === isDislike) return
   showDislikes.value = isDislike
   posts.value = []
@@ -78,7 +79,7 @@ async function loadMore() {
     const data = await apiGetFavorites(page.value, 40, showDislikes.value)
     const favs = data.favorites || []
 
-    const mapped = favs.map(fav => ({
+    const mapped: Post[] = favs.map(fav => ({
       id: fav.post_id,
       source_site: fav.source_site,
       preview_url: fav.preview_url,
@@ -87,14 +88,19 @@ async function loadMore() {
       tags: fav.tags || [],
       rating: fav.rating,
       score: fav.score,
+      width: null,
+      height: null,
+      file_ext: null,
+      md5: null,
+      created_at: null,
       is_dislike: showDislikes.value,
     }))
 
     posts.value.push(...mapped)
     page.value++
     hasMore.value = favs.length >= 40
-  } catch (e) {
-    toast.show(lang.t('error_load_favorites') + ': ' + e.message, 'error')
+  } catch (e: any) {
+    toast.show(lang.t('error_load_favorites') + ': ' + (e.message || e), 'error')
   } finally {
     loading.value = false
   }

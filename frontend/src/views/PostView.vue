@@ -61,23 +61,24 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
 import { useRoute } from 'vue-router'
-import { useAuthStore } from '../stores/auth.js'
-import { useToastStore } from '../stores/toast.js'
-import { useLangStore } from '../stores/lang.js'
-import { apiCheckFavorite, apiAddFavorite, apiRemoveFavorite, apiSearch } from '../api.js'
+import { useAuthStore } from '../stores/auth'
+import { useToastStore } from '../stores/toast'
+import { useLangStore } from '../stores/lang'
+import { apiCheckFavorite, apiAddFavorite, apiRemoveFavorite, apiSearch } from '../api'
 import TagChip from '../components/TagChip.vue'
+import { Post, SiteName, RATING_MAP, RATING_LABELS } from '../types'
 
 const route = useRoute()
 const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
 
-const post = ref(null)
+const post = ref<Post | null>(null)
 const isFav = ref(false)
-const favId = ref(null)
+const favId = ref<number | null>(null)
 
 const isVideo = computed(() => {
   if (!post.value) return false
@@ -91,18 +92,15 @@ const isVideo = computed(() => {
 const mediaUrl = computed(() => {
   if (!post.value) return ''
   // For videos, always use the direct file URL, samples might be just images
-  if (isVideo.value) return post.value.file_url
-  return post.value.sample_url || post.value.file_url
+  if (isVideo.value) return post.value.file_url || ''
+  return post.value.sample_url || post.value.file_url || ''
 })
-
-const ratingMap = { g: 'safe', general: 'safe', s: 'safe', q: 'questionable', questionable: 'questionable', e: 'explicit', explicit: 'explicit' }
-const ratingLabels = { safe: 'S', questionable: 'Q', explicit: 'E', unknown: '?' }
 
 const ratingClass = computed(() => {
   if (!post.value) return 'unknown'
-  return ratingMap[(post.value.rating || '').toLowerCase()] || 'unknown'
+  return RATING_MAP[(post.value.rating || '').toLowerCase()] || 'unknown'
 })
-const ratingLabel = computed(() => ratingLabels[ratingClass.value] || '?')
+const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
 
 function openOriginal() {
   if (post.value && post.value.file_url) {
@@ -124,6 +122,7 @@ async function toggleFavorite() {
     toast.show(lang.t('login_to_fav'), 'error')
     return
   }
+  if (!post.value) return
   try {
     if (isFav.value && favId.value) {
       await apiRemoveFavorite(favId.value)
@@ -136,14 +135,14 @@ async function toggleFavorite() {
       toast.show(lang.t('added_fav'), 'success')
       await checkFav()
     }
-  } catch (e) {
-    toast.show(e.message, 'error')
+  } catch (e: any) {
+    toast.show(e.message || e, 'error')
   }
 }
 
 onMounted(async () => {
-  const id = route.query.id
-  const site = route.query.site
+  const id = route.query.id as string
+  const site = route.query.site as SiteName
   if (!id || !site) return
   
   try {

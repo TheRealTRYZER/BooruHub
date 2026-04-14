@@ -6,24 +6,35 @@
   </div>
 </template>
 
-<script setup>
-import { ref, watch, onMounted, onUnmounted, nextTick, markRaw } from 'vue'
+<script setup lang="ts">
+import { ref, watch, onMounted, onUnmounted, markRaw } from 'vue'
 import PostCard from './PostCard.vue'
 import SkeletonCard from './SkeletonCard.vue'
+import type { Post } from '../types'
 
-const props = defineProps({
-  posts: { type: Array, default: () => [] },
-  loading: { type: Boolean, default: false },
-  skeletonCount: { type: Number, default: 0 },
+interface GridItem {
+  key: string
+  component: any
+  props: { post?: Post }
+}
+
+const props = withDefaults(defineProps<{
+  posts?: Post[]
+  loading?: boolean
+  skeletonCount?: number
+}>(), {
+  posts: () => [],
+  loading: false,
+  skeletonCount: 0
 })
 
-const gridEl = ref(null)
+const gridEl = ref<HTMLElement | null>(null)
 const colCount = ref(getColCount())
-const columns = ref([])
+const columns = ref<GridItem[][]>([])
 
 // Track all items placed so we can append incrementally
 let placedCount = 0
-let skeletonKeys = []
+let skeletonKeys: string[] = []
 
 function getColCount() {
   const w = window.innerWidth
@@ -75,7 +86,7 @@ function removeSkeletons() {
   skeletonKeys = []
 }
 
-function addSkeletons(count) {
+function addSkeletons(count: number) {
   removeSkeletons()
   for (let i = 0; i < count; i++) {
     const idx = i % colCount.value
@@ -97,7 +108,7 @@ watch(() => props.posts.length, () => {
 
 // Watch loading state for skeletons
 watch(() => props.skeletonCount, (count) => {
-  if (count > 0) {
+  if (count && count > 0) {
     addSkeletons(count)
   } else {
     removeSkeletons()

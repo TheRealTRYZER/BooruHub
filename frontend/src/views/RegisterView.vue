@@ -32,12 +32,12 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/auth.js'
-import { useToastStore } from '../stores/toast.js'
-import { useLangStore } from '../stores/lang.js'
+import { useAuthStore } from '../stores/auth'
+import { useToastStore } from '../stores/toast'
+import { useLangStore } from '../stores/lang'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -62,8 +62,8 @@ async function submit() {
     await auth.register(username.value, email.value, password.value)
     toast.show(lang.t('logged_in_msg'), 'success')
     router.push('/')
-  } catch(e) {
-    errorMsg.value = e.message
+  } catch(e: any) {
+    errorMsg.value = e.message || String(e)
   } finally {
     loading.value = false
   }

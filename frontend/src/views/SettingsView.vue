@@ -18,11 +18,11 @@
           <div class="settings-title">👤 {{ lang.t('profile') }}</div>
           <div style="display:flex,align-items:center;gap:16px;margin-bottom:16px;">
             <div class="nav-avatar" style="width:48px;height:48px;font-size:1.2rem;">
-              {{ auth.user.username[0].toUpperCase() }}
+              {{ auth.user!.username[0].toUpperCase() }}
             </div>
             <div>
-              <div style="font-weight:600;font-size:var(--font-md);">{{ auth.user.username }}</div>
-              <div style="color:var(--text-muted);font-size:var(--font-sm);">{{ auth.user.email }}</div>
+              <div style="font-weight:600;font-size:var(--font-md);">{{ auth.user!.username }}</div>
+              <div style="color:var(--text-muted);font-size:var(--font-sm);">{{ auth.user!.email }}</div>
             </div>
           </div>
           <div style="margin-top:16px; border-top:1px solid rgba(255,255,255,0.05); padding-top:16px;">
@@ -134,16 +134,17 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useAuthStore } from '../stores/auth.js'
-import { useToastStore } from '../stores/toast.js'
-import { useLangStore } from '../stores/lang.js'
+import { useAuthStore } from '../stores/auth'
+import { useToastStore } from '../stores/toast'
+import { useLangStore } from '../stores/lang'
 import {
   apiUpdateDefaultTags, apiGetApiKeysStatus, apiUpdateApiKeys,
   apiGetMappings, apiCreateMapping, apiUpdateMapping, apiDeleteMapping,
   apiGetBlacklist, apiAddBlacklistRule, apiUpdateBlacklistRule, apiDeleteBlacklistRule
-} from '../api.js'
+} from '../api'
+import type { TagMapping, BlacklistRule, ApiKeysStatus, ApiKeysUpdate } from '../types'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -162,11 +163,11 @@ const keys = ref({
 const keysStatusStr = ref('...')
 const savingKeys = ref(false)
 
-const mappings = ref([])
-const editingMappingId = ref(null)
+const mappings = ref<TagMapping[]>([])
+const editingMappingId = ref<number | null>(null)
 const mapForm = ref({ unitag: '', danbooru: '', e621: '', rule34: '' })
 
-const rules = ref([])
+const rules = ref<BlacklistRule[]>([])
 const newRule = ref('')
 
 async function saveDefaultTags() {
@@ -175,8 +176,8 @@ async function saveDefaultTags() {
     const res = await apiUpdateDefaultTags(defaultTags.value)
     auth.updateUser({ default_tags: res.default_tags })
     toast.show(lang.t('settings_saved'), 'success')
-  } catch (e) {
-    toast.show(e.message, 'error')
+  } catch (e: any) {
+    toast.show(e.message || e, 'error')
   } finally {
     savingTags.value = false
   }
@@ -184,7 +185,7 @@ async function saveDefaultTags() {
 
 async function loadKeysStatus() {
   try {
-    const status = await apiGetApiKeysStatus()
+    const status: ApiKeysStatus = await apiGetApiKeysStatus()
     const s = []
     if (status.danbooru) s.push('<span style="color:var(--danbooru)">Danbooru</span>')
     if (status.e621) s.push('<span style="color:var(--e621)">e621</span>')
@@ -193,7 +194,7 @@ async function loadKeysStatus() {
     keysStatusStr.value = s.length === 0 ? lang.t('keys_not_set') : lang.t('keys_configured') + s.join(', ')
     
     if (status.search_limit) keys.value.search_limit = status.search_limit
-    if (status.search_interval !== undefined) keys.value.search_interval = status.search_interval
+    if (status.search_interval !== undefined && status.search_interval !== null) keys.value.search_interval = status.search_interval
     
     keys.value.danbooru_login = status.danbooru_login || ''
     keys.value.e621_login = status.e621_login || ''
@@ -209,7 +210,7 @@ async function loadKeysStatus() {
 
 async function saveKeys() {
   savingKeys.value = true
-  const data = { ...keys.value }
+  const data: ApiKeysUpdate = { ...keys.value }
   
   if(!data.danbooru_api_key) delete data.danbooru_api_key
   if(!data.e621_api_key) delete data.e621_api_key
@@ -222,8 +223,8 @@ async function saveKeys() {
     keys.value.e621_api_key = ''
     keys.value.rule34_api_key = ''
     await loadKeysStatus()
-  } catch(e) {
-    toast.show(e.message, 'error')
+  } catch(e: any) {
+    toast.show(e.message || e, 'error')
   } finally {
     savingKeys.value = false
   }
@@ -258,12 +259,12 @@ async function saveMapping() {
     }
     mapForm.value = { unitag: '', danbooru: '', e621: '', rule34: '' }
     loadMappings()
-  } catch(e) {
-     toast.show(e.message, 'error')
+  } catch(e: any) {
+     toast.show(e.message || e, 'error')
   }
 }
 
-function editMapping(m) {
+function editMapping(m: TagMapping) {
   editingMappingId.value = m.id
   mapForm.value = {
     unitag: m.unitag,
@@ -273,7 +274,7 @@ function editMapping(m) {
   }
 }
 
-async function deleteMapping(id) {
+async function deleteMapping(id: number) {
   if (!confirm(lang.t('confirm_delete'))) return
   try {
     await apiDeleteMapping(id)
@@ -283,7 +284,7 @@ async function deleteMapping(id) {
       mapForm.value = { unitag: '', danbooru: '', e621: '', rule34: '' }
     }
     loadMappings()
-  } catch(e) { toast.show(e.message, 'error') }
+  } catch(e: any) { toast.show(e.message || e, 'error') }
 }
 
 async function loadRules() {
@@ -301,27 +302,27 @@ async function addRule() {
     newRule.value = ''
     toast.show(lang.t('rule_added'), 'success')
     loadRules()
-  } catch(e) { toast.show(e.message, 'error') }
+  } catch(e: any) { toast.show(e.message || e, 'error') }
 }
 
-async function toggleRule(r) {
+async function toggleRule(r: BlacklistRule) {
   try {
     await apiUpdateBlacklistRule(r.id, { is_active: !r.is_active })
     r.is_active = !r.is_active
-  } catch(e) { toast.show(e.message, 'error') }
+  } catch(e: any) { toast.show(e.message || e, 'error') }
 }
 
-async function deleteRule(id) {
+async function deleteRule(id: number) {
   if (!confirm(lang.t('confirm_delete'))) return
   try {
     await apiDeleteBlacklistRule(id)
     rules.value = rules.value.filter(x => x.id !== id)
     toast.show(lang.t('rule_deleted'), 'info')
-  } catch(e) { toast.show(e.message, 'error') }
+  } catch(e: any) { toast.show(e.message || e, 'error') }
 }
 
 onMounted(() => {
-  if (auth.isAuthenticated) {
+  if (auth.isAuthenticated && auth.user) {
     defaultTags.value = auth.user.default_tags || ''
     loadKeysStatus()
     loadMappings()

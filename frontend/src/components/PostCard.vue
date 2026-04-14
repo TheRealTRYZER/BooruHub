@@ -1,5 +1,5 @@
 <template>
-  <div v-show="!hidden" class="post-card" @click="handleCardClick" 
+  <div v-show="!hidden" class="post-card" @click="handleCardClick"
        @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"
        :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200) }">
     <div class="post-card-media" :style="mediaStyle">
@@ -34,25 +34,27 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/auth.js'
-import { useToastStore } from '../stores/toast.js'
-import { useLangStore } from '../stores/lang.js'
-import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite } from '../api.js'
+import { useAuthStore } from '../stores/auth'
+import { useToastStore } from '../stores/toast'
+import { useLangStore } from '../stores/lang'
+import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite } from '../api'
+import { RATING_MAP, RATING_LABELS } from '../types'
+import type { Post, RatingClass } from '../types'
 
-const props = defineProps({
-  post: { type: Object, required: true },
-  favorite: { type: Boolean, default: false },
-})
+const props = defineProps<{
+  post: Post
+  favorite?: boolean
+}>()
 
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
 const loaded = ref(false)
-const isFav = ref(props.favorite)
+const isFav = ref(props.favorite ?? false)
 const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="10" height="10"%3E%3C/svg%3E'
 
 const currentUrl = ref(props.post.sample_url || props.post.preview_url || '')
@@ -62,11 +64,8 @@ const isAnimated = computed(() =>
 
 const isFlash = computed(() => (props.post.file_ext || '').toLowerCase() === 'swf')
 
-const ratingMap = { g: 'safe', general: 'safe', s: 'safe', q: 'questionable', questionable: 'questionable', e: 'explicit', explicit: 'explicit' }
-const ratingLabels = { safe: 'S', questionable: 'Q', explicit: 'E', unknown: '?' }
-
-const ratingClass = computed(() => ratingMap[(props.post.rating || '').toLowerCase()] || 'unknown')
-const ratingLabel = computed(() => ratingLabels[ratingClass.value] || '?')
+const ratingClass = computed<RatingClass>(() => RATING_MAP[(props.post.rating || '').toLowerCase()] || 'unknown')
+const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
 
 const mediaStyle = computed(() => {
   const p = props.post
@@ -76,64 +75,58 @@ const mediaStyle = computed(() => {
   return { minHeight: '200px', background: 'var(--bg-secondary)', overflow: 'hidden' }
 })
 
-function onError(e) {
+function onError() {
   const p = props.post
-  // 1. If sample fails, try preview
   if (currentUrl.value === p.sample_url && p.preview_url) {
-    console.log('Sample failed, trying preview:', p.id)
     loaded.value = false
     currentUrl.value = p.preview_url
     return
   }
-  
-  // 2. If preview fails, try direct file_url
+
   if ((currentUrl.value === p.preview_url || currentUrl.value === p.sample_url) && p.file_url && currentUrl.value !== p.file_url) {
-    console.log('Fallback to file_url:', p.id)
     loaded.value = false
     currentUrl.value = p.file_url
     return
   }
-  
-  // 3. Everything failed
-  console.error('All image variants failed for post:', p.id)
-  loaded.value = true // Show broken state finally
+
+  loaded.value = true
 }
 
-function toggleFav() {
+async function toggleFav() {
   if (!auth.isAuthenticated) {
     toast.show(lang.t('login_to_fav'), 'error')
     return
   }
   try {
     if (isFav.value) {
-      apiCheckFavorite(props.post.source_site, props.post.id).then(check => {
-          if (check.favorite_id) apiRemoveFavorite(check.favorite_id)
-      })
+      const check = await apiCheckFavorite(props.post.source_site, String(props.post.id))
+      if (check.favorite_id) await apiRemoveFavorite(check.favorite_id)
       isFav.value = false
       toast.show(lang.t('removed_fav'), 'info')
     } else {
-      apiAddFavorite(props.post)
+      await apiAddFavorite(props.post)
       isFav.value = true
       isDisliked.value = false
       toast.show(lang.t('added_fav'), 'success')
     }
   } catch (e) {
-    toast.show(e.message, 'error')
+    toast.show((e as Error).message, 'error')
   }
 }
 
 const isDisliked = ref(props.post.is_dislike || false)
 
-function doDislike() {
+async function doDislike() {
   if (!auth.isAuthenticated) {
     toast.show(lang.t('login_to_fav'), 'error')
     return
   }
-  
+
   if (isDisliked.value) {
-    apiCheckFavorite(props.post.source_site, props.post.id).then(check => {
-        if (check.favorite_id) apiRemoveFavorite(check.favorite_id)
-    })
+    try {
+      const check = await apiCheckFavorite(props.post.source_site, String(props.post.id))
+      if (check.favorite_id) await apiRemoveFavorite(check.favorite_id)
+    } catch { /* ignore */ }
     isDisliked.value = false
     hidden.value = true
     toast.show(lang.t('removed_fav') || 'Removed', 'info')
@@ -152,7 +145,7 @@ const swiping = ref(false)
 
 let touchStartX = 0
 let touchStartY = 0
-let tapTimeout = null
+let tapTimeout: ReturnType<typeof setTimeout> | null = null
 let lastTapTime = 0
 
 function doLikeAnimation() {
@@ -163,29 +156,29 @@ function doLikeAnimation() {
 function handleCardClick() {
   const now = Date.now()
   if (now - lastTapTime < 300) {
-    clearTimeout(tapTimeout)
+    if (tapTimeout) clearTimeout(tapTimeout)
     lastTapTime = 0
     if (!isFav.value) toggleFav()
     doLikeAnimation()
   } else {
     lastTapTime = now
     tapTimeout = setTimeout(() => {
-      router.push({ name: 'post', query: { id: props.post.id, site: props.post.source_site } })
+      router.push({ name: 'post', query: { id: String(props.post.id), site: props.post.source_site } })
     }, 300)
   }
 }
 
-function onTouchStart(e) {
+function onTouchStart(e: TouchEvent) {
   touchStartX = e.changedTouches[0].screenX
   touchStartY = e.changedTouches[0].screenY
   swiping.value = true
 }
 
-function onTouchMove(e) {
+function onTouchMove(e: TouchEvent) {
   if (!swiping.value) return
   const diffX = e.changedTouches[0].screenX - touchStartX
   const diffY = e.changedTouches[0].screenY - touchStartY
-  
+
   if (Math.abs(diffX) > Math.abs(diffY)) {
     swipeDiff.value = diffX
   } else {
@@ -194,11 +187,11 @@ function onTouchMove(e) {
   }
 }
 
-function onTouchEnd(e) {
+function onTouchEnd() {
   swiping.value = false
   if (Math.abs(swipeDiff.value) > 80) {
     const dir = swipeDiff.value > 0 ? 1 : -1
-    swipeDiff.value = dir * window.innerWidth 
+    swipeDiff.value = dir * window.innerWidth
     setTimeout(() => {
       if (auth.isAuthenticated) {
         apiAddFavorite(props.post, true).catch(() => {})

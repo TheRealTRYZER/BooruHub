@@ -1,20 +1,21 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import type { ToastItem } from '../types'
 
 export const useToastStore = defineStore('toast', () => {
-  const toasts = ref([])
+  const toasts = ref<ToastItem[]>([])
   let nextId = 0
 
-  function show(message, type = 'info') {
+  function show(message: string, type: 'success' | 'error' | 'info' = 'info') {
     const id = nextId++
-    const icons = { success: '✓', error: '✕', info: 'ℹ' }
-    
+    const icons: Record<string, string> = { success: '✓', error: '✕', info: 'ℹ' }
+
     toasts.value.push({
       id,
       message,
       type,
       icon: icons[type] || 'ℹ',
-      removing: false
+      removing: false,
     })
 
     setTimeout(() => {
@@ -22,7 +23,7 @@ export const useToastStore = defineStore('toast', () => {
     }, 3000)
   }
 
-  function remove(id) {
+  function remove(id: number) {
     const t = toasts.value.find(x => x.id === id)
     if (t) {
       t.removing = true

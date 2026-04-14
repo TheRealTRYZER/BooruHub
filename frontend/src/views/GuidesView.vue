@@ -257,9 +257,9 @@ e621:     miku</pre>
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref } from 'vue'
-import { useLangStore } from '../stores/lang.js'
+import { useLangStore } from '../stores/lang'
 
 const lang = useLangStore()
 const tabs = [

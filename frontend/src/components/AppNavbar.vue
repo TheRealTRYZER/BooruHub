@@ -41,8 +41,8 @@
           {{ lang.locale.toUpperCase() }}
         </button>
         <template v-if="auth.isAuthenticated">
-          <div class="nav-avatar">{{ auth.user.username[0].toUpperCase() }}</div>
-          <span class="nav-username">{{ auth.user.username }}</span>
+          <div class="nav-avatar">{{ auth.user!.username[0].toUpperCase() }}</div>
+          <span class="nav-username">{{ auth.user!.username }}</span>
           <button class="btn btn-ghost btn-sm" @click="doLogout" id="nav-logout">{{ lang.t('logout') }}</button>
         </template>
         <template v-else>
@@ -53,11 +53,11 @@
   </nav>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { useRouter, useRoute } from 'vue-router'
-import { useAuthStore } from '../stores/auth.js'
-import { useToastStore } from '../stores/toast.js'
-import { useLangStore } from '../stores/lang.js'
+import { useAuthStore } from '../stores/auth'
+import { useToastStore } from '../stores/toast'
+import { useLangStore } from '../stores/lang'
 
 const router = useRouter()
 const route = useRoute()

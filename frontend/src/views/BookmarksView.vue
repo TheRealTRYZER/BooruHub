@@ -41,14 +41,15 @@
   </div>
 </template>
 
-<script setup>
+<script setup lang="ts">
 import { ref, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useAuthStore } from '../stores/auth.js'
-import { useFeedStore } from '../stores/feed.js'
-import { useToastStore } from '../stores/toast.js'
-import { useLangStore } from '../stores/lang.js'
-import { apiGetBookmarks, apiDeleteBookmark } from '../api.js'
+import { useAuthStore } from '../stores/auth'
+import { useFeedStore } from '../stores/feed'
+import { useToastStore } from '../stores/toast'
+import { useLangStore } from '../stores/lang'
+import { apiGetBookmarks, apiDeleteBookmark } from '../api'
+import type { Bookmark } from '../types'
 
 const auth = useAuthStore()
 const feed = useFeedStore()
@@ -56,7 +57,7 @@ const router = useRouter()
 const toast = useToastStore()
 const lang = useLangStore()
 
-const bookmarks = ref([])
+const bookmarks = ref<Bookmark[]>([])
 const loading = ref(false)
 
 async function load() {
@@ -64,26 +65,26 @@ async function load() {
   try {
     const data = await apiGetBookmarks()
     bookmarks.value = data.bookmarks || []
-  } catch (e) {
-    toast.show(lang.t('error_load_bookmarks') + ': ' + e.message, 'error')
+  } catch (e: any) {
+    toast.show(lang.t('error_load_bookmarks') + ': ' + (e.message || e), 'error')
   } finally {
     loading.value = false
   }
 }
 
-function apply(query) {
+function apply(query: string) {
   feed.tags = query
   router.push('/')
 }
 
-async function del(id) {
+async function del(id: number) {
   if (!confirm(lang.t('confirm_delete'))) return
   try {
     await apiDeleteBookmark(id)
     bookmarks.value = bookmarks.value.filter(x => x.id !== id)
     toast.show(lang.t('removed_fav'), 'info')
-  } catch (e) {
-    toast.show(e.message, 'error')
+  } catch (e: any) {
+    toast.show(e.message || e, 'error')
   }
 }
 

@@ -1,4 +1,5 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
+import type { RouteRecordRaw } from 'vue-router'
 
 import FeedView from './views/FeedView.vue'
 import PostView from './views/PostView.vue'
@@ -9,7 +10,7 @@ import RegisterView from './views/RegisterView.vue'
 import SettingsView from './views/SettingsView.vue'
 import GuidesView from './views/GuidesView.vue'
 
-const routes = [
+const routes: RouteRecordRaw[] = [
   { path: '/', name: 'feed', component: FeedView },
   { path: '/post', name: 'post', component: PostView },
   { path: '/favorites', name: 'favorites', component: FavoritesView },
@@ -24,7 +25,7 @@ const routes = [
 const router = createRouter({
   history: createWebHashHistory(),
   routes,
-  scrollBehavior(to, from, savedPosition) {
+  scrollBehavior(_to, _from, savedPosition) {
     if (savedPosition) {
       return savedPosition
     }

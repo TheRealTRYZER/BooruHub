@@ -1,27 +1,34 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { apiLogin, apiRegister } from '../api.js'
+import { apiLogin, apiRegister } from '../api'
+import type { User } from '../types'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref(localStorage.getItem('booruhub_token') || null)
-  const user = ref(JSON.parse(localStorage.getItem('booruhub_user') || 'null'))
+  const token = ref<string | null>(localStorage.getItem('booruhub_token') || null)
+  const user = ref<User | null>((() => {
+    try {
+      return JSON.parse(localStorage.getItem('booruhub_user') || 'null')
+    } catch {
+      return null
+    }
+  })())
 
   const isAuthenticated = computed(() => !!token.value)
 
-  function setAuth(newToken, newUser) {
+  function setAuth(newToken: string, newUser: User) {
     token.value = newToken
     user.value = newUser
     localStorage.setItem('booruhub_token', newToken)
     localStorage.setItem('booruhub_user', JSON.stringify(newUser))
   }
 
-  async function login(loginStr, password) {
+  async function login(loginStr: string, password: string) {
     const data = await apiLogin(loginStr, password)
     setAuth(data.access_token, data.user)
     return data
   }
 
-  async function register(username, email, password) {
+  async function register(username: string, email: string, password: string) {
     const data = await apiRegister(username, email, password)
     setAuth(data.access_token, data.user)
     return data
@@ -34,7 +41,7 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('booruhub_user')
   }
 
-  function updateUser(updates) {
+  function updateUser(updates: Partial<User>) {
     if (user.value) {
       user.value = { ...user.value, ...updates }
       localStorage.setItem('booruhub_user', JSON.stringify(user.value))
