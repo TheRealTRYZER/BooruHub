@@ -140,7 +140,9 @@ async def search_multi_site(
     """Search multiple sites in parallel and interleave results by ratio weights.
     Returns (interleaved_posts, dict_of_unfiltered_counts_per_site).
     """
+    import random
     sites = [s for s in site_queries if s in PROVIDERS and site_queries[s] is not None]
+    random.shuffle(sites) # Randomize order to prevent one site from always winning MD5 deduplication
     if not sites:
         return [], {}
 
@@ -155,6 +157,14 @@ async def search_multi_site(
         else:
             per_site = max(20, (limit * 2) // num)
 
+        # Boost limit for Danbooru if it's likely searching with many tags (local filtering)
+        # to ensure it contributes enough posts after filtering to interleave well.
+        if site == "danbooru" and site_queries[site]:
+            tag_count = len(site_queries[site].split())
+            if tag_count > 2:
+                per_site *= 4 # Fetch 4x more (up to 200) to account for local filter drop-off
+                per_site = min(per_site, 240)
+        
         tasks.append(
             search_posts(
                 site, site_queries[site], per_site, page,
