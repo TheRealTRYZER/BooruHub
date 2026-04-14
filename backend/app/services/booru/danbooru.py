@@ -42,17 +42,12 @@ class Danbooru(BaseBooru):
             if not any(t.startswith("score:") for t in all_tags) and len(all_tags) < 2:
                 all_tags.insert(0, "score:>=10")
         
-        # 2. Prioritize: Meta tags (like order:score, -rating:explicit) > Regular tags > Special tags (~, -)
-        meta_tags = [t for t in all_tags if ":" in t]
-        regular_tags = [t for t in all_tags if ":" not in t and not t.startswith(("~", "-"))]
-        special_tags = [t for t in all_tags if ":" not in t and t.startswith(("~", "-"))]
-        
-        priority_order = meta_tags + regular_tags + special_tags
-        api_tags_list = priority_order[:2]
+        # 2. Take first 2 tags for the API (Danbooru limit)
+        api_tags_list = all_tags[:2]
         
         # 3. Filter extra tags: exclude meta tags that can't be filtered locally
         # (local filter can only check for presence/absence of tokens in tag_string)
-        extra_tags = [t for t in priority_order[2:] if ":" not in t]
+        extra_tags = [t for t in all_tags[2:] if ":" not in t]
         
         return " ".join(api_tags_list), extra_tags
 

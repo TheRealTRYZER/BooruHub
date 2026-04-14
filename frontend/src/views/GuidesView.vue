@@ -27,7 +27,7 @@
               <h3>Как искать</h3>
               <p>Вводите теги в строке поиска через пробел. BooruHub автоматически конвертирует их для каждого сайта в соответствии с вашим маппингом.</p>
               <div class="info-box warning">
-                <strong>Danbooru:</strong> Базовые аккаунты ограничены <code>2 тегами</code> в запросе. Если вы вводите больше — первые 2 тега используются для запроса к API Danbooru, а остальные фильтруются приложением локально.
+                <strong>Danbooru:</strong> Базовые аккаунты ограничены <code>2 тегами</code> в запросе. Если вы вводите больше — первые 2 тега используются для запроса к API Danbooru, а остальные фильтруются приложением локально. Расставляйте наиболее важные теги (особенно мета-теги вроде <code>order:score</code>) первыми в строке поиска!
               </div>
             </section>
             
@@ -58,7 +58,7 @@
               <h3>How to search</h3>
               <p>Enter tags in the search bar separated by spaces. BooruHub automatically converts them for each site according to your mappings.</p>
               <div class="info-box warning">
-                <strong>Danbooru:</strong> Basic accounts are limited to <code>2 tags</code> per query. If you enter more, the first two are used for the Danbooru API, and the rest are filtered locally.
+                <strong>Danbooru:</strong> Basic accounts are limited to <code>2 tags</code> per query. If you enter more, the first two are used for the Danbooru API, and the rest are filtered locally. Place your most important tags (especially meta-tags like <code>order:score</code>) at the very beginning of your query!
               </div>
             </section>
 
