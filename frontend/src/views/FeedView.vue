@@ -7,14 +7,14 @@
                v-model="feed.tags"
                @input="onSearchInput"
                @blur="onSearchBlur"
-               @keydown.enter="reload"
+               @keydown.enter="handleReload"
                v-show="!feed.isSplit"
                style="width: 100%;">
         <div style="display:flex; gap:8px; justify-content:flex-end;">
           <button class="btn btn-secondary btn-icon" @click="feed.toggleSplit()" :title="lang.t('advanced_search')">
             {{ feed.isSplit ? '⬅️ ' + lang.t('collapse') : '🔀 ' + lang.t('split_search') }}
           </button>
-          <button class="btn btn-primary" @click="reload" v-show="!feed.isSplit" style="padding:0 24px;">
+          <button class="btn btn-primary" @click="handleReload" v-show="!feed.isSplit" style="padding:0 24px;">
             🔍 {{ lang.t('search_btn') }}
           </button>
         </div>
@@ -35,8 +35,8 @@
         <input type="text" class="input btn-sm split-tag-input"
                :placeholder="lang.t('tags_for') + ' ' + site + '...'"
                v-model="feed.siteTags[site]"
-               @keydown.enter="reload">
-        <button class="btn btn-primary btn-sm" @click="reload">🔍</button>
+               @keydown.enter="handleReload">
+        <button class="btn btn-primary btn-sm" @click="handleReload">🔍</button>
         <div class="ratio-slider-container">
           <input type="range" class="ratio-slider"
                  min="0" max="10" step="1"
@@ -80,9 +80,10 @@ import { useAuthStore } from '../stores/auth'
 import { useFeedStore } from '../stores/feed'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
-import { apiFeed, apiSuggestTags, apiAddBookmark } from '../api'
+import { apiSuggestTags, apiAddBookmark } from '../api'
+import { useFeedLoader } from '../composables/useFeedLoader'
 import PostGrid from '../components/PostGrid.vue'
-import type { SiteName, Post } from '../types'
+import type { SiteName } from '../types'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -91,13 +92,14 @@ const toast = useToastStore()
 const lang = useLangStore()
 
 const availableSites: SiteName[] = ['danbooru', 'e621', 'rule34']
-const loading = ref(false)
 const sentinel = ref<HTMLElement | null>(null)
 const suggestions = ref<string[]>([])
-const skeletonCount = ref(0)
 let observer: IntersectionObserver | null = null
 let suggestTimeout: any = null
-let loadGeneration = 0  // Increments on each reload() to cancel stale requests
+
+const { loading, skeletonCount, loadMore, reload } = useFeedLoader(feed, toast, lang, availableSites)
+
+const handleReload = () => reload(sentinel.value)
 
 function toggleSite(site: SiteName) {
   feed.toggleSite(site)
@@ -106,12 +108,12 @@ function toggleSite(site: SiteName) {
 async function saveBookmark() {
   const tags = feed.tags.trim()
   if (!tags) {
-    toast.show('Введите теги для сохранения', 'error')
+    toast.show(lang.t('enter_tags_to_save'), 'error')
     return
   }
   try {
     await apiAddBookmark(tags, tags, feed.sites)
-    toast.show('Запрос сохранён в закладки', 'success')
+    toast.show(lang.t('bookmark_added_msg'), 'success')
   } catch (e: any) {
     toast.show(e.message || e, 'error')
   }
@@ -147,107 +149,6 @@ function selectSuggestion(tag: string) {
   suggestions.value = []
 }
 
-function reload() {
-  loadGeneration++  // Invalidates any in-flight loadMore calls
-  feed.resetFeed()
-  loadMore()
-}
-
-async function loadMore() {
-  if (loading.value || !feed.hasMore) return
-  loading.value = true
-  skeletonCount.value = 12
-  const gen = loadGeneration
-
-  const activeSites = (feed.sites.length > 0 ? feed.sites : availableSites) as SiteName[]
-  const limitPerSite = Math.ceil(45 / activeSites.length)
-  
-  const siteTagSig = feed.isSplit ? JSON.stringify(feed.siteTags) : ''
-  feed.lastSearchSignature = `${feed.tags}|${feed.sites.join(',')}|${feed.isSplit}|${siteTagSig}`
-
-  const basePosts = [...feed.posts];
-  const pagePayloads: Record<string, Post[]> = {};
-  const unfilteredCounts: Record<string, number> = {};
-  activeSites.forEach(s => {
-    pagePayloads[s] = [];
-    unfilteredCounts[s] = 0;
-  });
-
-  try {
-    const fetchPromises = activeSites.map(async (site, idx) => {
-      try {
-        if (idx > 0) await new Promise(r => setTimeout(r, idx * 50));
-        if (gen !== loadGeneration) return 0
-        
-        const options: Record<string, any> = {}
-        if (feed.isSplit) {
-          if (feed.siteTags[site]) options[`${site}_tags`] = feed.siteTags[site]
-        }
-        
-        const data = await apiFeed({
-          tags: feed.tags,
-          sites: site,
-          page: feed.page,
-          limit: limitPerSite,
-          ...options
-        })
-        if (gen !== loadGeneration) return 0
-        
-        const newPosts = data.posts || []
-        pagePayloads[site] = newPosts
-        unfilteredCounts[site] = data.unfiltered_count || 0
-        return newPosts.length
-      } catch (siteErr) {
-        console.error(`Error loading ${site}:`, siteErr)
-        return 0
-      }
-    })
-
-    const results = await Promise.all(fetchPromises)
-    if (gen !== loadGeneration) return
-
-    const totalNew = results.reduce((acc, val) => acc + val, 0)
-    const allSitesExhausted = activeSites.every(s => unfilteredCounts[s] === 0)
-    
-    if (totalNew > 0) {
-      const mixed: Post[] = []
-      const maxLen = Math.max(...activeSites.map(s => pagePayloads[s].length))
-      for (let i = 0; i < maxLen; i++) {
-        for (const activeSite of activeSites) {
-          if (pagePayloads[activeSite][i]) mixed.push(pagePayloads[activeSite][i])
-        }
-      }
-      feed.posts = [...basePosts, ...mixed]
-      skeletonCount.value = 0
-    }
-
-    if (allSitesExhausted) {
-      feed.hasMore = false
-    } else {
-      feed.page++
-      if (totalNew === 0 && feed.hasMore && gen === loadGeneration) {
-        setTimeout(() => { if (gen === loadGeneration) loadMore() }, 50)
-      } else {
-        setTimeout(() => {
-          if (gen === loadGeneration && sentinel.value && !loading.value && feed.hasMore) {
-            const rect = sentinel.value.getBoundingClientRect()
-            if (rect.top <= window.innerHeight + 800) loadMore()
-          }
-        }, 500)
-      }
-    }
-  } catch (e: any) {
-    if (gen === loadGeneration) {
-      toast.show(lang.t('failed_load') + ': ' + (e.message || e), 'error')
-    }
-  } finally {
-    if (gen === loadGeneration) {
-      loading.value = false
-      skeletonCount.value = 0
-    }
-  }
-}
-
 onMounted(() => {
   const guestDefault = "order:score rating:general"
   const hasVisited = sessionStorage.getItem('booruhub_visited')
@@ -265,7 +166,7 @@ onMounted(() => {
 
   observer = new IntersectionObserver((entries) => {
     if (entries[0].isIntersecting && !loading.value && feed.hasMore) {
-      loadMore()
+      loadMore(sentinel.value)
     }
   }, { rootMargin: '1000px' })
 
@@ -274,7 +175,7 @@ onMounted(() => {
   const currentSig = feed.isSplit ? `${feed.tags}|${feed.sites.join(',')}|${feed.isSplit}|${JSON.stringify(feed.siteTags)}` : `${feed.tags}|${feed.sites.join(',')}|${feed.isSplit}|`
   
   if (feed.posts.length === 0 || feed.lastSearchSignature !== currentSig) {
-    reload()
+    reload(sentinel.value)
   }
 })
 
