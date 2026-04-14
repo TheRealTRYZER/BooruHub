@@ -1,12 +1,12 @@
 """Posts API — feed, search, tag suggestions."""
 import asyncio
 import logging
-from typing import List, Optional
+from typing import List, Optional, Union, Dict
+from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update
-from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy import select, update, insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.database import get_db
@@ -23,6 +23,34 @@ from app.services.tag_mapping import (
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/posts", tags=["posts"])
+
+
+class PostResponse(BaseModel):
+    id: Union[int, str]
+    source_site: str
+    preview_url: Optional[str] = None
+    sample_url: Optional[str] = None
+    file_url: str
+    file_ext: Optional[str] = None
+    width: Optional[int] = None
+    height: Optional[int] = None
+    rating: Optional[str] = "g"
+    score: Optional[int] = 0
+    tags: List[str] = []
+    md5: Optional[str] = None
+    is_dislike: Optional[bool] = False
+
+
+class FeedResponse(BaseModel):
+    posts: List[PostResponse]
+    page: int
+    total: int
+    unfiltered_count: int
+    resolved_tags: str
+
+
+class TagSuggestionResponse(BaseModel):
+    suggestions: List[str]
 
 
 
@@ -78,38 +106,49 @@ async def _cache_tags_task(tags: List[str], db: AsyncSession):
     if not tags:
         return
     
+    clean_tags = []
     for tag in tags:
         tag = tag.strip().lower()
         if not tag or ":" in tag:
             continue
         
         # Remove operators
-        clean_tag = tag
-        if clean_tag.startswith(("~", "-")):
-            clean_tag = clean_tag[1:]
-        if not clean_tag:
+        if tag.startswith(("~", "-")):
+            tag = tag[1:]
+        if not tag:
             continue
-            
-        stmt = insert(CachedTag).values(tag=clean_tag)
-        stmt = stmt.on_conflict_do_update(
-            index_elements=['tag'],
-            set_=dict(usage_count=CachedTag.usage_count + 1)
-        )
-        try:
-            await db.execute(stmt)
-        except Exception:
-            pass
+        clean_tags.append(tag)
+
+    if not clean_tags:
+        return
+
+    # Use a set to avoid duplicates in the current batch
+    unique_clean_tags = list(set(clean_tags))
+    values = [{"tag": t} for t in unique_clean_tags]
+
+    # Batch UPSERT
+    stmt = pg_insert(CachedTag).values(values)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=['tag'],
+        set_=dict(usage_count=CachedTag.usage_count + 1)
+    )
     
     try:
+        await db.execute(stmt)
         await db.commit()
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error caching tags: {e}")
         await db.rollback()
 
 
 async def _index_posts_task(posts: List[dict], db: AsyncSession):
-    """Save all seen posts (id, source_site, tags) to the global post index."""
+    """Save all seen posts (id, source_site, tags) to the global post index in batches."""
     if not posts:
         return
+
+    with_md5 = []
+    without_md5 = []
+
     for post in posts:
         post_id = str(post.get("id", "")).strip()
         source_site = str(post.get("source_site", "")).strip()
@@ -120,26 +159,32 @@ async def _index_posts_task(posts: List[dict], db: AsyncSession):
         tags = post.get("tags", [])
         tags_str = " ".join(tags) if isinstance(tags, list) else str(tags)
         
-        stmt = pg_insert(PostIndex).values(
-            source_site=source_site,
-            post_id=post_id,
-            md5=md5 if md5 else None,
-            tags_str=tags_str,
-        )
+        data = {
+            "source_site": source_site,
+            "post_id": post_id,
+            "md5": md5 if md5 else None,
+            "tags_str": tags_str,
+        }
         
-        # Deduplicate by MD5 if available, otherwise by site/id
         if md5:
-            stmt = stmt.on_conflict_do_nothing(index_elements=['md5'])
+            with_md5.append(data)
         else:
-            stmt = stmt.on_conflict_do_nothing(index_elements=['source_site', 'post_id'])
-            
-        try:
-            await db.execute(stmt)
-        except Exception:
-            pass
+            without_md5.append(data)
+
     try:
+        if with_md5:
+            stmt = pg_insert(PostIndex).values(with_md5)
+            stmt = stmt.on_conflict_do_nothing(index_elements=['md5'])
+            await db.execute(stmt)
+
+        if without_md5:
+            stmt = pg_insert(PostIndex).values(without_md5)
+            stmt = stmt.on_conflict_do_nothing(index_elements=['source_site', 'post_id'])
+            await db.execute(stmt)
+
         await db.commit()
-    except Exception:
+    except Exception as e:
+        logger.error(f"Error indexing posts: {e}")
         await db.rollback()
 
 
@@ -147,7 +192,7 @@ async def _index_posts_task(posts: List[dict], db: AsyncSession):
 #  Endpoints                                                          #
 # ------------------------------------------------------------------ #
 
-@router.get("/feed")
+@router.get("/feed", response_model=FeedResponse)
 async def get_feed(
     background_tasks: BackgroundTasks,
     tags: str = Query("", description="Universal tags"),
@@ -225,7 +270,7 @@ async def get_feed(
     return {"posts": posts, "page": page, "total": len(posts), "unfiltered_count": unfiltered_count, "resolved_tags": tags}
 
 
-@router.get("/search")
+@router.get("/search", response_model=FeedResponse)
 async def search(
     background_tasks: BackgroundTasks,
     tags: str = Query(..., description="Search tags"),
@@ -278,7 +323,7 @@ async def search(
     return {"posts": posts, "page": page, "total": len(posts), "unfiltered_count": unfiltered_count, "resolved_tags": tags}
 
 
-@router.get("/tags/suggest")
+@router.get("/tags/suggest", response_model=TagSuggestionResponse)
 async def suggest_tags(
     q: str = Query(..., min_length=1, description="Tag prefix"),
     limit: int = Query(15, ge=1, le=50),
