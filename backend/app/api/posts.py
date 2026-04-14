@@ -208,7 +208,7 @@ async def get_similar_tags(tags_str: str, db: AsyncSession) -> Optional[str]:
         # Search for a similar tag in cached_tags using pg_trgm similarity
         # We only accept a high similarity threshold
         stmt = select(CachedTag.tag).where(
-            func.similarity(CachedTag.tag, part) > 0.4
+            func.similarity(CachedTag.tag, part) > 0.5
         ).order_by(
             func.similarity(CachedTag.tag, part).desc(),
             CachedTag.usage_count.desc()
@@ -281,7 +281,7 @@ async def get_feed(
                 logger.info(f"[MAP] {site}: '{query}' (from '{tags}')")
 
     # Fetch
-    posts = await search_multi_site(
+    posts, site_counts = await search_multi_site(
         site_queries, limit, page,
         user=user, ratios=ratio_dict, skip_interval=skip_interval,
     )
@@ -291,7 +291,7 @@ async def get_feed(
         apply_reverse_mapping(posts, mappings)
 
     # Index raw posts BEFORE filtering (captures everything the API returns)
-    unfiltered_count = len(posts)
+    unfiltered_total = sum(site_counts.values())
     background_tasks.add_task(_index_posts_task, list(posts), db)
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
@@ -345,18 +345,18 @@ async def search(
 
     if query_str is None:
         posts = []
+        unfiltered_total = 0
     else:
-        posts = await search_posts(
+        posts, unfiltered_total = await search_posts(
             site, query_str, limit, page,
             user=user, skip_interval=skip_interval,
         )
-        if mappings:
-            apply_reverse_mapping(posts, mappings)
+
+    if mappings:
+        apply_reverse_mapping(posts, mappings)
 
     # Index raw posts BEFORE filtering (captures everything the API returns)
-    unfiltered_count = len(posts)
-    if posts:
-        background_tasks.add_task(_index_posts_task, list(posts), db)
+    background_tasks.add_task(_index_posts_task, list(posts), db)
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
     posts = _deduplicate_by_md5(posts)
@@ -376,8 +376,8 @@ async def search(
     return {
         "posts": posts, 
         "page": page, 
-        "total": len(posts), 
-        "unfiltered_count": unfiltered_count, 
+        "total": unfiltered_total, 
+        "unfiltered_count": unfiltered_total, 
         "resolved_tags": tags,
         "corrected_tags": corrected_tags
     }

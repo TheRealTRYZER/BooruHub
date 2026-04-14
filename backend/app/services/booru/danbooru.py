@@ -63,7 +63,7 @@ class Danbooru(BaseBooru):
         limit: int,
         user: Optional[User],
         timeout: float = 30.0,
-    ) -> List[dict]:
+    ) -> Tuple[List[dict], int]:
         """Fetch with local filtering for tags 3+."""
         api_tags, extra_tags = self.prepare_tags(tags)
         
@@ -102,7 +102,7 @@ class Danbooru(BaseBooru):
             data = resp.json()
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
             logger.warning(f"[Danbooru] Fetch failed: {e}")
-            return []
+            return [], 0
 
         raw_posts = data if isinstance(data, list) else []
         normalised = []
@@ -136,7 +136,7 @@ class Danbooru(BaseBooru):
         if extra_tags:
             logger.info(f"[Danbooru] Local filter: {len(normalised)}/{len(raw_posts)} posts matched extra tags {extra_tags}")
 
-        return normalised[:limit]
+        return normalised[:limit], len(raw_posts)
 
     def normalize_post(self, raw: dict) -> Optional[dict]:
         file_url = raw.get("file_url") or raw.get("large_file_url")

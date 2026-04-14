@@ -7,7 +7,7 @@ Provides:
 - Standard post normalisation contract via abstract normalize_post()
 """
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple
+from typing import Dict, List, Optional, Tuple, Tuple
 
 import httpx
 import logging
@@ -154,7 +154,7 @@ class BaseBooru(ABC):
         limit: int,
         user: Optional[User],
         timeout: float = 30.0,
-    ) -> List[dict]:
+    ) -> Tuple[List[dict], int]:
         """Fetch posts from the remote API, normalise, and return."""
         actual_page = self.calculate_page(page, limit)
         actual_tags = self.prepare_tags(tags)
@@ -181,10 +181,10 @@ class BaseBooru(ABC):
             data = resp.json()
         except httpx.HTTPStatusError as e:
             logger.warning(f"[{self.__class__.__name__}] HTTP {e.response.status_code} for tags='{tags}'")
-            return []
+            return [], 0
         except httpx.RequestError as e:
             logger.error(f"[{self.__class__.__name__}] Network error: {e}")
-            return []
+            return [], 0
 
         # Unwrap posts from wrapper if needed (e.g. e621's {"posts": [...]})
         if self.is_wrapped:
@@ -199,4 +199,4 @@ class BaseBooru(ABC):
             if item is not None:
                 normalised.append(item)
 
-        return normalised[:limit]
+        return normalised[:limit], len(raw_posts)

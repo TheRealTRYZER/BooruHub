@@ -57,7 +57,7 @@ class Rule34(BaseBooru):
         limit: int,
         user: Optional[User],
         timeout: float = 30.0,
-    ) -> List[dict]:
+    ) -> Tuple[List[dict], int]:
         """Override fetch_posts to handle Rule34's 'Missing authentication' quirk
         where a 200 response contains a plain string instead of JSON."""
         actual_tags = self.prepare_tags(tags)
@@ -77,32 +77,32 @@ class Rule34(BaseBooru):
         try:
             resp = await client.get(url, params=params)
             if resp.status_code != 200:
-                return []
+                return [], 0
 
             text = resp.text.strip()
             if not text:
-                return []
+                return [], 0
 
             if "Missing authentication" in text:
                 logger.error(
                     "[rule34] API requires authentication. "
                     "Set User ID and API Key in Settings → Rule34."
                 )
-                return []
+                return [], 0
 
             # Safety check: if it looks like XML or not like JSON, skip
             if text.startswith("<") or not (text.startswith("[") or text.startswith("{")):
-                return []
+                return [], 0
 
             data = resp.json()
             if not isinstance(data, list):
-                return []
+                return [], 0
 
             return [p for p in (self.normalize_post(r) for r in data) if p][:limit]
 
         except (httpx.RequestError, ValueError, Exception) as e:
             logger.error(f"[rule34] Request failed: {e}")
-            return []
+            return [], 0
 
     def normalize_post(self, raw: dict) -> Optional[dict]:
         file_url = raw.get("file_url")

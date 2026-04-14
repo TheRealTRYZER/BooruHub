@@ -9,7 +9,7 @@ import asyncio
 import logging
 import time
 from collections import OrderedDict
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 from app.db.models import User
 from app.services.booru import PROVIDERS
@@ -32,7 +32,7 @@ class _LRUCache:
         self._data: OrderedDict[tuple, tuple] = OrderedDict()
         self._max = maxsize
 
-    def get(self, key: tuple) -> Optional[list]:
+    def get(self, key: tuple) -> Optional[tuple]:
         entry = self._data.get(key)
         if entry is None:
             return None
@@ -43,7 +43,7 @@ class _LRUCache:
         self._data.move_to_end(key)
         return value
 
-    def put(self, key: tuple, value: list) -> None:
+    def put(self, key: tuple, value: tuple) -> None:
         if not value:
             return
         self._data[key] = (value, time.monotonic() + _CACHE_TTL)
@@ -87,11 +87,13 @@ async def search_posts(
     timeout: float = 30.0,
     user: Optional[User] = None,
     skip_interval: bool = False,
-) -> List[dict]:
-    """Search a single booru site with caching and optional per-user pacing."""
+) -> Tuple[List[dict], int]:
+    """Search a single booru site with caching and optional per-user pacing.
+    Returns (normalised_posts, unfiltered_count).
+    """
     if site not in PROVIDERS:
         logger.warning(f"Unknown provider: {site}")
-        return []
+        return [], 0
 
     # Cache lookup
     cache_key = (site, tags, limit, page, user.id if user else None)
@@ -112,13 +114,14 @@ async def search_posts(
             wait = interval - (time.monotonic() - last)
             if wait > 0:
                 await asyncio.sleep(wait)
-            result = await provider.fetch_posts(tags, page, limit, user, timeout)
+            posts, count = await provider.fetch_posts(tags, page, limit, user, timeout)
             _last_search[lock_key] = time.monotonic()
     else:
-        result = await provider.fetch_posts(tags, page, limit, user, timeout)
+        posts, count = await provider.fetch_posts(tags, page, limit, user, timeout)
 
+    result = (posts, count)
     _cache.put(cache_key, result)
-    logger.info(f"[{site}] {len(result)} posts (tags='{tags}' page={page})")
+    logger.info(f"[{site}] {len(posts)} posts (tags='{tags}' page={page})")
     return result
 
 
@@ -133,11 +136,13 @@ async def search_multi_site(
     user: Optional[User] = None,
     ratios: Optional[Dict[str, float]] = None,
     skip_interval: bool = False,
-) -> List[dict]:
-    """Search multiple sites in parallel and interleave results by ratio weights."""
+) -> Tuple[List[dict], Dict[str, int]]:
+    """Search multiple sites in parallel and interleave results by ratio weights.
+    Returns (interleaved_posts, dict_of_unfiltered_counts_per_site).
+    """
     sites = [s for s in site_queries if s in PROVIDERS and site_queries[s] is not None]
     if not sites:
-        return []
+        return [], {}
 
     # Determine per-site fetch limits
     num = len(sites)
@@ -160,17 +165,23 @@ async def search_multi_site(
     results = await asyncio.gather(*tasks, return_exceptions=True)
 
     by_site: Dict[str, List[dict]] = {}
+    total_counts: Dict[str, int] = {}
+    
     for i, site in enumerate(sites):
         res = results[i]
-        if isinstance(res, list):
-            by_site[site] = res
+        if isinstance(res, tuple) and len(res) == 2:
+            posts, count = res
+            by_site[site] = posts
+            total_counts[site] = count
         else:
-            logger.error(f"[{site}] Multi-site error: {res}")
+            logger.error(f"[{site}] Multi-site error or invalid format: {res}")
             by_site[site] = []
+            total_counts[site] = 0
 
     # Single site — no interleaving needed
     if len(sites) == 1:
-        return by_site[sites[0]][:limit]
+        s = sites[0]
+        return by_site[s][:limit], total_counts
 
     # Weighted interleaving algorithm
     actual_ratios = ratios or {s: 1.0 for s in sites}
@@ -197,4 +208,4 @@ async def search_multi_site(
             except StopIteration:
                 del iterators[s]
 
-    return interleaved[:limit]
+    return interleaved[:limit], total_counts
