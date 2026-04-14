@@ -8,7 +8,7 @@ Quirks handled:
 - Tags are a single space-separated string, not an array
 """
 import logging
-from typing import Dict, List, Optional
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 
