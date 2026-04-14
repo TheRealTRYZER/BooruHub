@@ -8,6 +8,7 @@
                @input="onSearchInput"
                @blur="onSearchBlur"
                @keydown.enter="handleReload"
+               @keydown.tab.prevent="onTabPress"
                v-show="!feed.isSplit"
                style="width: 100%;">
         <div style="display:flex; gap:8px; justify-content:flex-end;">
@@ -142,11 +143,21 @@ function onSearchBlur() {
 }
 
 function selectSuggestion(tag: string) {
-  const parts = feed.tags.trim().split(/\s+/)
-  parts[parts.length - 1] = tag
+  const parts = feed.tags.split(/\s+/)
+  if (parts.length > 0) {
+    parts[parts.length - 1] = tag
+  } else {
+    parts.push(tag)
+  }
   const endsWithColon = tag.endsWith(':')
   feed.tags = parts.join(' ') + (endsWithColon ? '' : ' ')
   suggestions.value = []
+}
+
+function onTabPress() {
+  if (suggestions.value.length > 0) {
+    selectSuggestion(suggestions.value[0])
+  }
 }
 
 onMounted(() => {
