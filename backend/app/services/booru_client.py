@@ -177,14 +177,16 @@ async def search_multi_site(
     by_site: Dict[str, List[dict]] = {}
     total_counts: Dict[str, int] = {}
     
+    logger.info(f"[MIX] Fetch results for page {page}:")
     for i, site in enumerate(sites):
         res = results[i]
         if isinstance(res, tuple) and len(res) == 2:
             posts, count = res
             by_site[site] = posts
             total_counts[site] = count
+            logger.info(f"    - {site}: {len(posts)} posts (matches: {count})")
         else:
-            logger.error(f"[{site}] Multi-site error or invalid format: {res}")
+            logger.error(f"    - {site}: Error: {res}")
             by_site[site] = []
             total_counts[site] = 0
 
@@ -199,23 +201,40 @@ async def search_multi_site(
     iterators = {s: iter(posts) for s, posts in by_site.items() if posts}
     interleaved: List[dict] = []
 
+    # Interleaving loop
     while iterators and len(interleaved) < limit * 2:
+        # Give credits to all active iterators
         for s in list(iterators):
             credits[s] += actual_ratios.get(s, 1.0)
 
+        # Sort eligible sites by credits (desc) to pull fairly
         eligible = sorted(
             (s for s in iterators if credits[s] >= 1.0),
-            key=lambda s: credits[s],
+            key=lambda s: (credits[s], random.random()), # Random tie-break
             reverse=True,
         )
+        
         if not eligible:
+            # If no one is eligible but we still have iterators, 
+            # we need to lower the 1.0 threshold or something is wrong.
+            # Usually happens if all ratios < 1.0. 
+            # Let's just break and return what we have.
             break
 
+        added_this_round = False
         for s in eligible:
             try:
-                interleaved.append(next(iterators[s]))
+                post = next(iterators[s])
+                interleaved.append(post)
                 credits[s] -= 1.0
+                added_this_round = True
             except StopIteration:
                 del iterators[s]
+                # Reset credits for exhausted site to not skew others
+                credits[s] = 0.0
+        
+        if not added_this_round:
+            break
 
+    logger.info(f"[MIX] Interleaved {len(interleaved)} posts total")
     return interleaved[:limit], total_counts

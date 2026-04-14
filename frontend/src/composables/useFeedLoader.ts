@@ -48,7 +48,8 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
           })
           if (gen !== loadGeneration) return 0
           
-          if (data.corrected_tags && !correctedTags.value) {
+          // Always update with the latest suggestion from any site if results are empty
+          if (data.corrected_tags) {
             correctedTags.value = data.corrected_tags
           }
 
@@ -69,6 +70,7 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
       const allSitesExhausted = activeSites.every(s => unfilteredCounts[s] === 0)
       
       if (totalNew > 0) {
+        correctedTags.value = null // Hide suggestion if we found something
         const mixed: Post[] = []
         const maxLen = Math.max(...activeSites.map(s => pagePayloads[s].length))
         for (let i = 0; i < maxLen; i++) {

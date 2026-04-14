@@ -71,7 +71,7 @@
     </div>
     <div ref="sentinel" style="height:20px; margin-top:50px;"></div>
 
-    <div v-if="!loading && !feed.hasMore && feed.posts.length === 0" class="empty-state" style="padding:100px 20px; text-align:center;">
+    <div v-if="!loading && !feed.hasMore && feed.posts.length === 0 && !correctedTags" class="empty-state" style="padding:100px 20px; text-align:center;">
       <div class="empty-state-icon" style="font-size:4rem; margin-bottom:20px;">🔍</div>
       <div class="empty-state-title" style="font-size:1.5rem; font-weight:700;">{{ lang.t('no_results') }}</div>
       <div class="empty-state-text" style="color:var(--text-muted);">{{ lang.t('try_changing') }}</div>
