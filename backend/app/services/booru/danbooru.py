@@ -45,9 +45,8 @@ class Danbooru(BaseBooru):
         # 2. Take first 2 tags for the API (Danbooru limit)
         api_tags_list = all_tags[:2]
         
-        # 3. Filter extra tags: exclude meta tags that can't be filtered locally
-        # (local filter can only check for presence/absence of tokens in tag_string)
-        extra_tags = [t for t in all_tags[2:] if ":" not in t]
+        # 3. Extra tags (skip 'order:' algorithms as they cannot be locally filtered efficiently)
+        extra_tags = [t for t in all_tags[2:] if "order:" not in t]
         
         return " ".join(api_tags_list), extra_tags
 
@@ -113,6 +112,19 @@ class Danbooru(BaseBooru):
                 continue
                 
             post_tags = {t.lower() for t in post.get("tags", [])}
+            
+            # Inject rating as a meta-tag for local filtering
+            r = post.get("rating", "g").lower()
+            if r == "e":
+                post_tags.add("rating:explicit")
+            elif r == "q":
+                post_tags.add("rating:questionable")
+            elif r == "s":
+                post_tags.add("rating:sensitive")
+                post_tags.add("rating:safe")
+            elif r == "g":
+                post_tags.add("rating:general")
+                post_tags.add("rating:safe")
             
             # Debug: Log tags for the very first post to see what's happening
             if raw == raw_posts[0]:
