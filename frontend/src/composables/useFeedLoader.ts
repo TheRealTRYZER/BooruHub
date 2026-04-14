@@ -78,6 +78,9 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
             if (pagePayloads[activeSite][i]) mixed.push(pagePayloads[activeSite][i])
           }
         }
+        // Shuffle the mixed results to distribute sites randomly
+        mixed.sort(() => Math.random() - 0.5)
+        
         feed.posts = [...basePosts, ...mixed]
         skeletonCount.value = 0
       }

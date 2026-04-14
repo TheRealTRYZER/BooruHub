@@ -103,7 +103,7 @@ class Rule34(BaseBooru):
                 return [], 0
 
             posts = [p for p in (self.normalize_post(r) for r in data) if p][:limit]
-            return posts, 0
+            return posts, len(data)
 
         except (httpx.RequestError, ValueError, Exception) as e:
             logger.error(f"[rule34] Request failed: {e}")
