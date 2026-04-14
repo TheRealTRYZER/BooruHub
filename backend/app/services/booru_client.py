@@ -237,4 +237,5 @@ async def search_multi_site(
             break
 
     logger.info(f"[MIX] Interleaved {len(interleaved)} posts total")
+    random.shuffle(interleaved)
     return interleaved[:limit], total_counts
