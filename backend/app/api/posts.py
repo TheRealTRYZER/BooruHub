@@ -271,9 +271,12 @@ async def get_feed(
     tag_list = tags.split() if tags else []
     
     # Enforce rating:general for guests (override any provided rating)
-    if not user:
+    if user is None:
+        logger.info(f"[GUEST_MODE] Enforcing rating:general for unauthorized user")
         tag_list = [t for t in tag_list if not t.startswith("rating:")]
         tag_list.append("rating:general")
+    else:
+        logger.info(f"[USER_MODE] User {user.id} search tags: '{tags}'")
 
     site_queries = {}
     for site in site_list:
@@ -339,9 +342,12 @@ async def search(
     tag_list = tags.split() if tags else []
     
     # Enforce rating:general for guests (override any provided rating)
-    if not user:
+    if user is None:
+        logger.info(f"[GUEST_MODE] Enforcing rating:general in search")
         tag_list = [t for t in tag_list if not t.startswith("rating:")]
         tag_list.append("rating:general")
+    else:
+        logger.info(f"[USER_MODE] User {user.id} search tags: '{tags}'")
 
     mappings = []
     blacklist_rules: List[BlacklistRule] = []

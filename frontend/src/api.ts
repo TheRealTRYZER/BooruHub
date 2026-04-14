@@ -70,6 +70,10 @@ async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
   return data as T
 }
 
+export function apiClearCache() {
+  cache.clear()
+}
+
 // Auth
 export async function apiLogin(loginStr: string, password: string): Promise<AuthResponse> {
   return _fetch<AuthResponse>('/auth/login', {

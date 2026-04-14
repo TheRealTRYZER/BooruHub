@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { apiLogin, apiRegister } from '../api'
+import { apiLogin, apiRegister, apiClearCache } from '../api'
 import type { User } from '../types'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -39,6 +39,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     localStorage.removeItem('booruhub_token')
     localStorage.removeItem('booruhub_user')
+    apiClearCache()
   }
 
   function updateUser(updates: Partial<User>) {
