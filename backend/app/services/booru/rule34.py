@@ -28,6 +28,7 @@ class Rule34(BaseBooru):
         self.max_per_page = 1000
         self.page_param = "pid"
         self.start_page = 0
+        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
         self.default_params = {
             "page": "dapi",
             "s": "post",
@@ -81,7 +82,10 @@ class Rule34(BaseBooru):
 
             text = resp.text.strip()
             if not text:
+                logger.warning(f"[rule34] Empty response from API. Status: {resp.status_code}")
                 return [], 0
+
+            logger.info(f"[rule34] Response status: {resp.status_code}, snippet: {text[:100]}")
 
             if "Missing authentication" in text:
                 logger.error(
