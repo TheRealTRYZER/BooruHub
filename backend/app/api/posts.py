@@ -410,31 +410,39 @@ async def suggest_tags(
     suggestions = []
     q_lower = q.lower()
     
-    # 1. Provide Meta-Tag suggestions
-    meta_suggests = {
-        "order:": ["score", "rank", "id", "hot", "change", "favcount", "random"],
-        "rating:": ["general", "sensitive", "questionable", "explicit", "g", "s", "q", "e"],
-    }
+    # Extract operator prefix if present
+    prefix = ""
+    if q_lower.startswith(("-", "~")):
+        prefix = q_lower[0]
+        q_lower = q_lower[1:]
     
-    for prefix, values in meta_suggests.items():
-        if prefix.startswith(q_lower):
-            suggestions.append(prefix)
-        if q_lower.startswith(prefix):
-            sub_q = q_lower[len(prefix):]
-            for val in values:
-                if val.startswith(sub_q):
-                    suggestions.append(f"{prefix}{val}")
+    # 1. Provide Meta-Tag suggestions (only skip if prefix is present and meta-tags don't support it)
+    if not prefix:
+        meta_suggests = {
+            "order:": ["score", "rank", "id", "hot", "change", "favcount", "random"],
+            "rating:": ["general", "sensitive", "questionable", "explicit", "g", "s", "q", "e"],
+        }
+        
+        for p, values in meta_suggests.items():
+            if p.startswith(q_lower):
+                suggestions.append(p)
+            if q_lower.startswith(p):
+                sub_q = q_lower[len(p):]
+                for val in values:
+                    if val.startswith(sub_q):
+                        suggestions.append(f"{p}{val}")
 
     # 2. User's mapped tags get priority
     if user:
         mappings = await get_user_mappings(user.id, db)
         for m in mappings:
-            if m.unitag.lower().startswith(q_lower) and m.unitag not in suggestions:
-                suggestions.append(m.unitag)
+            tag = m.unitag.lower()
+            if tag.startswith(q_lower) and f"{prefix}{m.unitag}" not in suggestions:
+                suggestions.append(f"{prefix}{m.unitag}")
     
     # 3. Fill remaining with global cached tags, sorted by popularity
     remaining_limit = limit - len(suggestions)
-    if remaining_limit > 0:
+    if remaining_limit > 0 and q_lower:
         result = await db.execute(
             select(CachedTag)
             .where(CachedTag.tag.like(f"{q_lower}%"))
@@ -443,8 +451,9 @@ async def suggest_tags(
         )
         cached_tags = result.scalars().all()
         for ct in cached_tags:
-            if ct.tag not in suggestions:
-                suggestions.append(ct.tag)
+            full_tag = f"{prefix}{ct.tag}"
+            if full_tag not in suggestions:
+                suggestions.append(full_tag)
 
     return {"suggestions": suggestions[:limit]}
 
