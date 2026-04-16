@@ -51,8 +51,13 @@ class FeedResponse(BaseModel):
     corrected_tags: Optional[str] = None
 
 
+class TagSuggestion(BaseModel):
+    tag: str
+    is_mapped: bool = False
+
+
 class TagSuggestionResponse(BaseModel):
-    suggestions: List[str]
+    suggestions: List[TagSuggestion]
 
 
 
@@ -407,17 +412,38 @@ async def suggest_tags(
     user: Optional[User] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    suggestions = []
+    suggestions: List[TagSuggestion] = []
+    seen_tags = set()
     q_lower = q.lower()
     
     # Extract operator prefix if present
-    prefix = ""
+    op_prefix = ""
     if q_lower.startswith(("-", "~")):
-        prefix = q_lower[0]
+        op_prefix = q_lower[0]
         q_lower = q_lower[1:]
     
-    # 1. Provide Meta-Tag suggestions (only skip if prefix is present and meta-tags don't support it)
-    if not prefix:
+    # 0. Collect all mapped tags (Starter + User)
+    mapped_unitags = set()
+    from app.core.defaults import STARTER_MAPPINGS
+    for m in STARTER_MAPPINGS:
+        mapped_unitags.add(m["unitag"])
+    
+    if user:
+        user_mappings = await get_user_mappings(user.id, db)
+        for m in user_mappings:
+            mapped_unitags.add(m.unitag)
+
+    # 1. Prioritize all mapped tags
+    for unitag in sorted(list(mapped_unitags)):
+        tag_name = unitag.lower()
+        if tag_name.startswith(q_lower):
+            full_tag = f"{op_prefix}{unitag}"
+            if full_tag not in seen_tags:
+                suggestions.append(TagSuggestion(tag=full_tag, is_mapped=True))
+                seen_tags.add(full_tag)
+
+    # 2. Provide Meta-Tag suggestions (only skip if prefix is present and meta-tags don't support it)
+    if not op_prefix:
         meta_suggests = {
             "order:": ["score", "rank", "id", "hot", "change", "favcount", "random"],
             "rating:": ["general", "sensitive", "questionable", "explicit", "g", "s", "q", "e"],
@@ -425,21 +451,18 @@ async def suggest_tags(
         
         for p, values in meta_suggests.items():
             if p.startswith(q_lower):
-                suggestions.append(p)
+                if p not in seen_tags:
+                    suggestions.append(TagSuggestion(tag=p, is_mapped=False))
+                    seen_tags.add(p)
             if q_lower.startswith(p):
                 sub_q = q_lower[len(p):]
                 for val in values:
                     if val.startswith(sub_q):
-                        suggestions.append(f"{p}{val}")
+                        full_p = f"{p}{val}"
+                        if full_p not in seen_tags:
+                            suggestions.append(TagSuggestion(tag=full_p, is_mapped=False))
+                            seen_tags.add(full_p)
 
-    # 2. User's mapped tags get priority
-    if user:
-        mappings = await get_user_mappings(user.id, db)
-        for m in mappings:
-            tag = m.unitag.lower()
-            if tag.startswith(q_lower) and f"{prefix}{m.unitag}" not in suggestions:
-                suggestions.append(f"{prefix}{m.unitag}")
-    
     # 3. Fill remaining with global cached tags, sorted by popularity
     remaining_limit = limit - len(suggestions)
     if remaining_limit > 0 and q_lower:
@@ -447,13 +470,16 @@ async def suggest_tags(
             select(CachedTag)
             .where(CachedTag.tag.like(f"{q_lower}%"))
             .order_by(CachedTag.usage_count.desc())
-            .limit(remaining_limit)
+            .limit(remaining_limit + 20) # Over-fetch to filter duplicates and metadata results
         )
         cached_tags = result.scalars().all()
         for ct in cached_tags:
-            full_tag = f"{prefix}{ct.tag}"
-            if full_tag not in suggestions:
-                suggestions.append(full_tag)
+            full_tag = f"{op_prefix}{ct.tag}"
+            if full_tag not in seen_tags:
+                suggestions.append(TagSuggestion(tag=full_tag, is_mapped=False))
+                seen_tags.add(full_tag)
+                if len(suggestions) >= limit:
+                    break
 
     return {"suggestions": suggestions[:limit]}
 

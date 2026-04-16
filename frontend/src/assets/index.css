@@ -168,6 +168,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .search-suggestions.visible { display: block; }
 .search-suggestion-item { padding: 8px 12px; cursor: pointer; color: var(--text-secondary); font-size: 14px; }
 .search-suggestion-item:hover { background: rgba(255,255,255,0.05); color: #fff; }
+.search-suggestion-item.mapped {
+  background: rgba(122, 111, 255, 0.15);
+  color: #fff;
+  border-left: 2px solid var(--accent);
+}
+.search-suggestion-item.mapped:hover {
+  background: rgba(122, 111, 255, 0.25);
+}
 
 .site-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: var(--sp-6); align-items: center; }
 .site-filter {

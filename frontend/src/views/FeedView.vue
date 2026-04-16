@@ -21,8 +21,12 @@
         </div>
       </div>
       <div class="search-suggestions" :class="{ visible: suggestions.length > 0 }">
-        <div v-for="tag in suggestions" :key="tag" class="search-suggestion-item" @mousedown.prevent="selectSuggestion(tag)">
-          {{ tag.replace(/_/g, ' ') }}
+        <div v-for="tagObj in suggestions" :key="tagObj.tag" 
+             class="search-suggestion-item" 
+             :class="{ mapped: tagObj.is_mapped }"
+             @mousedown.prevent="selectSuggestion(tagObj.tag)">
+          <span v-if="tagObj.is_mapped" style="margin-right: 6px; font-size: 10px;">⭐</span>
+          {{ tagObj.tag.replace(/_/g, ' ') }}
         </div>
       </div>
     </div>
@@ -99,7 +103,7 @@ const lang = useLangStore()
 
 const availableSites: SiteName[] = ['danbooru', 'e621', 'rule34']
 const sentinel = ref<HTMLElement | null>(null)
-const suggestions = ref<string[]>([])
+const suggestions = ref<any[]>([])
 let observer: IntersectionObserver | null = null
 let suggestTimeout: any = null
 
@@ -166,7 +170,7 @@ function selectSuggestion(tag: string) {
 
 function onTabPress() {
   if (suggestions.value.length > 0) {
-    selectSuggestion(suggestions.value[0])
+    selectSuggestion(suggestions.value[0].tag)
   }
 }
 

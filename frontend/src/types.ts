@@ -57,8 +57,13 @@ export interface FeedResponse {
 
 export interface SearchResponse extends FeedResponse {}
 
+export interface TagSuggestion {
+  tag: string
+  is_mapped: boolean
+}
+
 export interface TagSuggestResponse {
-  suggestions: string[]
+  suggestions: TagSuggestion[]
 }
 
 export interface Favorite {
