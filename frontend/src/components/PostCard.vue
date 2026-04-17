@@ -20,12 +20,12 @@
         <span v-if="post.score !== undefined" class="post-card-score">★ {{ post.score }}</span>
       </div>
     </div>
-    <button class="post-card-fav" :class="{ active: isFav }"
+    <button v-if="!isMobile" class="post-card-fav" :class="{ active: isFav }"
             @click.stop="toggleFav"
             :title="lang.t('nav_favorites')">
       {{ isFav ? '❤️' : '🤍' }}
     </button>
-    <button class="post-card-dislike" :class="{ active: isDisliked }"
+    <button v-if="!isMobile" class="post-card-dislike" :class="{ active: isDisliked }"
             @click.stop="doDislike"
             :title="lang.t('dislikes_tab') || 'Dislike'">
       👎
@@ -35,7 +35,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
@@ -146,11 +146,26 @@ const hidden = ref(false)
 const showLikeAnimation = ref(false)
 const swipeDiff = ref(0)
 const swiping = ref(false)
+const isMobile = ref(false)
 
 let touchStartX = 0
 let touchStartY = 0
 let tapTimeout: ReturnType<typeof setTimeout> | null = null
 let lastTapTime = 0
+
+function updateMobileState() {
+  isMobile.value = window.matchMedia('(max-width: 768px)').matches
+}
+
+onMounted(() => {
+  updateMobileState()
+  window.addEventListener('resize', updateMobileState)
+})
+
+onUnmounted(() => {
+  window.removeEventListener('resize', updateMobileState)
+  if (tapTimeout) clearTimeout(tapTimeout)
+})
 
 function doLikeAnimation() {
   showLikeAnimation.value = true
@@ -158,6 +173,16 @@ function doLikeAnimation() {
 }
 
 function handleCardClick() {
+  if (!isMobile.value) {
+    // Desktop: Immediate navigation
+    router.push({ 
+      name: 'post', 
+      query: { id: String(props.post.id), site: props.post.source_site } 
+    })
+    return
+  }
+
+  // Mobile: Double-tap buffer to allow "Like" action
   const now = Date.now()
   if (now - lastTapTime < 300) {
     if (tapTimeout) clearTimeout(tapTimeout)
@@ -168,7 +193,10 @@ function handleCardClick() {
   } else {
     lastTapTime = now
     tapTimeout = setTimeout(() => {
-      router.push({ name: 'post', query: { id: String(props.post.id), site: props.post.source_site } })
+      router.push({ 
+        name: 'post', 
+        query: { id: String(props.post.id), site: props.post.source_site } 
+      })
     }, 300)
   }
 }
