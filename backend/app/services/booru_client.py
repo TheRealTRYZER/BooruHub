@@ -121,7 +121,7 @@ async def search_posts(
 
     result = (posts, count)
     _cache.put(cache_key, result)
-    logger.info(f"[{site}] {len(posts)} posts (tags='{tags}' page={page})")
+    logger.debug(f"[{site}] {len(posts)} posts (tags='{tags}' page={page})")
     return result
 
 
@@ -177,14 +177,14 @@ async def search_multi_site(
     by_site: Dict[str, List[dict]] = {}
     total_counts: Dict[str, int] = {}
     
-    logger.info(f"[MIX] Fetch results for page {page}:")
+    logger.debug(f"[MIX] Fetch results for page {page}:")
     for i, site in enumerate(sites):
         res = results[i]
         if isinstance(res, tuple) and len(res) == 2:
             posts, count = res
             by_site[site] = posts
             total_counts[site] = count
-            logger.info(f"    - {site}: {len(posts)} posts (matches: {count})")
+            logger.debug(f"    - {site}: {len(posts)} posts (matches: {count})")
         else:
             logger.error(f"    - {site}: Error: {res}")
             by_site[site] = []
@@ -195,14 +195,15 @@ async def search_multi_site(
         s = sites[0]
         return by_site[s][:limit], total_counts
 
-    # Weighted interleaving algorithm
+    # Weighted interleaving algorithm with MD5 deduplication
     actual_ratios = ratios or {s: 1.0 for s in sites}
     credits = {s: 0.0 for s in sites}
     iterators = {s: iter(posts) for s, posts in by_site.items() if posts}
     interleaved: List[dict] = []
+    seen_md5 = set()
 
     # Interleaving loop
-    while iterators and len(interleaved) < limit * 2:
+    while iterators and len(interleaved) < limit:
         # Give credits to all active iterators
         for s in list(iterators):
             credits[s] += actual_ratios.get(s, 1.0)
@@ -215,26 +216,33 @@ async def search_multi_site(
         )
         
         if not eligible:
-            # If no one is eligible but we still have iterators, 
-            # we need to lower the 1.0 threshold or something is wrong.
-            # Usually happens if all ratios < 1.0. 
-            # Let's just break and return what we have.
+            # All ratios might be < 1.0; decrement 1.0 threshold if necessary or just bail
             break
 
         added_this_round = False
         for s in eligible:
             try:
                 post = next(iterators[s])
+                
+                # MD5 Deduplication
+                md5 = post.get("md5")
+                if md5:
+                    if md5 in seen_md5:
+                        continue
+                    seen_md5.add(md5)
+                
                 interleaved.append(post)
                 credits[s] -= 1.0
                 added_this_round = True
+                
+                if len(interleaved) >= limit:
+                    break
             except StopIteration:
                 del iterators[s]
-                # Reset credits for exhausted site to not skew others
                 credits[s] = 0.0
         
-        if not added_this_round:
+        if not added_this_round and not eligible:
             break
 
-    logger.info(f"[MIX] Interleaved {len(interleaved)} posts total")
-    return interleaved[:limit], total_counts
+    logger.debug(f"[MIX] Interleaved {len(interleaved)} posts total")
+    return interleaved, total_counts

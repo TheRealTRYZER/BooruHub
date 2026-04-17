@@ -25,6 +25,17 @@ from app.services.tag_mapping import (
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/posts", tags=["posts"])
 
+# Write Throttling: Track recently processed items to avoid redundant UPSERTs
+RECENTLY_CACHED_TAGS = set()
+RECENTLY_INDEXED_POSTS = set()
+
+# Clear the sets periodically (every few thousand entries) to prevent memory growth
+def _clear_throttling_sets():
+    if len(RECENTLY_CACHED_TAGS) > 10000:
+        RECENTLY_CACHED_TAGS.clear()
+    if len(RECENTLY_INDEXED_POSTS) > 20000:
+        RECENTLY_INDEXED_POSTS.clear()
+
 
 class PostResponse(BaseModel):
     id: Union[int, str]
@@ -129,9 +140,17 @@ async def _cache_tags_task(tags: List[str], db: AsyncSession):
     if not clean_tags:
         return
 
-    # Use a set to avoid duplicates in the current batch
-    unique_clean_tags = list(set(clean_tags))
-    values = [{"tag": t} for t in unique_clean_tags]
+    # Filter out recently cached tags
+    _clear_throttling_sets()
+    new_tags = [t for t in list(set(clean_tags)) if t not in RECENTLY_CACHED_TAGS]
+    
+    if not new_tags:
+        return
+
+    for t in new_tags:
+        RECENTLY_CACHED_TAGS.add(t)
+
+    values = [{"tag": t} for t in new_tags]
 
     # Batch UPSERT
     stmt = pg_insert(CachedTag).values(values)
@@ -178,14 +197,28 @@ async def _index_posts_task(posts: List[dict], db: AsyncSession):
         else:
             without_md5.append(data)
 
+    _clear_throttling_sets()
+    final_with_md5 = []
+    for d in with_md5:
+        if d['md5'] not in RECENTLY_INDEXED_POSTS:
+            final_with_md5.append(d)
+            RECENTLY_INDEXED_POSTS.add(d['md5'])
+
+    final_without_md5 = []
+    for d in without_md5:
+        key = f"{d['source_site']}:{d['post_id']}"
+        if key not in RECENTLY_INDEXED_POSTS:
+            final_without_md5.append(d)
+            RECENTLY_INDEXED_POSTS.add(key)
+
     try:
-        if with_md5:
-            stmt = pg_insert(PostIndex).values(with_md5)
+        if final_with_md5:
+            stmt = pg_insert(PostIndex).values(final_with_md5)
             stmt = stmt.on_conflict_do_nothing(index_elements=['md5'])
             await db.execute(stmt)
 
-        if without_md5:
-            stmt = pg_insert(PostIndex).values(without_md5)
+        if final_without_md5:
+            stmt = pg_insert(PostIndex).values(final_without_md5)
             stmt = stmt.on_conflict_do_nothing(index_elements=['source_site', 'post_id'])
             await db.execute(stmt)
 
@@ -309,7 +342,7 @@ async def get_feed(
     background_tasks.add_task(_index_posts_task, list(posts), db)
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
-    posts = _deduplicate_by_md5(posts)
+    # MD5 deduplication is now handled inside search_multi_site
 
     # Cache ONLY tags from results to avoid saving typos
     unique_tags = set()
@@ -381,7 +414,7 @@ async def search(
     background_tasks.add_task(_index_posts_task, list(posts), db)
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
-    posts = _deduplicate_by_md5(posts)
+    posts = _deduplicate_by_md5(posts) # Still needed for single-site search
 
     # Cache ONLY tags from results to avoid saving typos
     unique_tags = set()
