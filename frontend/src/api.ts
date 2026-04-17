@@ -144,7 +144,7 @@ export async function apiAddFavorite(post: Post, isDislike = false): Promise<unk
     method: 'POST',
     body: JSON.stringify({
       source_site: post.source_site,
-      post_id: String(post.id || (post as any).post_id),
+      post_id: String(post.id),
       preview_url: post.preview_url,
       file_url: post.file_url,
       sample_url: post.sample_url,
@@ -205,8 +205,11 @@ export async function apiDeleteBlacklistRule(id: number): Promise<unknown> {
 
 // Mappings
 export async function apiGetMappings(): Promise<TagMapping[]> {
-  const data = await _fetch<unknown>('/mappings')
-  return (Array.isArray(data) ? data : (data as Record<string, unknown>).mappings || []) as TagMapping[]
+  interface MappingsData {
+    mappings: TagMapping[]
+  }
+  const data = await _fetch<MappingsData | TagMapping[]>('/mappings')
+  return (Array.isArray(data) ? data : data.mappings || []) as TagMapping[]
 }
 
 export async function apiCreateMapping(data: Omit<TagMapping, 'id' | 'user_id'>): Promise<unknown> {
