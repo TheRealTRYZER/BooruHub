@@ -140,9 +140,7 @@ async def search_multi_site(
     """Search multiple sites in parallel and interleave results by ratio weights.
     Returns (interleaved_posts, dict_of_unfiltered_counts_per_site).
     """
-    import random
     sites = [s for s in site_queries if s in PROVIDERS and site_queries[s] is not None]
-    random.shuffle(sites) # Randomize order to prevent one site from always winning MD5 deduplication
     if not sites:
         return [], {}
 
@@ -208,10 +206,11 @@ async def search_multi_site(
         for s in list(iterators):
             credits[s] += actual_ratios.get(s, 1.0)
 
-        # Sort eligible sites by credits (desc) to pull fairly
+        # Sort eligible sites by credits (desc) to pull fairly. 
+        # Stable tie-break by site order in the list.
         eligible = sorted(
             (s for s in iterators if credits[s] >= 1.0),
-            key=lambda s: (credits[s], random.random()), # Random tie-break
+            key=lambda s: (credits[s], -sites.index(s)), 
             reverse=True,
         )
         
