@@ -25,7 +25,11 @@ def upgrade() -> None:
     # 2. GIN index on favorites.tags (ARRAY)
     op.create_index('ix_favorites_tags_gin', 'favorites', ['tags'], unique=False, postgresql_using='gin')
     
-    # 3. GIN index on user_events.tags (ARRAY)
+    # 3. Add tags column if it missing (handling cases where user_events was created via older migration)
+    # Using batch_alter_table for sqlite compatibility if needed, but here it's postgres
+    op.add_column('user_events', sa.Column('tags', sa.ARRAY(sa.Text), nullable=True))
+    
+    # 4. GIN index on user_events.tags (ARRAY)
     op.create_index('ix_user_events_tags_gin', 'user_events', ['tags'], unique=False, postgresql_using='gin')
     
     # 4. GIST Trigram index on cached_tags.tag for fast similarity calls
