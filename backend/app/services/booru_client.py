@@ -198,10 +198,9 @@ async def search_multi_site(
     credits = {s: 0.0 for s in sites}
     iterators = {s: iter(posts) for s, posts in by_site.items() if posts}
     interleaved: List[dict] = []
-    seen_md5 = set()
-
     # Interleaving loop
     while iterators and len(interleaved) < limit:
+        added_this_round = False
         # Give credits to all active iterators
         for s in list(iterators):
             credits[s] += actual_ratios.get(s, 1.0)
@@ -218,18 +217,9 @@ async def search_multi_site(
             # All ratios might be < 1.0; decrement 1.0 threshold if necessary or just bail
             break
 
-        added_this_round = False
         for s in eligible:
             try:
                 post = next(iterators[s])
-                
-                # MD5 Deduplication
-                md5 = post.get("md5")
-                if md5:
-                    if md5 in seen_md5:
-                        continue
-                    seen_md5.add(md5)
-                
                 interleaved.append(post)
                 credits[s] -= 1.0
                 added_this_round = True
@@ -240,7 +230,7 @@ async def search_multi_site(
                 del iterators[s]
                 credits[s] = 0.0
         
-        if not added_this_round and not eligible:
+        if not added_this_round:
             break
 
     logger.debug(f"[MIX] Interleaved {len(interleaved)} posts total")
