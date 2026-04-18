@@ -84,25 +84,38 @@
           </div>
         </div>
 
-        <div class="settings-section">
-          <div class="settings-title">🛡️ {{ lang.t('privacy_title') }}</div>
-          <p style="font-size:var(--font-sm);color:var(--text-muted);margin-bottom:12px;">
-            {{ lang.t('privacy_desc') }}
-            <a href="#/privacy" style="color:var(--primary);">{{ lang.t('privacy_policy') }}</a>
-          </p>
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
-            <input type="checkbox" id="dataConsent" v-model="dataConsent" @change="toggleConsent" style="width:18px;height:18px;accent-color:var(--primary);cursor:pointer;flex-shrink:0;">
-            <label for="dataConsent" style="font-size:var(--font-sm);color:var(--text-secondary);cursor:pointer;">{{ lang.t('consent_label') }}</label>
+        <details class="settings-section privacy-details">
+          <summary class="settings-title" style="cursor:pointer; list-style:none; display:flex; align-items:center; gap:8px;">
+            <span>🛡️ {{ lang.t('privacy_title') }}</span>
+            <span class="disclosure-arrow">▼</span>
+          </summary>
+          <div style="margin-top:16px; border-top:1px solid rgba(255,255,255,0.05); padding-top:16px;">
+            <p style="font-size:var(--font-sm);color:var(--text-muted);margin-bottom:16px;">
+              {{ lang.t('privacy_desc') }}
+              <a href="#/privacy" style="color:var(--primary);">{{ lang.t('privacy_policy') }}</a>
+            </p>
+            
+            <div class="privacy-control">
+              <div class="control-label">
+                <div style="font-weight:600; font-size:14px;">{{ lang.t('consent_label') }}</div>
+                <div style="font-size:11px; color:var(--text-muted);">{{ lang.t('consent_subtext', 'Allow tracking likes and views to improve recommendations') }}</div>
+              </div>
+              <label class="switch">
+                <input type="checkbox" v-model="dataConsent" @change="toggleConsent">
+                <span class="slider round"></span>
+              </label>
+            </div>
+
+            <div style="display:flex; justify-content:space-between; align-items:center; margin-top:20px; padding:12px; background:rgba(0,0,0,0.2); border-radius:8px;">
+              <span style="font-size:var(--font-sm);color:var(--text-secondary);">
+                {{ lang.t('events_collected') }}: <strong>{{ eventCount }}</strong>
+              </span>
+              <button class="btn btn-danger btn-sm" @click="deleteHistory" :disabled="deletingHistory">
+                🗑️ {{ lang.t('delete_history') }}
+              </button>
+            </div>
           </div>
-          <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px;">
-            <span style="font-size:var(--font-sm);color:var(--text-secondary);">
-              {{ lang.t('events_collected') }}: <strong>{{ eventCount }}</strong>
-            </span>
-          </div>
-          <button class="btn btn-danger btn-sm" @click="deleteHistory" :disabled="deletingHistory">
-            🗑️ {{ lang.t('delete_history') }}
-          </button>
-        </div>
+        </details>
       </div>
 
       <div class="settings-col">
@@ -491,4 +504,46 @@ async function deleteHistory() {
   background: var(--border-color);
   border-radius: 10px;
 }
+
+/* Privacy Toggle & Details */
+.privacy-control {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-radius: 12px;
+  border: 1px solid rgba(255, 255, 255, 0.05);
+}
+.switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+}
+.switch input { opacity: 0; width: 0; height: 0; }
+.slider {
+  position: absolute;
+  cursor: pointer;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background-color: #333;
+  transition: .4s;
+}
+.slider:before {
+  position: absolute;
+  content: "";
+  height: 18px; width: 18px;
+  left: 3px; bottom: 3px;
+  background-color: white;
+  transition: .4s;
+}
+input:checked + .slider { background-color: var(--primary); }
+input:focus + .slider { box-shadow: 0 0 1px var(--primary); }
+input:checked + .slider:before { transform: translateX(20px); }
+.slider.round { border-radius: 34px; }
+.slider.round:before { border-radius: 50%; }
+
+.privacy-details summary::-webkit-details-marker { display: none; }
+.privacy-details[open] .disclosure-arrow { transform: rotate(180deg); }
+.disclosure-arrow { font-size: 10px; color: var(--text-muted); transition: transform 0.2s; }
 </style>

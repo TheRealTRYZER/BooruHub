@@ -33,7 +33,7 @@ class User(Base):
     search_timeout = Column(Float, default=30.0)
     search_interval = Column(Float, default=0.0)
 
-    data_consent = Column(Boolean, default=False, nullable=False, server_default='false')
+    data_consent = Column(Boolean, default=True, nullable=False, server_default='true')
 
     created_at = Column(
         DateTime(timezone=True),
