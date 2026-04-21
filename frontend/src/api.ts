@@ -38,6 +38,30 @@ interface FetchOptions {
   body?: string
 }
 
+let _refreshPromise: Promise<void> | null = null
+
+async function _tryRefreshToken(): Promise<boolean> {
+  const refreshToken = localStorage.getItem('booruhub_refresh_token')
+  if (!refreshToken) return false
+
+  try {
+    const resp = await fetch(BASE + '/auth/refresh', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ refresh_token: refreshToken }),
+    })
+    if (!resp.ok) return false
+    const data = await resp.json()
+    if (data.access_token) {
+      localStorage.setItem('booruhub_token', data.access_token)
+      return true
+    }
+    return false
+  } catch {
+    return false
+  }
+}
+
 async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
   const isCacheable = !opts.method || opts.method === 'GET'
   if (isCacheable && cache.has(url)) {
@@ -47,16 +71,39 @@ async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
   }
 
   opts.headers = { ...getHeaders(), ...(opts.headers || {}) }
-  const resp = await fetch(BASE + url, opts)
+  let resp = await fetch(BASE + url, opts)
 
   if (!isCacheable) {
     cache.clear()
   }
 
+  // On 401, try refreshing the token once
   if (resp.status === 401) {
-    localStorage.removeItem('booruhub_token')
-    localStorage.removeItem('booruhub_user')
-    throw new Error('Authentication required')
+    if (!_refreshPromise) {
+      _refreshPromise = _tryRefreshToken().then(ok => {
+        _refreshPromise = null
+        if (!ok) {
+          localStorage.removeItem('booruhub_token')
+          localStorage.removeItem('booruhub_user')
+          localStorage.removeItem('booruhub_refresh_token')
+        }
+      })
+    }
+    await _refreshPromise
+
+    // Retry with new token if we have one
+    const newToken = localStorage.getItem('booruhub_token')
+    if (newToken) {
+      opts.headers = { ...getHeaders(), ...(opts.headers || {}) }
+      resp = await fetch(BASE + url, opts)
+    }
+
+    if (resp.status === 401) {
+      localStorage.removeItem('booruhub_token')
+      localStorage.removeItem('booruhub_user')
+      localStorage.removeItem('booruhub_refresh_token')
+      throw new Error('Authentication required')
+    }
   }
 
   const data: Record<string, unknown> = await resp.json().catch(() => ({}))

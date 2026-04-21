@@ -15,22 +15,25 @@ export const useAuthStore = defineStore('auth', () => {
 
   const isAuthenticated = computed(() => !!token.value)
 
-  function setAuth(newToken: string, newUser: User) {
+  function setAuth(newToken: string, newUser: User, refreshToken?: string) {
     token.value = newToken
     user.value = newUser
     localStorage.setItem('booruhub_token', newToken)
     localStorage.setItem('booruhub_user', JSON.stringify(newUser))
+    if (refreshToken) {
+      localStorage.setItem('booruhub_refresh_token', refreshToken)
+    }
   }
 
   async function login(loginStr: string, password: string) {
     const data = await apiLogin(loginStr, password)
-    setAuth(data.access_token, data.user)
+    setAuth(data.access_token, data.user, data.refresh_token)
     return data
   }
 
   async function register(username: string, email: string, password: string, dataConsent = false) {
     const data = await apiRegister(username, email, password, dataConsent)
-    setAuth(data.access_token, data.user)
+    setAuth(data.access_token, data.user, data.refresh_token)
     return data
   }
 
@@ -39,6 +42,7 @@ export const useAuthStore = defineStore('auth', () => {
     user.value = null
     localStorage.removeItem('booruhub_token')
     localStorage.removeItem('booruhub_user')
+    localStorage.removeItem('booruhub_refresh_token')
     apiClearCache()
   }
 
