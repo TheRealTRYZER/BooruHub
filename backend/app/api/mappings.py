@@ -81,7 +81,7 @@ async def create_mapping(
     await db.refresh(mapping)
     
     # Cache MUST be cleared for updates to be instant
-    invalidate_user_cache(user.id)
+    await invalidate_user_cache(user.id)
     return mapping
 
 
@@ -115,7 +115,7 @@ async def update_mapping(
     await db.refresh(mapping)
     
     # Clear cache
-    invalidate_user_cache(user.id)
+    await invalidate_user_cache(user.id)
     return mapping
 
 
@@ -139,7 +139,7 @@ async def delete_mapping(
     await db.commit()
     
     # Clear cache
-    invalidate_user_cache(user.id)
+    await invalidate_user_cache(user.id)
     return {"message": "Mapping deleted"}
 
 

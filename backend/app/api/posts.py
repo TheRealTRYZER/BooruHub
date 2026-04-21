@@ -1,5 +1,4 @@
 """Posts API — feed, search, tag suggestions."""
-import asyncio
 import logging
 from typing import List, Optional, Union, Dict
 from pydantic import BaseModel, Field
@@ -7,7 +6,6 @@ from pydantic import BaseModel, Field
 from fastapi import APIRouter, Depends, Query, BackgroundTasks
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select, update, insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.database import get_db
@@ -26,15 +24,34 @@ logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/posts", tags=["posts"])
 
 # Write Throttling: Track recently processed items to avoid redundant UPSERTs
-RECENTLY_CACHED_TAGS = set()
-RECENTLY_INDEXED_POSTS = set()
+# Thread-safe bounded set with automatic eviction
+import asyncio as _asyncio
 
-# Clear the sets periodically (every few thousand entries) to prevent memory growth
-def _clear_throttling_sets():
-    if len(RECENTLY_CACHED_TAGS) > 10000:
-        RECENTLY_CACHED_TAGS.clear()
-    if len(RECENTLY_INDEXED_POSTS) > 20000:
-        RECENTLY_INDEXED_POSTS.clear()
+class _BoundedSet:
+    """Thread-safe bounded set with automatic eviction."""
+    __slots__ = ("_data", "_max", "_lock")
+
+    def __init__(self, maxsize: int = 10000) -> None:
+        self._data: set = set()
+        self._max = maxsize
+        self._lock = _asyncio.Lock()
+
+    async def add_many(self, items) -> list:
+        """Add items, returning only those that were new."""
+        async with self._lock:
+            new = [i for i in items if i not in self._data]
+            self._data.update(new)
+            if len(self._data) > self._max:
+                self._data.clear()
+                self._data.update(new)
+            return new
+
+    def __contains__(self, item) -> bool:
+        return item in self._data
+
+
+_recently_cached_tags = _BoundedSet(maxsize=10000)
+_recently_indexed_posts = _BoundedSet(maxsize=20000)
 
 
 class PostResponse(BaseModel):
@@ -140,15 +157,12 @@ async def _cache_tags_task(tags: List[str], db: AsyncSession):
     if not clean_tags:
         return
 
-    # Filter out recently cached tags
-    _clear_throttling_sets()
-    new_tags = [t for t in list(set(clean_tags)) if t not in RECENTLY_CACHED_TAGS]
-    
+    # Filter out recently cached tags (thread-safe)
+    unique_tags = list(set(clean_tags))
+    new_tags = await _recently_cached_tags.add_many(unique_tags)
+
     if not new_tags:
         return
-
-    for t in new_tags:
-        RECENTLY_CACHED_TAGS.add(t)
 
     values = [{"tag": t} for t in new_tags]
 
@@ -158,7 +172,7 @@ async def _cache_tags_task(tags: List[str], db: AsyncSession):
         index_elements=['tag'],
         set_=dict(usage_count=CachedTag.usage_count + 1)
     )
-    
+
     try:
         await db.execute(stmt)
         await db.commit()
@@ -197,19 +211,18 @@ async def _index_posts_task(posts: List[dict], db: AsyncSession):
         else:
             without_md5.append(data)
 
-    _clear_throttling_sets()
-    final_with_md5 = []
-    for d in with_md5:
-        if d['md5'] not in RECENTLY_INDEXED_POSTS:
-            final_with_md5.append(d)
-            RECENTLY_INDEXED_POSTS.add(d['md5'])
+    # Thread-safe deduplication
+    md5_keys = [d['md5'] for d in with_md5]
+    nomd5_keys = [f"{d['source_site']}:{d['post_id']}" for d in without_md5]
 
-    final_without_md5 = []
-    for d in without_md5:
-        key = f"{d['source_site']}:{d['post_id']}"
-        if key not in RECENTLY_INDEXED_POSTS:
-            final_without_md5.append(d)
-            RECENTLY_INDEXED_POSTS.add(key)
+    new_md5 = await _recently_indexed_posts.add_many(md5_keys)
+    new_nomd5 = await _recently_indexed_posts.add_many(nomd5_keys)
+
+    new_md5_set = set(new_md5)
+    new_nomd5_set = set(new_nomd5)
+
+    final_with_md5 = [d for d in with_md5 if d['md5'] in new_md5_set]
+    final_without_md5 = [d for d in without_md5 if f"{d['source_site']}:{d['post_id']}" in new_nomd5_set]
 
     try:
         if final_with_md5:

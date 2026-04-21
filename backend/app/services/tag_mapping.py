@@ -7,8 +7,10 @@ Handles:
 - Reverse mapping (site tags → unitags for blacklist matching)
 - Caching with TTL to avoid repeated DB queries
 """
+import asyncio
 import logging
 import time
+from collections import OrderedDict
 from typing import Dict, List, Optional
 
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -19,38 +21,44 @@ from app.core.defaults import STARTER_MAPPINGS
 
 logger = logging.getLogger(__name__)
 
-# In-memory cache: user_id → (mappings_list, expiry_monotonic)
-_CACHE: Dict[int, tuple] = {}
+# Thread-safe bounded LRU cache with TTL
 _CACHE_TTL = 300  # 5 minutes
 _CACHE_MAX = 512
+_cache: OrderedDict[int, tuple] = OrderedDict()
+_cache_lock = asyncio.Lock()
 
 
 async def get_user_mappings(user_id: int, db: AsyncSession) -> List[UserTagMapping]:
-    """Fetch user's tag mappings with in-memory caching."""
+    """Fetch user's tag mappings with thread-safe in-memory caching."""
     now = time.monotonic()
 
-    cached = _CACHE.get(user_id)
-    if cached is not None:
-        mappings, expiry = cached
-        if now < expiry:
-            return mappings
-        del _CACHE[user_id]
+    async with _cache_lock:
+        cached = _cache.get(user_id)
+        if cached is not None:
+            mappings, expiry = cached
+            if now < expiry:
+                _cache.move_to_end(user_id)
+                return mappings
+            del _cache[user_id]
 
     result = await db.execute(
         select(UserTagMapping).where(UserTagMapping.user_id == user_id)
     )
     mappings = result.scalars().all()
 
-    _CACHE[user_id] = (mappings, now + _CACHE_TTL)
-    if len(_CACHE) > _CACHE_MAX:
-        _CACHE.clear()
+    async with _cache_lock:
+        _cache[user_id] = (mappings, now + _CACHE_TTL)
+        _cache.move_to_end(user_id)
+        while len(_cache) > _CACHE_MAX:
+            _cache.popitem(last=False)
 
     return mappings
 
 
-def invalidate_user_cache(user_id: int) -> None:
+async def invalidate_user_cache(user_id: int) -> None:
     """Call after mapping CRUD operations to bust the cache."""
-    _CACHE.pop(user_id, None)
+    async with _cache_lock:
+        _cache.pop(user_id, None)
 
 
 def build_lookup(mappings: List[UserTagMapping]) -> Dict[str, Dict[str, str]]:

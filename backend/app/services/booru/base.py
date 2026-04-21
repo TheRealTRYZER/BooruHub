@@ -7,7 +7,7 @@ Provides:
 - Standard post normalisation contract via abstract normalize_post()
 """
 from abc import ABC, abstractmethod
-from typing import Dict, List, Optional, Tuple, Tuple
+from typing import Dict, List, Optional, Tuple
 
 import httpx
 import logging
