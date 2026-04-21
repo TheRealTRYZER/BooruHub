@@ -24,9 +24,12 @@
         <div class="empty-state-title">{{ lang.t('empty_list') || 'Empty' }}</div>
       </div>
 
-      <button v-if="hasMore" class="btn btn-secondary" @click="loadMore" style="display:block; margin:24px auto;">
-        {{ loading ? '...' : lang.t('search_btn') }}
-      </button>
+      <!-- Infinite scroll sentinel -->
+      <div ref="sentinelRef" v-show="hasMore" style="height:1px;"></div>
+
+      <div v-if="!hasMore && posts.length > 0" class="no-more-posts">
+        {{ lang.t('no_more_posts') }}
+      </div>
     </template>
   </div>
 </template>
@@ -45,7 +48,7 @@
 </style>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, onMounted, onBeforeUnmount, nextTick } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
@@ -61,6 +64,8 @@ const page = ref(1)
 const loading = ref(false)
 const hasMore = ref(false)
 const showDislikes = ref(false)
+const sentinelRef = ref<HTMLElement | null>(null)
+let observer: IntersectionObserver | null = null
 
 function switchTab(isDislike: boolean) {
   if (showDislikes.value === isDislike) return
@@ -106,9 +111,29 @@ async function loadMore() {
   }
 }
 
+function setupObserver() {
+  if (observer) observer.disconnect()
+  observer = new IntersectionObserver(
+    (entries) => {
+      if (entries[0]?.isIntersecting && hasMore.value && !loading.value) {
+        loadMore()
+      }
+    },
+    { rootMargin: '400px' }
+  )
+  nextTick(() => {
+    if (sentinelRef.value) observer!.observe(sentinelRef.value)
+  })
+}
+
 onMounted(() => {
   if (auth.isAuthenticated) {
     loadMore()
+    setupObserver()
   }
+})
+
+onBeforeUnmount(() => {
+  if (observer) observer.disconnect()
 })
 </script>
