@@ -309,3 +309,14 @@ export async function apiLogEvents(events: import('./types').UserEventPayload[])
 export async function apiDeleteHistory(): Promise<{ deleted: number }> {
   return _fetch('/events/history', { method: 'DELETE' })
 }
+
+export async function apiGetEventCount(): Promise<{ total: number }> {
+  return _fetch('/events/count')
+}
+
+export async function apiUpdateConsent(consent: boolean): Promise<{ data_consent: boolean }> {
+  return _fetch('/user/consent', {
+    method: 'PUT',
+    body: JSON.stringify({ data_consent: consent }),
+  })
+}

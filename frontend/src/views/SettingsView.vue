@@ -80,7 +80,13 @@
             </div>
             
             <button class="btn btn-primary btn-sm" @click="saveKeys" :disabled="savingKeys">{{ lang.t('save_settings') }}</button>
-            <div style="font-size:10px;color:var(--text-muted);margin-top:4px;" v-html="keysStatusStr"></div>
+             <span v-if="keysConfiguredSites.length === 0" style="font-size:10px;color:var(--text-muted);margin-top:4px;">{{ lang.t('keys_not_set') }}</span>
+             <span v-else style="font-size:10px;color:var(--text-muted);margin-top:4px;">
+               {{ lang.t('keys_configured') }}
+               <template v-for="(site, i) in keysConfiguredSites" :key="site">
+                 <span :style="{ color: `var(--${site})` }">{{ site }}</span><template v-if="i < keysConfiguredSites.length - 1">, </template>
+               </template>
+             </span>
           </div>
         </div>
 
@@ -176,7 +182,7 @@ import {
   apiUpdateDefaultTags, apiGetApiKeysStatus, apiUpdateApiKeys,
   apiGetMappings, apiCreateMapping, apiUpdateMapping, apiDeleteMapping,
   apiGetBlacklist, apiAddBlacklistRule, apiUpdateBlacklistRule, apiDeleteBlacklistRule,
-  apiDeleteHistory as apiDeleteHistoryFn
+  apiDeleteHistory as apiDeleteHistoryFn, apiGetEventCount, apiUpdateConsent
 } from '../api'
 import type { TagMapping, BlacklistRule, ApiKeysStatus, ApiKeysUpdate } from '../types'
 
@@ -194,7 +200,7 @@ const keys = ref({
   rule34_user_id: '', rule34_api_key: '',
   search_limit: 40, search_interval: 0.0
 })
-const keysStatusStr = ref('...')
+const keysConfiguredSites = ref<string[]>([])
 const savingKeys = ref(false)
 
 const mappings = ref<TagMapping[]>([])
@@ -223,12 +229,12 @@ async function saveDefaultTags() {
 async function loadKeysStatus() {
   try {
     const status: ApiKeysStatus = await apiGetApiKeysStatus()
-    const s = []
-    if (status.danbooru) s.push('<span style="color:var(--danbooru)">Danbooru</span>')
-    if (status.e621) s.push('<span style="color:var(--e621)">e621</span>')
-    if (status.rule34) s.push('<span style="color:var(--rule34)">Rule34</span>')
+    const s: string[] = []
+    if (status.danbooru) s.push('danbooru')
+    if (status.e621) s.push('e621')
+    if (status.rule34) s.push('rule34')
     
-    keysStatusStr.value = s.length === 0 ? lang.t('keys_not_set') : lang.t('keys_configured') + s.join(', ')
+    keysConfiguredSites.value = s
     
     if (status.search_limit) keys.value.search_limit = status.search_limit
     if (status.search_interval !== undefined && status.search_interval !== null) keys.value.search_interval = status.search_interval
@@ -242,7 +248,7 @@ async function loadKeysStatus() {
     statusFlags.value.rule34 = status.rule34
     dataConsent.value = !!(status as any).data_consent
   } catch (e) {
-    keysStatusStr.value = lang.t('api_error')
+    keysConfiguredSites.value = []
   }
 }
 
@@ -371,24 +377,14 @@ onMounted(async () => {
 
 async function loadEventCount() {
   try {
-    const resp = await fetch('/api/events/count', { headers: { Authorization: `Bearer ${localStorage.getItem('booruhub_token')}` } })
-    if (resp.ok) {
-      const data = await resp.json()
-      eventCount.value = data.total || 0
-    }
+    const data = await apiGetEventCount()
+    eventCount.value = data.total || 0
   } catch {}
 }
 
 async function toggleConsent() {
   try {
-    await fetch('/api/user/consent', {
-      method: 'PUT',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${localStorage.getItem('booruhub_token')}`
-      },
-      body: JSON.stringify({ data_consent: dataConsent.value })
-    })
+    await apiUpdateConsent(dataConsent.value)
     toast.show(lang.t('settings_saved'), 'success')
   } catch {
     toast.show('Error', 'error')

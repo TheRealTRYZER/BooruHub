@@ -9,6 +9,9 @@ import { apiLogEvents } from '../api'
 import { useAuthStore } from '../stores/auth'
 import type { UserEventPayload, Post } from '../types'
 
+// WeakMap for associating Post data with DOM elements (replaces monkey-patching)
+const _postMap = new WeakMap<HTMLElement, Post>()
+
 const BATCH_SIZE = 10
 const FLUSH_INTERVAL_MS = 15_000 // 15 seconds
 
@@ -118,7 +121,7 @@ export function useEventLogger() {
         for (const entry of entries) {
           const el = entry.target as HTMLElement
           if (entry.isIntersecting) {
-            const post = (el as any).__bhPost
+            const post = _postMap.get(el)
             if (post) {
               timers.set(el, { start: Date.now(), post })
             }
@@ -139,7 +142,7 @@ export function useEventLogger() {
 
     return {
       observe(el: HTMLElement, post: Post) {
-        ;(el as any).__bhPost = post
+        _postMap.set(el, post)
         observer.observe(el)
       },
       disconnect() {
