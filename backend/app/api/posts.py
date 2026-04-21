@@ -19,6 +19,7 @@ from app.services.tag_mapping import (
     translate_tags,
     apply_reverse_mapping,
 )
+from app.core.rate_limit import rate_limit
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/posts", tags=["posts"])
@@ -295,6 +296,7 @@ async def get_feed(
     skip_interval: bool = Query(False),
     user: Optional[User] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("search", max_requests=30, window_seconds=60)),
 ):
     site_list = [s.strip().lower() for s in sites.split(",") if s.strip()]
 
@@ -389,6 +391,7 @@ async def search(
     skip_interval: bool = Query(False),
     user: Optional[User] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("search", max_requests=30, window_seconds=60)),
 ):
     tag_list = tags.split() if tags else []
     

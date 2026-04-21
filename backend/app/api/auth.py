@@ -9,6 +9,7 @@ from app.db.models import User, UserTagMapping
 from app.core.security import hash_password, verify_password, create_access_token
 from app.api.deps import require_user
 from app.core.defaults import DEFAULT_USER_TAGS, STARTER_MAPPINGS
+from app.core.rate_limit import rate_limit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -39,7 +40,11 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
+async def register(
+    req: RegisterRequest,
+    db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("register", max_requests=3, window_seconds=60)),
+):
     # Existing checks
     existing_q = await db.execute(
         select(User).where((User.username == req.username) | (User.email == req.email))
@@ -89,7 +94,11 @@ async def register(req: RegisterRequest, db: AsyncSession = Depends(get_db)):
 
 
 @router.post("/login", response_model=TokenResponse)
-async def login(req: LoginRequest, db: AsyncSession = Depends(get_db)):
+async def login(
+    req: LoginRequest,
+    db: AsyncSession = Depends(get_db),
+    _rl=Depends(rate_limit("login", max_requests=10, window_seconds=60)),
+):
     result = await db.execute(
         select(User).where((User.username == req.login) | (User.email == req.login))
     )
