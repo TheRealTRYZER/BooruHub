@@ -28,27 +28,44 @@ class Danbooru(BaseBooru):
 
     def prepare_tags(self, tags: str) -> Tuple[str, List[str]]:
         """Split tags into API-compatible (max 2) and local-filtering tags.
-        Meta-tags (order, rating, etc.) MUST go to API to avoid broken local filtering.
+        Prioritizes 'order:' and content tags for API, leaves 'rating:' for local filtering if over limit.
         """
         clean = tags.strip()
-        if not clean:
-            return "", []
-            
+        if not clean: return "", []
+        
         all_tags = clean.split()
         
-        # 1. Enforce score floor for ranking tags if possible
-        ranking_tags = ("order:rank", "order:score", "order:hot")
-        if any(t in all_tags for t in ranking_tags):
-            if not any(t.startswith("score:") for t in all_tags) and len(all_tags) < 2:
-                all_tags.insert(0, "score:>=10")
+        # 1. Mandatory API tags (priorities)
+        orders = [t for t in all_tags if t.startswith("order:")]
+        content = [t for t in all_tags if not t.startswith(("order:", "rating:"))]
+        ratings = [t for t in all_tags if t.startswith("rating:")]
         
-        # 2. Take first 2 tags for the API (Danbooru limit)
-        api_tags_list = all_tags[:2]
+        # Limit optimization: pick 2 best tags for the API
+        api_list = []
         
-        # 3. Extra tags (skip 'order:' algorithms as they cannot be locally filtered efficiently)
-        extra_tags = [t for t in all_tags[2:] if "order:" not in t]
+        # Priority 1: order: (max 1, otherwise it conflicts/breaks)
+        if orders:
+            api_list.append(orders[0])
+            
+        # Priority 2: most important content tag (the first one)
+        if content and len(api_list) < 2:
+            api_list.append(content[0])
+            
+        # Priority 3: rating: (if we still have room)
+        if ratings and len(api_list) < 2:
+            api_list.append(ratings[0])
+            
+        # Priority 4: second content tag if room
+        if len(content) > 1 and len(api_list) < 2:
+            api_list.append(content[1])
+            
+        api_tags = " ".join(api_list)
         
-        return " ".join(api_tags_list), extra_tags
+        # Everything else goes to local filtering
+        # Note: order tags NOT in api_list are useless globally but we keep them for debug? No.
+        extra_tags = [t for t in all_tags if t not in api_list and not t.startswith("order:")]
+        
+        return api_tags, extra_tags
 
     async def fetch_posts(
         self,

@@ -107,9 +107,15 @@ def translate_tags(
             # Map comma-separated values
             parts = [p.strip() for p in site_val.split(",") if p.strip()]
             if len(parts) > 1 and not prefix:
-                # Automagically treat multiple alternatives as OR (~) if no prefix specified
-                for part in parts:
-                    site_tags.append(f"~{part}")
+                # Automagically treat multiple alternatives as OR
+                if site == "danbooru":
+                    # Danbooru strict limit check: OR consumes multiple slots.
+                    # Best effort: use only the first (main) tag to avoid breaking 2-tag limit.
+                    site_tags.append(parts[0])
+                else:
+                    # e621/Rule34: use ~prefix
+                    for part in parts:
+                        site_tags.append(f"~{part}")
             else:
                 # Standard application of prefix (empty, ~, or -)
                 for part in parts:
