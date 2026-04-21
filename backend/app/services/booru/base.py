@@ -123,9 +123,14 @@ class BaseBooru(ABC):
         """Convert site-specific post JSON to unified BooruHub format."""
         ...
 
-    def prepare_tags(self, tags: str) -> str:
-        """Apply site-specific tag transformations before querying."""
-        return tags
+    def prepare_tags(self, tags: str) -> Tuple[str, List[str]]:
+        """Apply site-specific tag transformations before querying.
+
+        Returns:
+            (api_tags, extra_tags): api_tags is sent to the remote API,
+            extra_tags are filtered locally after the response.
+        """
+        return tags, []
 
     def calculate_page(self, page: int, limit: int) -> int:
         """Convert 1-based page number to site-specific index/offset."""
@@ -157,13 +162,17 @@ class BaseBooru(ABC):
     ) -> Tuple[List[dict], int]:
         """Fetch posts from the remote API, normalise, and return."""
         actual_page = self.calculate_page(page, limit)
-        actual_tags = self.prepare_tags(tags)
+        api_tags, extra_tags = self.prepare_tags(tags)
         auth_params = self.get_auth_params(user)
+
+        # Fetch more if local filtering is needed
+        fetch_limit = limit * 3 if extra_tags else limit
+        fetch_limit = min(fetch_limit, self.max_per_page)
 
         params = {
             **self.default_params,
-            "tags": actual_tags,
-            "limit": min(limit, self.max_per_page),
+            "tags": api_tags,
+            "limit": fetch_limit,
             self.page_param: actual_page,
             **auth_params,
         }
@@ -192,11 +201,29 @@ class BaseBooru(ABC):
         else:
             raw_posts = data if isinstance(data, list) else []
 
-        # Normalise
+        # Normalise and apply local tag filtering
         normalised = []
+        if extra_tags:
+            required = {t.lower() for t in extra_tags if not t.startswith('~') and not t.startswith('-')}
+            excluded = {t.lower()[1:] for t in extra_tags if t.startswith('-')}
+            optional = {t.lower()[1:] for t in extra_tags if t.startswith('~')}
+        else:
+            required = excluded = optional = set()
+
         for raw in raw_posts:
             item = self.normalize_post(raw)
-            if item is not None:
-                normalised.append(item)
+            if item is None:
+                continue
+
+            if extra_tags:
+                post_tags = {t.lower() for t in item.get("tags", [])}
+                if required and not required.issubset(post_tags):
+                    continue
+                if excluded and any(et in post_tags for et in excluded):
+                    continue
+                if optional and not any(ot in post_tags for ot in optional):
+                    continue
+
+            normalised.append(item)
 
         return normalised[:limit], len(raw_posts)
