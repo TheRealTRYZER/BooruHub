@@ -6,6 +6,7 @@
                :placeholder="lang.t('search_placeholder')"
                v-model="feed.tags"
                @input="onSearchInput"
+               @focus="onSearchFocus"
                @blur="onSearchBlur"
                @keydown.enter="handleReload"
                @keydown.tab.prevent="onTabPress"
@@ -27,6 +28,15 @@
              @mousedown.prevent="selectSuggestion(tagObj.tag)">
           <span v-if="tagObj.is_mapped" style="margin-right: 6px; font-size: 10px;">⭐</span>
           {{ tagObj.tag.replace(/_/g, ' ') }}
+        </div>
+      </div>
+      <!-- Search History Dropdown -->
+      <div class="search-suggestions" :class="{ visible: showHistory && searchHistory.length > 0 && suggestions.length === 0 }">
+        <div v-for="q in searchHistory" :key="q" class="search-suggestion-item history-item"
+             @mousedown.prevent="selectHistory(q)">
+          <span style="margin-right:8px;opacity:0.5;">🕐</span>
+          <span style="flex:1;">{{ q }}</span>
+          <span class="history-remove" @mousedown.stop.prevent="removeHistory(q)">×</span>
         </div>
       </div>
     </div>
@@ -92,6 +102,7 @@ import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
 import { apiSuggestTags, apiAddBookmark } from '../api'
 import { useFeedLoader } from '../composables/useFeedLoader'
+import { useSearchHistory } from '../composables/useSearchHistory'
 import PostGrid from '../components/PostGrid.vue'
 import type { SiteName } from '../types'
 
@@ -104,12 +115,18 @@ const lang = useLangStore()
 const availableSites: SiteName[] = ['danbooru', 'e621', 'rule34']
 const sentinel = ref<HTMLElement | null>(null)
 const suggestions = ref<any[]>([])
+const showHistory = ref(false)
 let observer: IntersectionObserver | null = null
 let suggestTimeout: any = null
 
 const { loading, skeletonCount, correctedTags, loadMore, reload } = useFeedLoader(feed, toast, lang, availableSites)
+const { history: searchHistory, addQuery: addSearchQuery, removeQuery: removeSearchQuery } = useSearchHistory()
 
-const handleReload = () => reload(sentinel.value)
+const handleReload = () => {
+  if (feed.tags.trim()) addSearchQuery(feed.tags.trim())
+  showHistory.value = false
+  reload(sentinel.value)
+}
 
 function applyCorrection(newTags: string) {
   feed.tags = newTags
@@ -152,8 +169,25 @@ function onSearchInput() {
   }
 }
 
+function onSearchFocus() {
+  if (!feed.tags.trim()) showHistory.value = true
+}
+
 function onSearchBlur() {
-  setTimeout(() => { suggestions.value = [] }, 200)
+  setTimeout(() => {
+    suggestions.value = []
+    showHistory.value = false
+  }, 200)
+}
+
+function selectHistory(query: string) {
+  feed.tags = query
+  showHistory.value = false
+  handleReload()
+}
+
+function removeHistory(query: string) {
+  removeSearchQuery(query)
 }
 
 function selectSuggestion(tag: string) {

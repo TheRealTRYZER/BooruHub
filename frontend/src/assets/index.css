@@ -176,6 +176,13 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .search-suggestion-item.mapped:hover {
   background: rgba(122, 111, 255, 0.25);
 }
+.search-suggestion-item.history-item {
+  display: flex; align-items: center;
+}
+.history-remove {
+  opacity: 0.3; font-size: 16px; padding: 0 4px; cursor: pointer; transition: opacity 0.15s;
+}
+.history-remove:hover { opacity: 1; color: var(--danger); }
 
 .site-filters { display: flex; gap: 8px; flex-wrap: wrap; margin-bottom: var(--sp-6); align-items: center; }
 .site-filter {
