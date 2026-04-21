@@ -16,83 +16,67 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
     const gen = ++loadGeneration
 
     const activeSites = (feed.sites.length > 0 ? feed.sites : availableSites) as SiteName[]
-    const limitPerSite = Math.ceil(45 / activeSites.length)
-    
+
     const siteTagSig = feed.isSplit ? JSON.stringify(feed.siteTags) : ''
     feed.lastSearchSignature = `${feed.tags}|${feed.sites.join(',')}|${feed.isSplit}|${siteTagSig}`
 
-    const basePosts = [...feed.posts];
-    const pagePayloads: Record<string, Post[]> = {};
-    const unfilteredCounts: Record<string, number> = {};
-    activeSites.forEach(s => {
-      pagePayloads[s] = [];
-      unfilteredCounts[s] = 0;
-    });
+    const basePosts = [...feed.posts]
 
     try {
-      const fetchPromises = activeSites.map(async (site, idx) => {
-        try {
-          if (idx > 0) await new Promise(r => setTimeout(r, idx * 50));
-          if (gen !== loadGeneration) return 0
-          
-          const options: Record<string, any> = {}
-          if (feed.isSplit) {
-            if (feed.siteTags[site]) options[`${site}_tags`] = feed.siteTags[site]
-          }
-          
-          const data = await apiFeed({
-            tags: feed.tags,
-            sites: site,
-            page: feed.page,
-            limit: limitPerSite,
-            ...options
-          })
-          if (gen !== loadGeneration) return 0
-          
-          // Always update with the latest suggestion from any site if results are empty
-          if (data.corrected_tags) {
-            correctedTags.value = data.corrected_tags
-          }
+      // Build a single request — let the backend handle multi-site interleaving
+      const options: Record<string, any> = {
+        tags: feed.tags,
+        sites: activeSites.join(','),
+        page: feed.page,
+        limit: 45,
+      }
 
-          const newPosts = data.posts || []
-          pagePayloads[site] = newPosts
-          unfilteredCounts[site] = data.unfiltered_count || 0
-          return newPosts.length
-        } catch (siteErr) {
-          console.error(`Error loading ${site}:`, siteErr)
-          return 0
+      // Pass per-site tag overrides for split search
+      if (feed.isSplit) {
+        for (const site of activeSites) {
+          if (feed.siteTags[site]) {
+            options[`${site}_tags`] = feed.siteTags[site]
+          }
         }
-      })
+      }
 
-      const results = await Promise.all(fetchPromises)
+      // Pass ratios if non-default
+      const ratioValues = activeSites.map(s => feed.ratios[s] ?? 1)
+      const hasCustomRatios = ratioValues.some((v: number) => v !== 1)
+      if (hasCustomRatios) {
+        options.ratios = ratioValues.join(',')
+      }
+
+      const data = await apiFeed(options)
       if (gen !== loadGeneration) return
 
-      const totalNew = results.reduce((acc, val) => acc + val, 0)
-      const allSitesExhausted = activeSites.every(s => unfilteredCounts[s] === 0)
-      
-      if (totalNew > 0) {
-        correctedTags.value = null // Hide suggestion if we found something
-        const mixed: Post[] = []
-        const maxLen = Math.max(...activeSites.map(s => pagePayloads[s].length))
-        for (let i = 0; i < maxLen; i++) {
-          for (const activeSite of activeSites) {
-            if (pagePayloads[activeSite][i]) mixed.push(pagePayloads[activeSite][i])
-          }
-        }
-        // Shuffle the mixed results to distribute sites randomly
-        mixed.sort(() => Math.random() - 0.5)
-        
-        feed.posts = [...basePosts, ...mixed]
+      const newPosts: Post[] = data.posts || []
+
+      if (data.corrected_tags) {
+        correctedTags.value = data.corrected_tags
+      }
+
+      if (newPosts.length > 0) {
+        correctedTags.value = null
+        feed.posts = [...basePosts, ...newPosts]
         skeletonCount.value = 0
       }
 
-      if (allSitesExhausted) {
-        feed.hasMore = false
+      const unfiltered = data.unfiltered_count || 0
+      if (unfiltered === 0 || newPosts.length === 0) {
+        if (unfiltered === 0) {
+          feed.hasMore = false
+        } else {
+          // Backend returned matches but all were filtered — try next page
+          feed.page++
+          if (feed.hasMore && gen === loadGeneration) {
+            setTimeout(() => { if (gen === loadGeneration) loadMore(sentinel) }, 50)
+          }
+        }
       } else {
         feed.page++
-        if (totalNew === 0 && feed.hasMore && gen === loadGeneration) {
-          setTimeout(() => { if (gen === loadGeneration) loadMore(sentinel) }, 50)
-        } else if (sentinel) {
+        // Pre-fetch if sentinel is still visible
+        if (sentinel) {
           setTimeout(() => {
             if (gen === loadGeneration && sentinel && !loading.value && feed.hasMore) {
               const rect = sentinel.getBoundingClientRect()

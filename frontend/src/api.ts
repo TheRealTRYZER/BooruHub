@@ -104,7 +104,7 @@ interface FeedOptions {
 }
 
 export async function apiFeed(options: FeedOptions = {}): Promise<FeedResponse> {
-  const { tags = '', sites = 'danbooru,e621,rule34', page = 1, limit = 40, skipInterval = false, ...rest } = options
+  const { tags = '', sites = 'danbooru,e621,rule34', page = 1, limit = 40, skipInterval = false, ratios, ...rest } = options
   const params = new URLSearchParams({
     tags,
     sites,
@@ -112,6 +112,7 @@ export async function apiFeed(options: FeedOptions = {}): Promise<FeedResponse> 
     limit: String(limit),
     skip_interval: skipInterval ? 'true' : 'false',
   })
+  if (ratios) params.set('ratios', ratios)
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) params.set(k, String(v))
   }
