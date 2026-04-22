@@ -39,11 +39,13 @@
   display: flex; gap: 12px; margin-bottom: 24px;
 }
 .tab-btn {
-  padding: 8px 16px; background: rgba(255,255,255,0.05); border-radius: 20px;
+  padding: 8px 16px; background: var(--bg-input); border-radius: 20px;
   color: var(--text-muted); font-weight: 600; font-size: 14px; transition: all 0.2s;
+  border: 1px solid rgba(128,128,128,0.1);
 }
 .tab-btn.active {
-  background: var(--bg-card); color: #fff; box-shadow: 0 4px 12px rgba(0,0,0,0.5);
+  background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+  border-color: var(--accent);
 }
 </style>
 

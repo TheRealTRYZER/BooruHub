@@ -25,7 +25,7 @@
               <div style="color:var(--text-muted);font-size:var(--font-sm);">{{ auth.user!.email }}</div>
             </div>
           </div>
-          <div style="margin-top:16px; border-top:1px solid rgba(255,255,255,0.05); padding-top:16px;">
+          <div style="margin-top:16px; border-top:1px solid rgba(128,128,128,0.1); padding-top:16px;">
             <label class="input-label" style="display:block;margin-bottom:8px;">{{ lang.t('start_tags') }}</label>
             <div style="display:flex;gap:8px;">
               <input type="text" class="input" v-model="defaultTags" :placeholder="lang.t('search_placeholder')" style="flex:1;">
@@ -65,7 +65,7 @@
               </div>
             </div>
 
-            <div style="margin-top:8px; border-top:1px solid rgba(255,255,255,0.05); padding-top:12px;">
+            <div style="margin-top:8px; border-top:1px solid rgba(128,128,128,0.1); padding-top:12px;">
               <div style="font-weight:600; font-size:12px; margin-bottom:8px;">⚙️ {{ lang.t('search_params') }}</div>
               <div style="display:flex; gap:12px;">
                 <div style="flex:1;">
@@ -95,7 +95,7 @@
             <span>🛡️ {{ lang.t('privacy_title') }}</span>
             <span class="disclosure-arrow">▼</span>
           </summary>
-          <div style="margin-top:16px; border-top:1px solid rgba(255,255,255,0.05); padding-top:16px;">
+          <div style="margin-top:16px; border-top:1px solid rgba(128,128,128,0.1); padding-top:16px;">
             <p style="font-size:var(--font-sm);color:var(--text-muted);margin-bottom:16px;">
               {{ lang.t('privacy_desc') }}
               <a href="#/privacy" style="color:var(--primary);">{{ lang.t('privacy_policy') }}</a>
@@ -507,9 +507,9 @@ async function deleteHistory() {
   justify-content: space-between;
   align-items: center;
   padding: 12px;
-  background: rgba(255, 255, 255, 0.03);
+  background: var(--bg-input);
   border-radius: 12px;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(128,128,128,0.1);
 }
 .switch {
   position: relative;
