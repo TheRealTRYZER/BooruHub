@@ -33,6 +33,32 @@
   --ease-out: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+[data-theme="light"] {
+  --bg-primary: #f4f4f5;
+  --bg-secondary: #ffffff;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f0f0f2;
+  --bg-input: #e4e4e7;
+  --bg-nav: #ffffff;
+  --text-primary: #18181b;
+  --text-secondary: #52525b;
+  --text-muted: #a1a1aa;
+
+  --accent: #7c3aed;
+  --accent-hover: #6d28d9;
+  --danger: #dc2626;
+  --success: #16a34a;
+}
+
+/* Smooth theme transition */
+*, *::before, *::after {
+  transition: background-color 0.2s ease, color 0.15s ease, border-color 0.2s ease;
+}
+/* But don't animate layout-affecting properties */
+*, *::before, *::after {
+  transition-property: background-color, color, border-color, box-shadow;
+}
+
 * { box-sizing: border-box; }
 
 body {
@@ -56,10 +82,10 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   position: fixed;
   top: 0; left: 0; right: 0;
   height: 60px;
-  background: rgba(24, 24, 27, 0.95);
+  background: var(--bg-nav);
   backdrop-filter: blur(10px);
   z-index: 1000;
-  border-bottom: 1px solid rgba(255,255,255,0.05);
+  border-bottom: 1px solid rgba(128,128,128,0.12);
 }
 .nav-inner {
   max-width: 1400px;
@@ -76,7 +102,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   gap: 8px;
   font-weight: 700;
   font-size: 1.25rem;
-  color: #fff;
+  color: var(--text-primary);
   cursor: pointer;
 }
 .nav-logo-icon { color: var(--accent); }

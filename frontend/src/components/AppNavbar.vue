@@ -37,6 +37,11 @@
       </div>
 
       <div class="nav-user">
+        <button class="btn btn-ghost btn-sm" @click="themeStore.toggle()"
+                :title="themeStore.theme" id="nav-theme"
+                style="font-size: 16px; padding: 4px 8px;">
+          {{ themeIcon }}
+        </button>
         <button class="btn btn-ghost btn-sm" @click="toggleLang" style="font-weight: 700; color: var(--accent);">
           {{ lang.locale.toUpperCase() }}
         </button>
@@ -58,12 +63,21 @@ import { useRouter, useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
+import { useThemeStore } from '../stores/theme'
+import { computed } from 'vue'
 
 const router = useRouter()
 const route = useRoute()
 const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
+const themeStore = useThemeStore()
+
+const themeIcon = computed(() => {
+  if (themeStore.theme === 'dark') return '🌙'
+  if (themeStore.theme === 'light') return '☀️'
+  return '🖥'
+})
 
 function toggleLang() {
   lang.setLocale(lang.locale === 'en' ? 'ru' : 'en')

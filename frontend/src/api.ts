@@ -159,7 +159,7 @@ export async function apiFeed(options: FeedOptions = {}): Promise<FeedResponse> 
     limit: String(limit),
     skip_interval: skipInterval ? 'true' : 'false',
   })
-  if (ratios) params.set('ratios', ratios)
+  if (ratios) params.set('ratios', String(ratios))
   for (const [k, v] of Object.entries(rest)) {
     if (v !== undefined) params.set(k, String(v))
   }
