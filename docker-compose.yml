@@ -5,8 +5,8 @@ services:
     env_file: .env
     volumes:
       - pgdata:/var/lib/postgresql/data
-    ports:
-      - "5432:5432"
+    expose:
+      - "5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U $${POSTGRES_USER} -d $${POSTGRES_DB}"]
       interval: 5s
@@ -24,8 +24,8 @@ services:
       - ./backend/app:/app/app
       - ./backend/alembic:/app/alembic
       - ./tag_aliases.csv:/app/tag_aliases.csv:ro
-    ports:
-      - "8000:8000"
+    expose:
+      - "8000"
 
   nginx:
     build: ./nginx
