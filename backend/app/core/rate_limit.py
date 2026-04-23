@@ -11,6 +11,8 @@ from typing import Optional
 
 from fastapi import Request, HTTPException, status
 
+from app.core.config import get_settings
+
 
 class _SlidingWindow:
     """Per-key sliding window counter with automatic cleanup."""
@@ -51,13 +53,14 @@ _window = _SlidingWindow()
 
 
 def _get_client_ip(request: Request) -> str:
-    """Extract client IP, respecting X-Forwarded-For behind a reverse proxy."""
+    """Extract client IP, trusting proxy headers only from configured proxies."""
+    remote_addr = request.client.host if request.client else "unknown"
+    trusted_proxies = set(get_settings().trusted_proxy_ip_list)
+
     forwarded = request.headers.get("x-forwarded-for")
-    if forwarded:
+    if forwarded and remote_addr in trusted_proxies:
         return forwarded.split(",")[0].strip()
-    if request.client:
-        return request.client.host
-    return "unknown"
+    return remote_addr
 
 
 def rate_limit(

@@ -1,7 +1,10 @@
 """Tests for the rate limiter."""
 import pytest
-import asyncio
+from starlette.requests import Request
+
 from app.core.rate_limit import _SlidingWindow
+from app.core import config as config_module
+from app.core.rate_limit import _get_client_ip
 
 
 class TestSlidingWindow:
@@ -34,3 +37,35 @@ class TestSlidingWindow:
             assert await window.check("user1", 2, 0)  # 0-second window = immediate expiry
         # Should be allowed since old entries expired
         assert await window.check("user1", 2, 0)
+
+
+def _make_request(client_ip: str, forwarded_for: str | None = None) -> Request:
+    headers = []
+    if forwarded_for is not None:
+        headers.append((b"x-forwarded-for", forwarded_for.encode()))
+    scope = {
+        "type": "http",
+        "method": "GET",
+        "path": "/",
+        "headers": headers,
+        "client": (client_ip, 12345),
+        "server": ("testserver", 80),
+        "scheme": "http",
+    }
+    return Request(scope)
+
+
+class TestClientIpResolution:
+    def test_ignores_spoofed_forwarded_header_from_untrusted_client(self, monkeypatch):
+        monkeypatch.setenv("TRUSTED_PROXY_IPS", "127.0.0.1")
+        config_module.get_settings.cache_clear()
+        request = _make_request("203.0.113.10", "198.51.100.77")
+        assert _get_client_ip(request) == "203.0.113.10"
+        config_module.get_settings.cache_clear()
+
+    def test_uses_forwarded_header_from_trusted_proxy(self, monkeypatch):
+        monkeypatch.setenv("TRUSTED_PROXY_IPS", "127.0.0.1,::1")
+        config_module.get_settings.cache_clear()
+        request = _make_request("127.0.0.1", "198.51.100.77, 127.0.0.1")
+        assert _get_client_ip(request) == "198.51.100.77"
+        config_module.get_settings.cache_clear()

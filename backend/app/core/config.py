@@ -22,6 +22,7 @@ class Settings(BaseSettings):
 
     # CORS
     CORS_ORIGINS: str = "http://localhost:5173,http://127.0.0.1:5173,http://localhost:8080,http://127.0.0.1:8080"
+    TRUSTED_PROXY_IPS: str = "127.0.0.1,::1"
 
     # Booru API keys (global fallback, per-user keys take priority)
     DANBOORU_LOGIN: str = ""
@@ -46,6 +47,14 @@ class Settings(BaseSettings):
             key.strip()
             for key in self.ENCRYPTION_KEY_FALLBACKS.split(",")
             if key.strip()
+        ]
+
+    @computed_field  # type: ignore[prop-decorator]
+    def trusted_proxy_ip_list(self) -> list[str]:
+        return [
+            ip.strip()
+            for ip in self.TRUSTED_PROXY_IPS.split(",")
+            if ip.strip()
         ]
 
     @property
