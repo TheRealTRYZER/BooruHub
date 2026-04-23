@@ -23,9 +23,34 @@ logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
 
+def _validate_security_settings() -> None:
+    issues: list[str] = []
+
+    if not settings.DATABASE_URL:
+        issues.append("DATABASE_URL must be set")
+
+    if not settings.JWT_SECRET or len(settings.JWT_SECRET) < 32:
+        issues.append("JWT_SECRET must be set and at least 32 characters long")
+
+    if settings.JWT_SECRET == "change-me-to-a-random-secret-string-at-least-32-chars":
+        issues.append("JWT_SECRET must not use the published placeholder value")
+
+    if not settings.ENCRYPTION_KEY:
+        issues.append("ENCRYPTION_KEY must be set explicitly to decouple data encryption from JWT signing")
+
+    if settings.is_development:
+        if issues:
+            logger.warning("Security configuration warnings in development: %s", "; ".join(issues))
+        return
+
+    if issues:
+        raise RuntimeError("Invalid security configuration: " + "; ".join(issues))
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Startup / shutdown events."""
+    _validate_security_settings()
     # 1. Basic schema creation & extensions
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
@@ -44,7 +69,7 @@ app = FastAPI(
     description="Imageboard aggregator API",
     version="1.1.0",
     lifespan=lifespan,
-    docs_url="/api/docs" if settings.CORS_ORIGINS == "*" else None,
+    docs_url="/api/docs" if settings.is_development else None,
     redoc_url=None,
 )
 

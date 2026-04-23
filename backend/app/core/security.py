@@ -24,54 +24,70 @@ def _derive_fernet_key(secret: str) -> bytes:
 
 def _derive_fernet_key_secure(secret: str) -> bytes:
     """Secure derivation using PBKDF2."""
-    # We use a static salt because this is derived from a global secret (JWT_SECRET)
-    # for system-wide encryption of user API keys.
-    salt = b"booruhub_crypto_salt_2024" 
-    key = hashlib.pbkdf2_hmac('sha256', secret.encode(), salt, 100000)
+    salt = b"booruhub_crypto_salt_2024"
+    key = hashlib.pbkdf2_hmac("sha256", secret.encode(), salt, 100000)
     return base64.urlsafe_b64encode(key)
 
 
-def _get_fernets():
+def _is_fernet_key(value: str) -> bool:
+    try:
+        return len(base64.urlsafe_b64decode(value.encode())) == 32
+    except Exception:
+        return False
+
+
+def _build_fernet_variants(secret: str) -> list[Fernet]:
+    variants = [Fernet(_derive_fernet_key_secure(secret)), Fernet(_derive_fernet_key(secret))]
+    if _is_fernet_key(secret):
+        variants.insert(0, Fernet(secret.encode()))
+    return variants
+
+
+def _get_encryption_fernets() -> list[Fernet]:
     settings = get_settings()
-    key_source = settings.ENCRYPTION_KEY or settings.JWT_SECRET
-    secure_f = Fernet(_derive_fernet_key_secure(key_source))
-    legacy_f = Fernet(_derive_fernet_key(key_source))
-    return secure_f, legacy_f
+    key_sources: list[str] = []
 
+    if settings.ENCRYPTION_KEY:
+        key_sources.append(settings.ENCRYPTION_KEY)
+    if settings.JWT_SECRET:
+        key_sources.append(settings.JWT_SECRET)
+    key_sources.extend(settings.encryption_key_fallback_list)
 
-# --------------- API-key encryption ---------------
+    seen: set[str] = set()
+    fernets: list[Fernet] = []
+    for source in key_sources:
+        if source in seen:
+            continue
+        seen.add(source)
+        fernets.extend(_build_fernet_variants(source))
+    return fernets
+
 
 def encrypt_key(plain_text: str) -> str:
-    """Encrypt an API key for storage in the database using the secure key."""
+    """Encrypt an API key for storage in the database using the primary key."""
     if not plain_text:
         return ""
-    secure_f, _ = _get_fernets()
-    return secure_f.encrypt(plain_text.encode()).decode()
+    fernets = _get_encryption_fernets()
+    if not fernets:
+        raise RuntimeError("Encryption is not configured")
+    return fernets[0].encrypt(plain_text.encode()).decode()
 
 
 def decrypt_key(encrypted_text: str) -> str:
-    """Decrypt an API key, trying the secure key first, then falling back to legacy."""
+    """Decrypt an API key, trying active and fallback encryption keys."""
     if not encrypted_text:
         return ""
-    
-    secure_f, legacy_f = _get_fernets()
+
     encoded_text = encrypted_text.encode()
+    for fernet in _get_encryption_fernets():
+        try:
+            return fernet.decrypt(encoded_text).decode()
+        except InvalidToken:
+            continue
 
-    # 1. Try secure key
-    try:
-        return secure_f.decrypt(encoded_text).decode()
-    except InvalidToken:
-        pass
-    
-    # 2. Try legacy fallback
-    try:
-        return legacy_f.decrypt(encoded_text).decode()
-    except InvalidToken:
-        logger.warning("Failed to decrypt API key — token invalid or key rotated")
-        return ""
+    logger.warning("Failed to decrypt API key: token invalid or no configured key matched")
+    return ""
 
-
-# --------------- Passwords ---------------
 
 def hash_password(password: str) -> str:
     return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
@@ -81,9 +97,8 @@ def verify_password(password: str, hashed: str) -> bool:
     return bcrypt.checkpw(password.encode(), hashed.encode())
 
 
-# --------------- JWT ---------------
-
 _REFRESH_EXPIRE_DAYS = 30
+
 
 def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -> str:
     settings = get_settings()
@@ -102,7 +117,6 @@ def decode_access_token(token: str) -> Optional[dict]:
         payload = jwt.decode(
             token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
         )
-        # Reject refresh tokens used as access tokens
         if payload.get("type") == "refresh":
             return None
         return payload
