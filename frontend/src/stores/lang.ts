@@ -109,6 +109,7 @@ const translations: Record<Locale, TranslationDict> = {
     did_you_mean: "Did you mean",
     // Privacy & Events
     consent_label: "I agree to the collection of my activity data to improve recommendations.",
+    consent_subtext: "Allow tracking likes and views to improve recommendations",
     privacy_policy: "Privacy Policy",
     privacy_title: "Privacy & Data",
     privacy_subtitle: "How we handle your data",
@@ -240,6 +241,7 @@ const translations: Record<Locale, TranslationDict> = {
     did_you_mean: "Возможно, вы имели в виду",
     // Privacy & Events
     consent_label: "Я согласен на сбор данных о моей активности для улучшения рекомендаций.",
+    consent_subtext: "Разрешить отслеживание лайков и просмотров для улучшения рекомендаций",
     privacy_policy: "Политика конфиденциальности",
     privacy_title: "Конфиденциальность",
     privacy_subtitle: "Как мы обрабатываем ваши данные",

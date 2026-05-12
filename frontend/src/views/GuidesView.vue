@@ -261,8 +261,10 @@ e621:     miku</pre>
 import { ref } from 'vue'
 import { useLangStore } from '../stores/lang'
 
-const lang = useLangStore()
-const tabs = [
+import type { TranslationKey } from '../types'
+ 
+ const lang = useLangStore()
+const tabs: { id: string, labelKey: TranslationKey }[] = [
   { id: 'tags', labelKey: 'tab_tags' },
   { id: 'api', labelKey: 'tab_api' },
   { id: 'blacklist', labelKey: 'tab_blacklist' },

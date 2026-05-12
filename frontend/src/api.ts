@@ -77,8 +77,8 @@ async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
     cache.clear()
   }
 
-  // On 401, try refreshing the token once
-  if (resp.status === 401) {
+  // On 401, try refreshing the token once, EXCEPT for login/register which should return their own error
+  if (resp.status === 401 && !url.includes('/auth/login') && !url.includes('/auth/register')) {
     if (!_refreshPromise) {
       _refreshPromise = _tryRefreshToken().then(ok => {
         _refreshPromise = null

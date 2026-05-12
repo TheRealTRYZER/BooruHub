@@ -182,7 +182,7 @@ export type TranslationKey =
   | 'tab_tags' | 'tab_api' | 'tab_blacklist' | 'tab_mapping'
   | 'error' | 'loading' | 'back' | 'delete' | 'confirm_delete' | 'save'
   | 'did_you_mean'
-  | 'consent_label' | 'privacy_policy' | 'privacy_title' | 'privacy_subtitle' | 'privacy_desc'
+  | 'consent_label' | 'consent_subtext' | 'privacy_policy' | 'privacy_title' | 'privacy_subtitle' | 'privacy_desc'
   | 'events_collected' | 'delete_history' | 'confirm_delete_history' | 'history_deleted'
   | 'privacy_what_title' | 'privacy_what_text'
   | 'privacy_impression_desc' | 'privacy_view_desc' | 'privacy_like_desc'

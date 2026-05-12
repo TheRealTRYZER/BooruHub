@@ -104,7 +104,7 @@
             <div class="privacy-control">
               <div class="control-label">
                 <div style="font-weight:600; font-size:14px;">{{ lang.t('consent_label') }}</div>
-                <div style="font-size:11px; color:var(--text-muted);">{{ lang.t('consent_subtext', 'Allow tracking likes and views to improve recommendations') }}</div>
+                <div style="font-size:11px; color:var(--text-muted);">{{ lang.t('consent_subtext') }}</div>
               </div>
               <label class="switch">
                 <input type="checkbox" v-model="dataConsent" @change="toggleConsent">
