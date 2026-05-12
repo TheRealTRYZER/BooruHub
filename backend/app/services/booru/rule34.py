@@ -61,12 +61,12 @@ class Rule34(BaseBooru):
     ) -> Tuple[List[dict], int]:
         """Override fetch_posts to handle Rule34's 'Missing authentication' quirk
         where a 200 response contains a plain string instead of JSON."""
-        actual_tags = self.prepare_tags(tags)
+        api_tags, extra_tags = self.prepare_tags(tags)
         auth_params = self.get_auth_params(user)
 
         params = {
             **self.default_params,
-            "tags": actual_tags,
+            "tags": api_tags,
             "limit": min(limit, self.max_per_page),
             "pid": self.calculate_page(page, limit),
             **auth_params,
