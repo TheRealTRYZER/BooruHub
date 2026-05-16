@@ -27,9 +27,17 @@
           </div>
           <div style="margin-top:16px; border-top:1px solid rgba(128,128,128,0.1); padding-top:16px;">
             <label class="input-label" style="display:block;margin-bottom:8px;">{{ lang.t('start_tags') }}</label>
-            <div style="display:flex;gap:8px;">
-              <input type="text" class="input" v-model="defaultTags" :placeholder="lang.t('search_placeholder')" style="flex:1;">
+            <div style="display:flex;gap:8px;position:relative;">
+              <input type="text" class="input" v-model="defaultTags" @input="onSuggest('defaultTags', defaultTags)" @blur="onBlur" :placeholder="lang.t('search_placeholder')" style="flex:1;">
               <button class="btn btn-secondary" @click="saveDefaultTags" :disabled="savingTags">{{ lang.t('save') }}</button>
+              <div v-if="activeField === 'defaultTags' && suggestions.length > 0" class="search-suggestions visible mapping-suggest" style="top:calc(100% + 4px);">
+                <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
+                  <span style="flex:1">{{ s.tag }}</span>
+                  <span v-if="s.from_danbooru" class="suggestion-source danbooru">db</span>
+                  <span v-if="s.from_e621" class="suggestion-source e621">e6</span>
+                  <span v-if="s.from_rule34" class="suggestion-source rule34">r34</span>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -130,10 +138,45 @@
           <div class="settings-title">🏷️ {{ lang.t('manual_mappings') }}</div>
           <div class="mapping-add-card">
             <div class="mapping-grid">
-              <div><label class="input-label" style="font-size:10px;">Unitag</label><input type="text" class="input btn-sm" v-model="mapForm.unitag"></div>
-              <div><label class="input-label" style="font-size:10px;color:var(--danbooru);">Danbooru</label><input type="text" class="input btn-sm" v-model="mapForm.danbooru"></div>
-              <div><label class="input-label" style="font-size:10px;color:var(--e621);">e621</label><input type="text" class="input btn-sm" v-model="mapForm.e621"></div>
-              <div><label class="input-label" style="font-size:10px;color:var(--rule34);">Rule34</label><input type="text" class="input btn-sm" v-model="mapForm.rule34"></div>
+              <div style="position:relative;">
+                <label class="input-label" style="font-size:10px;">Unitag</label>
+                <input type="text" class="input btn-sm" v-model="mapForm.unitag" @input="onSuggest('unitag', mapForm.unitag)" @blur="onBlur">
+                <div v-if="activeField === 'unitag' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
+                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
+                    <span style="flex:1">{{ s.tag }}</span>
+                  </div>
+                </div>
+              </div>
+              <div style="position:relative;">
+                <label class="input-label" style="font-size:10px;color:var(--danbooru);">Danbooru</label>
+                <input type="text" class="input btn-sm" v-model="mapForm.danbooru" @input="onSuggest('danbooru', mapForm.danbooru)" @blur="onBlur">
+                <div v-if="activeField === 'danbooru' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
+                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
+                    <span style="flex:1">{{ s.tag }}</span>
+                    <span v-if="s.from_danbooru" class="suggestion-source danbooru">db</span>
+                  </div>
+                </div>
+              </div>
+              <div style="position:relative;">
+                <label class="input-label" style="font-size:10px;color:var(--e621);">e621</label>
+                <input type="text" class="input btn-sm" v-model="mapForm.e621" @input="onSuggest('e621', mapForm.e621)" @blur="onBlur">
+                <div v-if="activeField === 'e621' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
+                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
+                    <span style="flex:1">{{ s.tag }}</span>
+                    <span v-if="s.from_e621" class="suggestion-source e621">e6</span>
+                  </div>
+                </div>
+              </div>
+              <div style="position:relative;">
+                <label class="input-label" style="font-size:10px;color:var(--rule34);">Rule34</label>
+                <input type="text" class="input btn-sm" v-model="mapForm.rule34" @input="onSuggest('rule34', mapForm.rule34)" @blur="onBlur">
+                <div v-if="activeField === 'rule34' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
+                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
+                    <span style="flex:1">{{ s.tag }}</span>
+                    <span v-if="s.from_rule34" class="suggestion-source rule34">r34</span>
+                  </div>
+                </div>
+              </div>
             </div>
             <button class="btn btn-sm" :class="editingMappingId ? 'btn-secondary' : 'btn-primary'" @click="saveMapping" style="margin-top:12px;width:100%;">
               {{ editingMappingId ? lang.t('update_mapping') : lang.t('add_mapping') }}
@@ -156,9 +199,17 @@
         <!-- Blacklist -->
         <div class="settings-section">
           <div class="settings-title">🚫 {{ lang.t('blacklist_title') }}</div>
-          <div style="display:flex;gap:8px;margin-bottom:12px;">
-            <input type="text" class="input" v-model="newRule" @keydown.enter="addRule" :placeholder="lang.t('search_placeholder')" style="flex:1;">
+          <div style="display:flex;gap:8px;margin-bottom:12px;position:relative;">
+            <input type="text" class="input" v-model="newRule" @input="onSuggest('blacklist', newRule)" @blur="onBlur" @keydown.enter="addRule" :placeholder="lang.t('search_placeholder')" style="flex:1;">
             <button class="btn btn-primary" @click="addRule">{{ lang.t('save') }}</button>
+            <div v-if="activeField === 'blacklist' && suggestions.length > 0" class="search-suggestions visible mapping-suggest" style="top:calc(100% + 4px);">
+              <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
+                <span style="flex:1">{{ s.tag }}</span>
+                <span v-if="s.from_danbooru" class="suggestion-source danbooru">db</span>
+                <span v-if="s.from_e621" class="suggestion-source e621">e6</span>
+                <span v-if="s.from_rule34" class="suggestion-source rule34">r34</span>
+              </div>
+            </div>
           </div>
           <div style="max-height:300px;overflow-y:auto;padding-right:4px;">
             <div v-for="r in rules" :key="r.id" class="blacklist-rule" :class="{ inactive: !r.is_active }">
@@ -182,7 +233,8 @@ import {
   apiUpdateDefaultTags, apiGetApiKeysStatus, apiUpdateApiKeys,
   apiGetMappings, apiCreateMapping, apiUpdateMapping, apiDeleteMapping,
   apiGetBlacklist, apiAddBlacklistRule, apiUpdateBlacklistRule, apiDeleteBlacklistRule,
-  apiDeleteHistory as apiDeleteHistoryFn, apiGetEventCount, apiUpdateConsent
+  apiDeleteHistory as apiDeleteHistoryFn, apiGetEventCount, apiUpdateConsent,
+  apiSuggestTags
 } from '../api'
 import type { TagMapping, BlacklistRule, ApiKeysStatus, ApiKeysUpdate } from '../types'
 
@@ -212,6 +264,45 @@ const newRule = ref('')
 const eventCount = ref(0)
 const deletingHistory = ref(false)
 const dataConsent = ref(false)
+const suggestions = ref<any[]>([])
+const activeField = ref<string | null>(null)
+let suggestTimeout: any = null
+
+function onSuggest(field: string, val: string) {
+  activeField.value = field
+  clearTimeout(suggestTimeout)
+  if (val.length < 2) {
+    suggestions.value = []
+    return
+  }
+  suggestTimeout = setTimeout(async () => {
+    try {
+      const data = await apiSuggestTags(val)
+      suggestions.value = data.suggestions || []
+    } catch {
+      suggestions.value = []
+    }
+  }, 300)
+}
+
+function onBlur() {
+  setTimeout(() => {
+    activeField.value = null
+    suggestions.value = []
+  }, 200)
+}
+
+function selectSuggest(tag: string) {
+  if (activeField.value === 'unitag') mapForm.value.unitag = tag
+  else if (activeField.value === 'danbooru') mapForm.value.danbooru = tag
+  else if (activeField.value === 'e621') mapForm.value.e621 = tag
+  else if (activeField.value === 'rule34') mapForm.value.rule34 = tag
+  else if (activeField.value === 'blacklist') newRule.value = tag
+  else if (activeField.value === 'defaultTags') defaultTags.value = tag
+  
+  suggestions.value = []
+  activeField.value = null
+}
 
 async function saveDefaultTags() {
   savingTags.value = true
@@ -542,4 +633,10 @@ input:checked + .slider:before { transform: translateX(20px); }
 .privacy-details summary::-webkit-details-marker { display: none; }
 .privacy-details[open] .disclosure-arrow { transform: rotate(180deg); }
 .disclosure-arrow { font-size: 10px; color: var(--text-muted); transition: transform 0.2s; }
+
+.mapping-suggest {
+  left: 0;
+  width: 250px;
+  max-height: 200px;
+}
 </style>
