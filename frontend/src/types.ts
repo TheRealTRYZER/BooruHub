@@ -61,6 +61,9 @@ export interface SearchResponse extends FeedResponse {}
 export interface TagSuggestion {
   tag: string
   is_mapped: boolean
+  from_danbooru?: boolean
+  from_e621?: boolean
+  from_rule34?: boolean
 }
 
 export interface TagSuggestResponse {

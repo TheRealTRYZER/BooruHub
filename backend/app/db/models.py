@@ -126,6 +126,9 @@ class CachedTag(Base):
     id = Column(Integer, primary_key=True, autoincrement=True)
     tag = Column(String(255), nullable=False, unique=True, index=True)
     usage_count = Column(Integer, default=1)
+    from_danbooru = Column(Boolean, default=False, server_default='false')
+    from_e621 = Column(Boolean, default=False, server_default='false')
+    from_rule34 = Column(Boolean, default=False, server_default='false')
     last_seen = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

@@ -62,7 +62,7 @@ class Settings(BaseSettings):
         return self.ENVIRONMENT.lower() == "development"
 
     class Config:
-        env_file = ".env"
+        env_file = [".env", "../.env"]
         extra = "ignore"
 
 

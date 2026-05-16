@@ -192,7 +192,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   box-shadow: 0 10px 30px rgba(0,0,0,0.2);
 }
 .search-suggestions.visible { display: block; }
-.search-suggestion-item { padding: 8px 12px; cursor: pointer; color: var(--text-secondary); font-size: 14px; }
+.search-suggestion-item { padding: 8px 12px; cursor: pointer; color: var(--text-secondary); font-size: 14px; display: flex; align-items: center; gap: 8px; }
 .search-suggestion-item:hover { background: var(--bg-card-hover); color: var(--accent); }
 .search-suggestion-item.mapped {
   background: rgba(122, 111, 255, 0.15);
@@ -202,6 +202,25 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .search-suggestion-item.mapped:hover {
   background: rgba(122, 111, 255, 0.25);
 }
+
+.suggestion-sources {
+  display: flex;
+  gap: 4px;
+  margin-left: auto;
+}
+
+.suggestion-source {
+  font-size: 9px;
+  font-weight: 800;
+  padding: 1px 4px;
+  border-radius: 3px;
+  text-transform: uppercase;
+  opacity: 0.9;
+  letter-spacing: 0.02em;
+}
+.suggestion-source.danbooru { background: var(--danbooru); color: #fff; }
+.suggestion-source.e621 { background: var(--e621); color: #fff; }
+.suggestion-source.rule34 { background: var(--rule34); color: #222; }
 .search-suggestion-item.history-item {
   display: flex; align-items: center;
 }

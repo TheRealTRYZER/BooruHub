@@ -83,6 +83,9 @@ class FeedResponse(BaseModel):
 class TagSuggestion(BaseModel):
     tag: str
     is_mapped: bool = False
+    from_danbooru: bool = False
+    from_e621: bool = False
+    from_rule34: bool = False
 
 
 class TagSuggestionResponse(BaseModel):
@@ -138,13 +141,18 @@ def _deduplicate_by_md5(posts: List[dict]) -> List[dict]:
     return unique_posts
 
 
-async def _cache_tags_task(tags: List[str], db: AsyncSession):
-    if not tags:
+async def _cache_tags_task(tag_sources: List[dict], db: AsyncSession):
+    """
+    Expects tag_sources: [{"tag": "tagname", "source": "sitename"}, ...]
+    """
+    if not tag_sources:
         return
     
-    clean_tags = []
-    for tag in tags:
-        tag = tag.strip().lower()
+    tag_map = {} # tag -> data dict
+    for item in tag_sources:
+        tag = item.get("tag", "").strip().lower()
+        source = item.get("source", "unknown")
+        
         if not tag or ":" in tag:
             continue
         
@@ -153,25 +161,41 @@ async def _cache_tags_task(tags: List[str], db: AsyncSession):
             tag = tag[1:]
         if not tag:
             continue
-        clean_tags.append(tag)
+            
+        if tag not in tag_map:
+            tag_map[tag] = {
+                "tag": tag, 
+                "from_danbooru": False, 
+                "from_e621": False, 
+                "from_rule34": False
+            }
+        
+        if source == "danbooru": tag_map[tag]["from_danbooru"] = True
+        elif source == "e621": tag_map[tag]["from_e621"] = True
+        elif source == "rule34": tag_map[tag]["from_rule34"] = True
 
-    if not clean_tags:
+    if not tag_map:
         return
 
     # Filter out recently cached tags (thread-safe)
-    unique_tags = list(set(clean_tags))
-    new_tags = await _recently_cached_tags.add_many(unique_tags)
-
-    if not new_tags:
+    all_tags = list(tag_map.keys())
+    new_tag_names = await _recently_cached_tags.add_many(all_tags)
+    
+    if not new_tag_names:
         return
-
-    values = [{"tag": t} for t in new_tags]
+    
+    values = [tag_map[t] for t in new_tag_names]
 
     # Batch UPSERT
     stmt = pg_insert(CachedTag).values(values)
     stmt = stmt.on_conflict_do_update(
         index_elements=['tag'],
-        set_=dict(usage_count=CachedTag.usage_count + 1)
+        set_=dict(
+            usage_count=CachedTag.usage_count + 1,
+            from_danbooru=CachedTag.from_danbooru | stmt.excluded.from_danbooru,
+            from_e621=CachedTag.from_e621 | stmt.excluded.from_e621,
+            from_rule34=CachedTag.from_rule34 | stmt.excluded.from_rule34
+        )
     )
 
     try:
@@ -360,12 +384,14 @@ async def get_feed(
     # MD5 deduplication is now handled inside search_multi_site
 
     # Cache ONLY tags from results to avoid saving typos
-    unique_tags = set()
+    tag_sources = []
     for p in posts:
-        unique_tags.update(p.get("tags", []))
+        source = p.get("source_site")
+        for t in p.get("tags", []):
+            tag_sources.append({"tag": t, "source": source})
     
-    if unique_tags:
-        background_tasks.add_task(_cache_tags_task, list(unique_tags), db)
+    if tag_sources:
+        background_tasks.add_task(_cache_tags_task, tag_sources, db)
 
     corrected_tags = None
     if not posts and tags:
@@ -433,12 +459,14 @@ async def search(
     posts = _deduplicate_by_md5(posts) # Still needed for single-site search
 
     # Cache ONLY tags from results to avoid saving typos
-    unique_tags = set()
+    tag_sources = []
     for p in posts:
-        unique_tags.update(p.get("tags", []))
+        source = p.get("source_site")
+        for t in p.get("tags", []):
+            tag_sources.append({"tag": t, "source": source})
         
-    if unique_tags:
-        background_tasks.add_task(_cache_tags_task, list(unique_tags), db)
+    if tag_sources:
+        background_tasks.add_task(_cache_tags_task, tag_sources, db)
     
     corrected_tags = None
     if not posts and tags:
@@ -525,7 +553,13 @@ async def suggest_tags(
         for ct in cached_tags:
             full_tag = f"{op_prefix}{ct.tag}"
             if full_tag not in seen_tags:
-                suggestions.append(TagSuggestion(tag=full_tag, is_mapped=False))
+                suggestions.append(TagSuggestion(
+                    tag=full_tag, 
+                    is_mapped=False,
+                    from_danbooru=ct.from_danbooru,
+                    from_e621=ct.from_e621,
+                    from_rule34=ct.from_rule34
+                ))
                 seen_tags.add(full_tag)
                 if len(suggestions) >= limit:
                     break

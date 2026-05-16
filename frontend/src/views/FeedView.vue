@@ -27,7 +27,12 @@
              :class="{ mapped: tagObj.is_mapped }"
              @mousedown.prevent="selectSuggestion(tagObj.tag)">
           <span v-if="tagObj.is_mapped" style="margin-right: 6px; font-size: 10px;">⭐</span>
-          {{ tagObj.tag.replace(/_/g, ' ') }}
+          <span style="flex: 1;">{{ tagObj.tag.replace(/_/g, ' ') }}</span>
+          <div class="suggestion-sources">
+            <span v-if="tagObj.from_danbooru" class="suggestion-source danbooru">db</span>
+            <span v-if="tagObj.from_e621" class="suggestion-source e621">e6</span>
+            <span v-if="tagObj.from_rule34" class="suggestion-source rule34">r34</span>
+          </div>
         </div>
       </div>
       <!-- Search History Dropdown -->
