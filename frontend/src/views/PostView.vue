@@ -67,6 +67,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
+import { useFeedStore } from '../stores/feed'
 import { apiCheckFavorite, apiAddFavorite, apiRemoveFavorite, apiSearch } from '../api'
 import { useEventLogger } from '../composables/useEventLogger'
 import TagChip from '../components/TagChip.vue'
@@ -148,6 +149,17 @@ onMounted(async () => {
   const site = route.query.site as SiteName
   if (!id || !site) return
   
+  // 1. Try finding the post in memory (feed.posts) first for instant (0ms) loading
+  const feed = useFeedStore()
+  const found = feed.posts.find(p => String(p.id) === id && p.source_site === site)
+  if (found) {
+    post.value = found
+    logView(post.value)
+    await checkFav()
+    return
+  }
+  
+  // 2. Fall back to API fetch if refreshed or direct link
   try {
     const data = await apiSearch(`id:${id}`, site, 1, 1)
     if (data.posts && data.posts.length > 0) {

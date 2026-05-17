@@ -35,15 +35,18 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
+import { useFeedStore } from '../stores/feed'
 import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite } from '../api'
 import { useEventLogger } from '../composables/useEventLogger'
 import { RATING_MAP, RATING_LABELS } from '../types'
 import type { Post, RatingClass } from '../types'
+
+const feed = useFeedStore()
 
 const props = defineProps<{
   post: Post
@@ -60,7 +63,25 @@ const cardRef = ref<HTMLElement | null>(null)
 const isFav = ref(props.favorite ?? false)
 const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="10" height="10"%3E%3C/svg%3E'
 
-const currentUrl = ref(props.post.sample_url || props.post.preview_url || '')
+const currentUrl = ref('')
+
+function updateUrl() {
+  const q = feed.previewQuality // 'thumbnail' | 'sample' | 'full'
+  const p = props.post
+  if (q === 'thumbnail') {
+    currentUrl.value = p.preview_url || p.sample_url || p.file_url || ''
+  } else if (q === 'sample') {
+    currentUrl.value = p.sample_url || p.preview_url || p.file_url || ''
+  } else { // 'full'
+    currentUrl.value = p.file_url || p.sample_url || p.preview_url || ''
+  }
+}
+
+// Watch for quality setting changes
+watch(() => feed.previewQuality, () => {
+  loaded.value = false
+  updateUrl()
+})
 const isAnimated = computed(() =>
   ['gif', 'webm', 'mp4', 'm4v', 'mov', 'mkv', 'swf'].includes((props.post.file_ext || '').toLowerCase())
 )
@@ -80,16 +101,26 @@ const mediaStyle = computed(() => {
 
 function onError() {
   const p = props.post
-  if (currentUrl.value === p.sample_url && p.preview_url) {
-    loaded.value = false
-    currentUrl.value = p.preview_url
-    return
+  // If current is file_url, try sample_url, then preview_url
+  if (currentUrl.value === p.file_url) {
+    if (p.sample_url && p.sample_url !== p.file_url) {
+      loaded.value = false
+      currentUrl.value = p.sample_url
+      return
+    } else if (p.preview_url && p.preview_url !== p.file_url) {
+      loaded.value = false
+      currentUrl.value = p.preview_url
+      return
+    }
   }
-
-  if ((currentUrl.value === p.preview_url || currentUrl.value === p.sample_url) && p.file_url && currentUrl.value !== p.file_url) {
-    loaded.value = false
-    currentUrl.value = p.file_url
-    return
+  
+  // If current is sample_url, try preview_url
+  if (currentUrl.value === p.sample_url) {
+    if (p.preview_url && p.preview_url !== p.sample_url) {
+      loaded.value = false
+      currentUrl.value = p.preview_url
+      return
+    }
   }
 
   loaded.value = true
@@ -158,6 +189,7 @@ function updateMobileState() {
 }
 
 onMounted(() => {
+  updateUrl()
   updateMobileState()
   window.addEventListener('resize', updateMobileState)
 })

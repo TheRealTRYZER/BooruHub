@@ -78,6 +78,23 @@
       </label>
     </div>
 
+    <div class="feed-controls" v-show="!feed.isSplit">
+      <div class="feed-control-group">
+        <label class="feed-control-label">🎚️ {{ lang.t('card_size') }}</label>
+        <input type="range" min="150" max="400" step="10" v-model.number="feed.cardSize" class="size-slider">
+        <span class="size-val">{{ feed.cardSize }}px</span>
+      </div>
+      
+      <div class="feed-control-group">
+        <label class="feed-control-label">🖼️ {{ lang.t('preview_quality') }}</label>
+        <select v-model="feed.previewQuality" class="quality-select">
+          <option value="thumbnail">{{ lang.t('quality_thumbnail') }}</option>
+          <option value="sample">{{ lang.t('quality_sample') }}</option>
+          <option value="full">{{ lang.t('quality_full') }}</option>
+        </select>
+      </div>
+    </div>
+
     <div v-if="correctedTags" class="suggestion-banner">
       <span>{{ lang.t('did_you_mean') }}: </span>
       <a href="#" @click.prevent="applyCorrection(correctedTags)">{{ correctedTags }}</a>

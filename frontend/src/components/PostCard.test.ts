@@ -1,5 +1,5 @@
 import { mount } from '@vue/test-utils'
-import { describe, it, expect, vi } from 'vitest'
+import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createTestingPinia } from '@pinia/testing'
 import PostCard from './PostCard.vue'
 
@@ -8,6 +8,22 @@ vi.mock('vue-router', () => ({
     push: vi.fn()
   })
 }))
+
+beforeEach(() => {
+  Object.defineProperty(window, 'matchMedia', {
+    writable: true,
+    value: vi.fn().mockImplementation((query: string) => ({
+      matches: false,
+      media: query,
+      onchange: null,
+      addListener: vi.fn(),
+      removeListener: vi.fn(),
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+      dispatchEvent: vi.fn(),
+    })),
+  })
+})
 
 describe('PostCard.vue', () => {
   const mockPost = {
@@ -71,5 +87,36 @@ describe('PostCard.vue', () => {
     // Note: Since apiAddFavorite is imported directly, we might need to mock it
     // but here we just check if it was clicked.
     // A better test would check if the icon changed if we mock the API response.
+  })
+
+  it('should reactively update currentUrl based on feed store previewQuality', async () => {
+    const mockPostExtended = {
+      id: 123,
+      source_site: 'danbooru',
+      preview_url: 'https://test.com/preview.jpg',
+      sample_url: 'https://test.com/sample.jpg',
+      file_url: 'https://test.com/file.jpg',
+      rating: 's',
+      tags: ['tag1'],
+      width: 100,
+      height: 100
+    }
+
+    const wrapper = mount(PostCard, {
+      props: {
+        post: mockPostExtended as any
+      },
+      global: {
+        plugins: [createTestingPinia({
+          createSpy: vi.fn,
+          initialState: {
+            feed: { previewQuality: 'thumbnail' },
+            lang: { t: (key: string) => key }
+          }
+        })],
+      }
+    })
+
+    expect((wrapper.vm as any).currentUrl).toBe('https://test.com/preview.jpg')
   })
 })

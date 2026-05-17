@@ -349,9 +349,11 @@ async def get_feed(
     
     # Enforce rating:general for guests (override any provided rating)
     if user is None:
-        logger.info(f"[GUEST_MODE] Enforcing rating:general for unauthorized user")
-        tag_list = [t for t in tag_list if not t.startswith("rating:")]
-        tag_list.append("rating:general")
+        is_id_lookup = any(t.startswith("id:") for t in tag_list)
+        if not is_id_lookup:
+            logger.info(f"[GUEST_MODE] Enforcing rating:general for unauthorized user")
+            tag_list = [t for t in tag_list if not t.startswith("rating:")]
+            tag_list.append("rating:general")
     else:
         logger.info(f"[USER_MODE] User {user.id} search tags: '{tags}'")
 
@@ -423,9 +425,11 @@ async def search(
     
     # Enforce rating:general for guests (override any provided rating)
     if user is None:
-        logger.info(f"[GUEST_MODE] Enforcing rating:general in search")
-        tag_list = [t for t in tag_list if not t.startswith("rating:")]
-        tag_list.append("rating:general")
+        is_id_lookup = any(t.startswith("id:") for t in tag_list)
+        if not is_id_lookup:
+            logger.info(f"[GUEST_MODE] Enforcing rating:general in search")
+            tag_list = [t for t in tag_list if not t.startswith("rating:")]
+            tag_list.append("rating:general")
     else:
         logger.info(f"[USER_MODE] User {user.id} search tags: '{tags}'")
 

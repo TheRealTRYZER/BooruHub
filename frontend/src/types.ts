@@ -195,6 +195,7 @@ export type TranslationKey =
   | 'privacy_rights_title' | 'privacy_rights_text'
   | 'privacy_right_access' | 'privacy_right_delete' | 'privacy_right_withdraw'
   | 'privacy_sharing_title' | 'privacy_sharing_text'
+  | 'card_size' | 'preview_quality' | 'quality_thumbnail' | 'quality_sample' | 'quality_full'
 
 export type Locale = 'en' | 'ru'
 

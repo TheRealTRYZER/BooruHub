@@ -136,6 +136,11 @@ const translations: Record<Locale, TranslationDict> = {
     privacy_right_withdraw: "Right to withdraw consent — you can uncheck consent at any time; new events will stop being collected",
     privacy_sharing_title: "Do we share your data?",
     privacy_sharing_text: "No. Your interaction data is never shared with third parties, never sold, and never leaves our servers. It is used solely to compute your personal recommendations.",
+    card_size: "Card Size",
+    preview_quality: "Quality",
+    quality_thumbnail: "Thumbnail",
+    quality_sample: "Medium",
+    quality_full: "Full",
   },
   ru: {
     search_placeholder: "Поиск по тегам... (напр. cat_ears 1girl)",
@@ -268,6 +273,11 @@ const translations: Record<Locale, TranslationDict> = {
     privacy_right_withdraw: "Право на отзыв согласия — вы можете отозвать согласие в любой момент, и сбор прекратится",
     privacy_sharing_title: "Передаём ли мы ваши данные?",
     privacy_sharing_text: "Нет. Данные о ваших взаимодействиях никогда не передаются третьим лицам, не продаются и не покидают наши серверы. Они используются только для расчёта ваших персональных рекомендаций.",
+    card_size: "Размер карточек",
+    preview_quality: "Качество превью",
+    quality_thumbnail: "Эскиз (Мини)",
+    quality_sample: "Среднее",
+    quality_full: "Оригинал (Фул)",
   },
 }
 

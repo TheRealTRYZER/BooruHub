@@ -10,10 +10,13 @@
 
 <script setup lang="ts">
 import { ref, watch, onMounted, onUnmounted, markRaw } from 'vue'
+import { useFeedStore } from '../stores/feed'
 import PostCard from './PostCard.vue'
 import SkeletonCard from './SkeletonCard.vue'
 import { useEventLogger } from '../composables/useEventLogger'
 import type { Post } from '../types'
+
+const feed = useFeedStore()
 
 interface GridItem {
   key: string
@@ -41,10 +44,8 @@ let skeletonKeys: string[] = []
 
 function getColCount() {
   const w = window.innerWidth
-  if (w >= 1400) return 5
-  if (w >= 1100) return 4
-  if (w >= 768) return 3
-  return 2
+  const availableWidth = w - 40
+  return Math.max(1, Math.min(10, Math.floor(availableWidth / feed.cardSize)))
 }
 
 function initColumns() {
@@ -108,6 +109,16 @@ watch(() => props.posts.length, () => {
   removeSkeletons()
   placeNewPosts()
   setTimeout(observeNewCards, 100)
+})
+
+// Watch for card size changes
+watch(() => feed.cardSize, () => {
+  const newCount = getColCount()
+  if (newCount !== colCount.value) {
+    colCount.value = newCount
+    initColumns()
+    placeNewPosts()
+  }
 })
 
 // Watch loading state for skeletons
