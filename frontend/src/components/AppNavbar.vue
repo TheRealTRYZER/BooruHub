@@ -48,7 +48,10 @@
         <template v-if="auth.isAuthenticated">
           <div class="nav-avatar">{{ auth.user!.username[0].toUpperCase() }}</div>
           <span class="nav-username">{{ auth.user!.username }}</span>
-          <button class="btn btn-ghost btn-sm" @click="doLogout" id="nav-logout">{{ lang.t('logout') }}</button>
+          <button class="btn btn-ghost btn-sm" @click="doLogout" id="nav-logout" :title="lang.t('logout')">
+            <span class="nav-logout-icon">🚪</span>
+            <span class="nav-logout-text">{{ lang.t('logout') }}</span>
+          </button>
         </template>
         <template v-else>
           <button class="btn btn-primary btn-sm" @click="router.push('/login')" id="nav-login">{{ lang.t('login') }}</button>

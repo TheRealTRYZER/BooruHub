@@ -134,6 +134,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   display: flex; align-items: center; justify-content: center;
   font-weight: bold; color: #fff;
 }
+.nav-logout-icon { display: none; }
 
 /* === BUTTONS === */
 .btn {
@@ -490,14 +491,17 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   #page-container { padding: 12px 10px; }
   
   /* Navbar */
-  .nav-inner { gap: 12px; padding: 0 12px; }
+  .nav-inner { gap: 8px; padding: 0 8px; }
   .nav-logo { font-size: 1.1rem; }
   .nav-logo span:not(.nav-logo-icon) { display: none; } /* Hide 'BooruHub' text on mobile, keep logo icon */
-  .nav-links { gap: 4px; }
-  .nav-link { padding: 8px; font-size: 16px; } /* larger touch target */
+  .nav-links { gap: 2px; }
+  .nav-link { padding: 8px 6px; font-size: 16px; } /* larger touch target */
   .nav-link span:not(.nav-link-icon) { display: none; } /* Only hide text, keep icon */
   .nav-username { display: none; }
-  .nav-user { gap: 8px; }
+  .nav-user { gap: 4px; }
+  .nav-user .btn { padding: 6px 8px; }
+  .nav-logout-icon { display: inline; }
+  .nav-logout-text { display: none; }
 
   /* Search & Split Search */
   .search-bar > div:first-child { flex-wrap: wrap; }
