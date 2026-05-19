@@ -1,5 +1,5 @@
 <template>
-  <div class="post-grid" ref="gridEl">
+  <div class="post-grid" ref="gridEl" :style="{ '--card-size': feed.cardSize + 'px' }">
     <div v-for="(col, ci) in columns" :key="ci" class="post-column">
       <div v-for="item in col" :key="item.key" :data-post-key="item.key">
         <component :is="item.component" v-bind="item.props" />
@@ -45,7 +45,7 @@ let skeletonKeys: string[] = []
 function getColCount() {
   const w = window.innerWidth
   const availableWidth = w - 40
-  return Math.max(1, Math.min(10, Math.floor(availableWidth / feed.cardSize)))
+  return Math.max(1, Math.min(20, Math.floor(availableWidth / feed.cardSize)))
 }
 
 function initColumns() {

@@ -329,8 +329,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .ratio-val { font-size: 11px; color: var(--text-muted); width: 16px; text-align: right; }
 
 /* === POST GRID (Flex-column Stable) === */
-.post-grid { display: flex; gap: var(--card-gap); align-items: flex-start; }
-.post-column { flex: 1; display: flex; flex-direction: column; gap: var(--card-gap); min-width: 0; }
+.post-grid { display: flex; gap: var(--card-gap); align-items: flex-start; justify-content: center; }
+.post-column { width: var(--card-size, 250px); flex: 0 0 var(--card-size, 250px); max-width: 100%; display: flex; flex-direction: column; gap: var(--card-gap); min-width: 0; }
 
 .post-card {
   position: relative; width: 100%;
