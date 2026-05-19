@@ -504,6 +504,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   .nav-logout-text { display: none; }
 
   /* Search & Split Search */
+  .btn-bookmark-text { display: none; }
   .search-bar > div:first-child { flex-wrap: wrap; }
   .input-search { flex: 1; min-width: 200px; }
   .split-search-row { flex-direction: column; align-items: stretch; margin-bottom: 12px; }

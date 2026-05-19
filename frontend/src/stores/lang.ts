@@ -141,6 +141,7 @@ const translations: Record<Locale, TranslationDict> = {
     quality_thumbnail: "Thumbnail",
     quality_sample: "Medium",
     quality_full: "Full",
+    save_to_bookmarks: "Save to Bookmarks",
   },
   ru: {
     search_placeholder: "Поиск по тегам... (напр. cat_ears 1girl)",
@@ -278,6 +279,7 @@ const translations: Record<Locale, TranslationDict> = {
     quality_thumbnail: "Эскиз (Мини)",
     quality_sample: "Среднее",
     quality_full: "Оригинал (Фул)",
+    save_to_bookmarks: "В закладки",
   },
 }
 

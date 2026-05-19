@@ -13,6 +13,9 @@
                v-show="!feed.isSplit"
                style="width: 100%;">
         <div style="display:flex; gap:8px; justify-content:flex-end;">
+          <button v-if="auth.isAuthenticated && !feed.isSplit" class="btn btn-secondary" @click="saveBookmark" :title="lang.t('save_to_bookmarks')" id="btn-bookmark">
+            🔖 <span class="btn-bookmark-text">{{ lang.t('save_to_bookmarks') }}</span>
+          </button>
           <button class="btn btn-secondary btn-icon" @click="feed.toggleSplit()" :title="lang.t('advanced_search')">
             {{ feed.isSplit ? '⬅️ ' + lang.t('collapse') : '🔀 ' + lang.t('split_search') }}
           </button>
