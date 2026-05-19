@@ -81,7 +81,7 @@
     <div class="feed-controls" v-show="!feed.isSplit">
       <div class="feed-control-group">
         <label class="feed-control-label">🎚️ {{ lang.t('card_size') }}</label>
-        <input type="range" min="150" max="400" step="10" v-model.number="feed.cardSize" class="size-slider">
+        <input type="range" min="75" max="400" step="5" v-model.number="feed.cardSize" class="size-slider">
         <span class="size-val">{{ feed.cardSize }}px</span>
       </div>
       
