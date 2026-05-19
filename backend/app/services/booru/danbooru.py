@@ -59,11 +59,16 @@ class Danbooru(BaseBooru):
         if len(content) > 1 and len(api_list) < 2:
             api_list.append(content[1])
             
+        # Score floor injection for order:score to prevent Danbooru 500s
+        # Only inject if we have 'order:score' and room in api_list
+        if any(t == "order:score" for t in api_list) and len(api_list) < 2:
+            api_list.append("score:>=10")
+
         api_tags = " ".join(api_list)
         
         # Everything else goes to local filtering
         # Note: order tags NOT in api_list are useless globally but we keep them for debug? No.
-        extra_tags = [t for t in all_tags if t not in api_list and not t.startswith("order:")]
+        extra_tags = [t for t in all_tags if t not in api_list and not t.startswith("order:") and t != "score:>=10"]
         
         return api_tags, extra_tags
 
@@ -160,7 +165,7 @@ class Danbooru(BaseBooru):
         if extra_tags:
             logger.info(f"[Danbooru] Local filter: {len(normalised)}/{len(raw_posts)} posts matched extra tags {extra_tags}")
 
-        return normalised[:limit], len(raw_posts)
+        return normalised, len(raw_posts)
 
     def normalize_post(self, raw: dict) -> Optional[dict]:
         file_url = raw.get("file_url") or raw.get("large_file_url")

@@ -48,8 +48,8 @@ class Rule34(BaseBooru):
         return mapping.get(field_name, field_name)
 
     def calculate_page(self, page: int, limit: int) -> int:
-        """Rule34 uses offset-based pagination (pid = offset)."""
-        return (page - 1) * limit
+        """Rule34 uses 0-indexed page-based pagination (pid = page)."""
+        return page - 1
 
     async def fetch_posts(
         self,
@@ -102,7 +102,7 @@ class Rule34(BaseBooru):
             if not isinstance(data, list):
                 return [], 0
 
-            posts = [p for p in (self.normalize_post(r) for r in data) if p][:limit]
+            posts = [p for p in (self.normalize_post(r) for r in data) if p]
             return posts, len(data)
 
         except (httpx.RequestError, ValueError, Exception) as e:

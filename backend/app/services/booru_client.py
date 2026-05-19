@@ -148,12 +148,17 @@ async def search_multi_site(
     num = len(sites)
     tasks = []
     for site in sites:
-        if ratios and site in ratios:
+        if num == 1:
+            per_site = limit
+        elif ratios and site in ratios:
             total_ratio = sum(ratios.values()) or 1.0
             share = ratios[site] / total_ratio
-            per_site = max(20, int(limit * 3 * share))
+            if share >= 0.99:
+                per_site = limit
+            else:
+                per_site = max(20, int(limit * 1.5 * share))
         else:
-            per_site = max(20, (limit * 2) // num)
+            per_site = max(20, int(limit * 1.2) // num)
 
         # Boost limit for Danbooru if it's likely searching with many tags (local filtering)
         # to ensure it contributes enough posts after filtering to interleave well.
@@ -191,7 +196,7 @@ async def search_multi_site(
     # Single site — no interleaving needed
     if len(sites) == 1:
         s = sites[0]
-        return by_site[s][:limit], total_counts
+        return by_site[s], total_counts
 
     # Weighted interleaving algorithm with MD5 deduplication
     actual_ratios = ratios or {s: 1.0 for s in sites}
@@ -199,7 +204,9 @@ async def search_multi_site(
     iterators = {s: iter(posts) for s, posts in by_site.items() if posts}
     interleaved: List[dict] = []
     # Interleaving loop
-    while iterators and len(interleaved) < limit:
+    # We do not truncate strictly to limit because that causes pagination gaps.
+    # Instead, we interleave all fetched posts to ensure contiguous pagination.
+    while iterators:
         added_this_round = False
         # Give credits to all active iterators
         for s in list(iterators):
@@ -223,9 +230,6 @@ async def search_multi_site(
                 interleaved.append(post)
                 credits[s] -= 1.0
                 added_this_round = True
-                
-                if len(interleaved) >= limit:
-                    break
             except StopIteration:
                 del iterators[s]
                 credits[s] = 0.0

@@ -226,4 +226,4 @@ class BaseBooru(ABC):
 
             normalised.append(item)
 
-        return normalised[:limit], len(raw_posts)
+        return normalised, len(raw_posts)

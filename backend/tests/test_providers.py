@@ -106,10 +106,10 @@ class TestRule34Normalization:
         assert post["rating"] == "g"
 
     def test_calculate_page_offset(self):
-        """it should calculate pid as offset-based pagination"""
+        """it should calculate pid as 0-indexed page pagination"""
         assert self.provider.calculate_page(1, 40) == 0
-        assert self.provider.calculate_page(2, 40) == 40
-        assert self.provider.calculate_page(3, 50) == 100
+        assert self.provider.calculate_page(2, 40) == 1
+        assert self.provider.calculate_page(3, 50) == 2
 
     def test_prepare_tags_returns_tuple(self):
         """it should return (tags, []) since Rule34 doesn't split tags"""
