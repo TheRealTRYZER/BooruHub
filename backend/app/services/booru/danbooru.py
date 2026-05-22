@@ -168,13 +168,40 @@ class Danbooru(BaseBooru):
         return normalised, len(raw_posts)
 
     def normalize_post(self, raw: dict) -> Optional[dict]:
-        file_url = raw.get("file_url") or raw.get("large_file_url")
+        # Extract variants mapping for robust fallbacks
+        media_asset = raw.get("media_asset") or {}
+        variants = media_asset.get("variants") or []
+        variants_dict = {v.get("type"): v.get("url") for v in variants if v.get("type") and v.get("url")}
+        
+        # Align URL prioritization with the user's CLI downloader logic:
+        # Prioritize large_file_url (the web-optimized sample version) over file_url (original)
+        # to ensure high compatibility, fast load times, and bypass hotlinking restrictions.
+        file_url = (
+            raw.get("large_file_url")
+            or raw.get("file_url")
+            or variants_dict.get("sample")
+            or variants_dict.get("original")
+            or (list(variants_dict.values())[0] if variants_dict else None)
+        )
         if not file_url:
             return None
 
+        # 2. sample_url: prioritize root large_file_url, fallback to sample/original variants, fallback to file_url
+        sample_url = (
+            raw.get("large_file_url")
+            or raw.get("file_url")
+            or variants_dict.get("sample")
+            or variants_dict.get("720x720")
+            or variants_dict.get("original")
+            or file_url
+        )
+
+        # 3. preview_url: prioritize root preview_file_url, fallback to 180x180/360x360 variants, fallback to sample_url
         preview = (
             raw.get("preview_file_url")
-            or raw.get("media_asset", {}).get("variants", [{}])[0].get("url", "")
+            or variants_dict.get("180x180")
+            or variants_dict.get("360x360")
+            or sample_url
         )
 
         tag_str = raw.get("tag_string", "")
@@ -182,7 +209,7 @@ class Danbooru(BaseBooru):
             "id": str(raw["id"]),
             "source_site": "danbooru",
             "preview_url": preview,
-            "sample_url": raw.get("large_file_url") or file_url,
+            "sample_url": sample_url,
             "file_url": file_url,
             "tags": tag_str.split() if tag_str else [],
             "rating": raw.get("rating") or "g",

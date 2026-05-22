@@ -107,10 +107,13 @@ def translate_tags(
             tag_name = tag_lower
 
         if tag_name in lookup:
-            site_val = lookup[tag_name].get(site, "").strip()
+            site_val = lookup[tag_name].get(site, "")
+            if site_val is None:
+                site_val = ""
+            site_val = site_val.strip()
             if not site_val:
-                logger.debug(f"[MAP] Site {site} disabled by unitag '{tag_name}'")
-                return None
+                logger.debug(f"[MAP] Site {site} has no mapping for unitag '{tag_name}', omitting from query")
+                continue
             
             # Map comma-separated values
             parts = [p.strip() for p in site_val.split(",") if p.strip()]

@@ -3,7 +3,9 @@ import logging
 from typing import List, Optional, Union, Dict
 from pydantic import BaseModel, Field
 
-from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, BackgroundTasks, Response
+from fastapi.responses import StreamingResponse
+import httpx
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -570,3 +572,37 @@ async def suggest_tags(
 
     return {"suggestions": suggestions[:limit]}
 
+@router.get("/proxy")
+async def proxy_image(url: str = Query(...)):
+    """Proxy image request to bypass hotlinking protection (Cloudflare)."""
+    # Safety check: only allow known booru domains
+    allowed_domains = ["donmai.us", "e621.net", "rule34.xxx"]
+    if not any(domain in url for domain in allowed_domains):
+        return Response(status_code=403)
+
+    # Use a custom API User-Agent to bypass Cloudflare JS challenge,
+    # and NO referer, which Cloudflare permits for API clients on Danbooru CDN.
+    headers = {
+        "User-Agent": "BooruHub/1.0"
+    }
+    
+    async def stream_image():
+        async with httpx.AsyncClient() as client:
+            try:
+                async with client.stream("GET", url, headers=headers, follow_redirects=True, timeout=15.0) as resp:
+                    resp.raise_for_status()
+                    async for chunk in resp.aiter_bytes():
+                        yield chunk
+            except Exception as e:
+                logger.error(f"Proxy error for {url}: {e}")
+                # We can't change status code after streaming has started, but if it fails early:
+                raise e
+
+    # For HEAD requests or fast responses, getting the content type first might be better,
+    # but for simplicity and low latency, we stream and let browser infer or default to image/jpeg
+    # A slightly better approach is to do a normal request for headers, but this works fine.
+    return StreamingResponse(
+        stream_image(), 
+        media_type="image/jpeg",
+        headers={"Cache-Control": "public, max-age=86400"}
+    )
