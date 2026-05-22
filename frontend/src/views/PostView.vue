@@ -1,5 +1,5 @@
 <template>
-  <div v-if="!post" class="empty-state">
+  <div v-if="!displayedPost" class="empty-state">
     <div class="empty-state-icon">❌</div>
     <div class="empty-state-title">{{ lang.t('post_not_found') }}</div>
     <button class="btn btn-primary" @click="$router.push('/')">{{ lang.t('back_to_feed') }}</button>
@@ -7,7 +7,7 @@
   <div v-else class="post-detail">
     <div class="post-detail-image">
       <video v-if="isVideo" :src="mediaUrl" controls loop autoplay muted style="width:100%;max-height:85vh;"></video>
-      <img v-else :src="mediaUrl" :alt="'Post ' + post.id" @click="openOriginal" style="cursor:zoom-in;">
+      <img v-else :src="mediaUrl" :alt="'Post ' + displayedPost.id" @click="openOriginal" style="cursor:zoom-in;">
     </div>
     
     <div class="post-detail-sidebar">
@@ -23,13 +23,20 @@
       <div class="post-detail-info">
         <div class="post-detail-info-row">
           <span class="post-detail-info-label">{{ lang.t('source') }}</span>
-          <span class="post-detail-info-value">
-            <span class="post-card-badge" :class="post.source_site">{{ post.source_site }}</span>
+          <span class="post-detail-info-value" style="display: flex; gap: 6px; flex-wrap: wrap; justify-content: flex-end;">
+            <span v-for="site in allSites" 
+                  :key="site" 
+                  class="post-card-badge" 
+                  :class="[site, { 'interactive-badge': allSites.length > 1, 'active-site': allSites.length > 1 && activeSite === site }]"
+                  :title="allSites.length > 1 ? 'Switch to ' + site + ' version' : ''"
+                  @click="allSites.length > 1 ? switchActiveSite(site) : null">
+              {{ site }}
+            </span>
           </span>
         </div>
         <div class="post-detail-info-row">
           <span class="post-detail-info-label">{{ lang.t('post_id') }}</span>
-          <span class="post-detail-info-value">{{ post.id }}</span>
+          <span class="post-detail-info-value">{{ displayedPost.id }}</span>
         </div>
         <div class="post-detail-info-row">
           <span class="post-detail-info-label">{{ lang.t('rating') }}</span>
@@ -39,22 +46,22 @@
         </div>
         <div class="post-detail-info-row">
           <span class="post-detail-info-label">{{ lang.t('score') }}</span>
-          <span class="post-detail-info-value">★ {{ post.score || 0 }}</span>
+          <span class="post-detail-info-value">★ {{ displayedPost.score || 0 }}</span>
         </div>
-        <div v-if="post.width" class="post-detail-info-row">
+        <div v-if="displayedPost.width" class="post-detail-info-row">
           <span class="post-detail-info-label">{{ lang.t('size') }}</span>
-          <span class="post-detail-info-value">{{ post.width }}×{{ post.height }}</span>
+          <span class="post-detail-info-value">{{ displayedPost.width }}×{{ displayedPost.height }}</span>
         </div>
-        <div v-if="post.file_ext" class="post-detail-info-row">
+        <div v-if="displayedPost.file_ext" class="post-detail-info-row">
           <span class="post-detail-info-label">{{ lang.t('format') }}</span>
-          <span class="post-detail-info-value">{{ post.file_ext.toUpperCase() }}</span>
+          <span class="post-detail-info-value">{{ displayedPost.file_ext.toUpperCase() }}</span>
         </div>
       </div>
 
-      <div class="post-detail-tags" v-if="post.tags && post.tags.length">
-        <div class="post-detail-tags-title">{{ lang.t('tags_count') }} ({{ post.tags.length }})</div>
+      <div class="post-detail-tags" v-if="displayedPost.tags && displayedPost.tags.length">
+        <div class="post-detail-tags-title">{{ lang.t('tags_count') }} ({{ displayedPost.tags.length }})</div>
         <div class="post-detail-tags-list">
-          <TagChip v-for="tag in post.tags" :key="tag" :tag="tag" />
+          <TagChip v-for="tag in displayedPost.tags" :key="tag" :tag="tag" />
         </div>
       </div>
     </div>
@@ -63,7 +70,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
@@ -74,47 +81,73 @@ import TagChip from '../components/TagChip.vue'
 import { Post, SiteName, RATING_MAP, RATING_LABELS } from '../types'
 
 const route = useRoute()
+const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
 const { logView, logFavourite } = useEventLogger()
 
-const post = ref<Post | null>(null)
+const mainPost = ref<Post | null>(null)
+const activeSite = ref<SiteName>('danbooru')
 const isFav = ref(false)
 const favId = ref<number | null>(null)
 
+// Compute all sites available for version switching
+const allSites = computed<SiteName[]>(() => {
+  if (!mainPost.value) return []
+  const list: SiteName[] = [mainPost.value.source_site]
+  if (mainPost.value.duplicate_sites) {
+    for (const site of mainPost.value.duplicate_sites) {
+      if (!list.includes(site)) {
+        list.push(site)
+      }
+    }
+  }
+  return list
+})
+
+// Compute currently displayed post based on active site version
+const displayedPost = computed<Post | null>(() => {
+  if (!mainPost.value) return null
+  if (activeSite.value === mainPost.value.source_site) {
+    return mainPost.value
+  }
+  const dup = mainPost.value.duplicates?.find(d => d.source_site === activeSite.value)
+  return dup || mainPost.value
+})
+
 const isVideo = computed(() => {
-  if (!post.value) return false
-  const ext = (post.value.file_ext || '').toLowerCase()
-  const url = (post.value.file_url || '').toLowerCase()
+  if (!displayedPost.value) return false
+  const ext = (displayedPost.value.file_ext || '').toLowerCase()
+  const url = (displayedPost.value.file_url || '').toLowerCase()
   const videoExts = ['webm', 'mp4', 'm4v', 'mov', 'mkv', 'ogv']
   
   return videoExts.includes(ext) || videoExts.some(ve => url.endsWith('.' + ve) || url.includes('.' + ve + '?'))
 })
 
 const mediaUrl = computed(() => {
-  if (!post.value) return ''
+  if (!displayedPost.value) return ''
   // For videos, always use the direct file URL, samples might be just images
-  if (isVideo.value) return post.value.file_url || ''
-  return post.value.sample_url || post.value.file_url || ''
+  if (isVideo.value) return displayedPost.value.file_url || ''
+  return displayedPost.value.sample_url || displayedPost.value.file_url || ''
 })
 
 const ratingClass = computed(() => {
-  if (!post.value) return 'unknown'
-  return RATING_MAP[(post.value.rating || '').toLowerCase()] || 'unknown'
+  if (!displayedPost.value) return 'unknown'
+  return RATING_MAP[(displayedPost.value.rating || '').toLowerCase()] || 'unknown'
 })
 const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
 
 function openOriginal() {
-  if (post.value && post.value.file_url) {
-    window.open(post.value.file_url, '_blank')
+  if (displayedPost.value && displayedPost.value.file_url) {
+    window.open(displayedPost.value.file_url, '_blank')
   }
 }
 
 async function checkFav() {
-  if (!auth.isAuthenticated || !post.value) return
+  if (!auth.isAuthenticated || !displayedPost.value) return
   try {
-    const data = await apiCheckFavorite(post.value.source_site, post.value.id)
+    const data = await apiCheckFavorite(displayedPost.value.source_site, displayedPost.value.id)
     isFav.value = data.is_favorite
     favId.value = data.favorite_id
   } catch (e) {}
@@ -125,7 +158,7 @@ async function toggleFavorite() {
     toast.show(lang.t('login_to_fav'), 'error')
     return
   }
-  if (!post.value) return
+  if (!displayedPost.value) return
   try {
     if (isFav.value && favId.value) {
       await apiRemoveFavorite(favId.value)
@@ -133,9 +166,9 @@ async function toggleFavorite() {
       favId.value = null
       toast.show(lang.t('removed_fav'), 'info')
     } else {
-      await apiAddFavorite(post.value)
+      await apiAddFavorite(displayedPost.value)
       isFav.value = true
-      logFavourite(post.value)
+      logFavourite(displayedPost.value)
       toast.show(lang.t('added_fav'), 'success')
       await checkFav()
     }
@@ -144,17 +177,43 @@ async function toggleFavorite() {
   }
 }
 
+async function switchActiveSite(site: SiteName) {
+  activeSite.value = site
+  
+  // Sync router query with active version to preserve history/sharing URLs
+  if (displayedPost.value) {
+    router.replace({
+      query: {
+        ...route.query,
+        id: String(displayedPost.value.id),
+        site: displayedPost.value.source_site
+      }
+    })
+  }
+
+  await checkFav()
+}
+
 onMounted(async () => {
   const id = route.query.id as string
   const site = route.query.site as SiteName
   if (!id || !site) return
   
+  activeSite.value = site
+
   // 1. Try finding the post in memory (feed.posts) first for instant (0ms) loading
   const feed = useFeedStore()
-  const found = feed.posts.find(p => String(p.id) === id && p.source_site === site)
+  let found = feed.posts.find(p => String(p.id) === id && p.source_site === site)
+  if (!found) {
+    // Check if it's a duplicate of any post in feed.posts
+    found = feed.posts.find(p => p.duplicates?.some(d => String(d.id) === id && d.source_site === site))
+  }
+
   if (found) {
-    post.value = found
-    logView(post.value)
+    mainPost.value = found
+    if (displayedPost.value) {
+      logView(displayedPost.value)
+    }
     await checkFav()
     return
   }
@@ -163,8 +222,10 @@ onMounted(async () => {
   try {
     const data = await apiSearch(`id:${id}`, site, 1, 1)
     if (data.posts && data.posts.length > 0) {
-      post.value = data.posts[0]
-      logView(post.value)
+      mainPost.value = data.posts[0]
+      if (displayedPost.value) {
+        logView(displayedPost.value)
+      }
       await checkFav()
     }
   } catch(e) {
