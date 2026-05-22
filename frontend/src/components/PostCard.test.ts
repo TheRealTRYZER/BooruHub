@@ -120,7 +120,7 @@ describe('PostCard.vue', () => {
     expect((wrapper.vm as any).currentUrl).toBe('https://test.com/preview.jpg')
   })
 
-  it('should display aspect-ratio skeleton and trigger verification when hash is undefined', async () => {
+  it('should render main image directly and trigger verification when loaded', async () => {
     const mockVerifyingPost = {
       id: 456,
       source_site: 'danbooru',
@@ -129,7 +129,7 @@ describe('PostCard.vue', () => {
       tags: ['tag3'],
       width: 100,
       height: 150,
-      hash: undefined // No hash triggers verifying skeleton
+      hash: undefined // No hash triggers verification on load
     }
 
     const wrapper = mount(PostCard, {
@@ -146,20 +146,22 @@ describe('PostCard.vue', () => {
       }
     })
 
-    // Assert skeleton wrapper is rendered matching media aspect ratio
-    const skeleton = wrapper.find('.post-card-skeleton-wrapper')
-    expect(skeleton.exists()).toBe(true)
-    expect(skeleton.attributes('style')).toContain('aspect-ratio: 100 / 150')
+    // Assert main image is rendered matching media aspect ratio
+    const mediaContainer = wrapper.find('.post-card-media')
+    expect(mediaContainer.exists()).toBe(true)
+    expect(mediaContainer.attributes('style')).toContain('aspect-ratio: 100 / 150')
 
-    // Find the hidden background loader image
-    const hiddenLoader = wrapper.find('img[crossorigin="anonymous"]')
-    expect(hiddenLoader.exists()).toBe(true)
-    expect(hiddenLoader.attributes('src')).toBe('https://test.com/verifying.jpg')
+    // Find the main image and check that it exists
+    const mainImg = wrapper.find('img.post-card-img')
+    expect(mainImg.exists()).toBe(true)
 
     // Simulate image loaded triggering verification
-    await (wrapper.vm as any).onImageLoaded()
+    await (wrapper.vm as any).onImageLoad()
 
-    // Assert skeleton state resolves
+    // Assert main image source has resolved to the currentUrl containing test.com
+    expect(mainImg.attributes('src')).toContain('test.com')
+
+    // Assert state resolves
     expect((wrapper.vm as any).isVerifying).toBe(false)
   })
 
