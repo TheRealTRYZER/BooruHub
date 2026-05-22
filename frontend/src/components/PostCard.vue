@@ -105,7 +105,7 @@ const mediaStyle = computed(() => {
 })
 
 function calculateAverageHash(img: HTMLImageElement): string {
-  const size = 8
+  const size = 16
   const canvas = document.createElement('canvas')
   canvas.width = size
   canvas.height = size
@@ -117,6 +117,8 @@ function calculateAverageHash(img: HTMLImageElement): string {
   const data = imgData.data
   
   let sum = 0
+  let minGray = 255
+  let maxGray = 0
   const grays = new Uint8Array(size * size)
   for (let i = 0; i < data.length; i += 4) {
     const r = data[i]
@@ -125,6 +127,14 @@ function calculateAverageHash(img: HTMLImageElement): string {
     const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
     grays[i / 4] = gray
     sum += gray
+    if (gray < minGray) minGray = gray
+    if (gray > maxGray) maxGray = gray
+  }
+  
+  // Safeguard: If the image is extremely low contrast/monochrome (like a pure black or solid color frame),
+  // throw an error to fallback to metadata/URL hashes to avoid false duplicate matches.
+  if (maxGray - minGray < 5) {
+    throw new Error('Image is monochrome or extremely low contrast')
   }
   
   const avg = sum / (size * size)
@@ -142,11 +152,13 @@ function calculateAverageHash(img: HTMLImageElement): string {
 }
 
 function computePostHash(img: HTMLImageElement | null, post: Post): string {
-  if (img) {
+  // Video Safeguard: Skip canvas parsing for video/animated files because
+  // their previews are often blank, black, or highly generic cover frames
+  if (img && !isAnimated.value) {
     try {
       return calculateAverageHash(img)
     } catch (e) {
-      // SecurityError (CORS) or other canvas drawing issue
+      // SecurityError (CORS) or monochrome safeguard triggered
     }
   }
   
