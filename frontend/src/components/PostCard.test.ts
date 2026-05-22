@@ -9,6 +9,12 @@ vi.mock('vue-router', () => ({
   })
 }))
 
+// Mock our perceptual hash utility to avoid DOM Canvas errors in jsdom
+vi.mock('../utils/perceptualHash', () => ({
+  computeDifferenceHash: vi.fn(() => 'dhash-1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'),
+  hammingDistance: vi.fn(() => 0)
+}))
+
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
     writable: true,
@@ -33,7 +39,8 @@ describe('PostCard.vue', () => {
     rating: 's',
     tags: ['tag1', 'tag2'],
     width: 100,
-    height: 100
+    height: 100,
+    hash: 'existing-hash' // Set hash to render card instantly
   }
 
   it('should render post metadata correctly', () => {
@@ -78,15 +85,7 @@ describe('PostCard.vue', () => {
 
     const favBtn = wrapper.find('.post-card-fav')
     expect(favBtn.text()).toBe('🤍')
-    
-    // In actual component it calls API, here we just test internal ref isFav 
-    // which is initialized from props.favorite or false.
-    // Clicking it should trigger toggleFav()
     await favBtn.trigger('click')
-    
-    // Note: Since apiAddFavorite is imported directly, we might need to mock it
-    // but here we just check if it was clicked.
-    // A better test would check if the icon changed if we mock the API response.
   })
 
   it('should reactively update currentUrl based on feed store previewQuality', async () => {
@@ -99,7 +98,8 @@ describe('PostCard.vue', () => {
       rating: 's',
       tags: ['tag1'],
       width: 100,
-      height: 100
+      height: 100,
+      hash: 'existing-hash' // Set hash to render card instantly
     }
 
     const wrapper = mount(PostCard, {
@@ -118,5 +118,107 @@ describe('PostCard.vue', () => {
     })
 
     expect((wrapper.vm as any).currentUrl).toBe('https://test.com/preview.jpg')
+  })
+
+  it('should display aspect-ratio skeleton and trigger verification when hash is undefined', async () => {
+    const mockVerifyingPost = {
+      id: 456,
+      source_site: 'danbooru',
+      preview_url: 'https://test.com/verifying.jpg',
+      rating: 'q',
+      tags: ['tag3'],
+      width: 100,
+      height: 150,
+      hash: undefined // No hash triggers verifying skeleton
+    }
+
+    const wrapper = mount(PostCard, {
+      props: {
+        post: mockVerifyingPost as any
+      },
+      global: {
+        plugins: [createTestingPinia({
+          createSpy: vi.fn,
+          initialState: {
+            lang: { t: (key: string) => key }
+          }
+        })],
+      }
+    })
+
+    // Assert skeleton wrapper is rendered matching media aspect ratio
+    const skeleton = wrapper.find('.post-card-skeleton-wrapper')
+    expect(skeleton.exists()).toBe(true)
+    expect(skeleton.attributes('style')).toContain('aspect-ratio: 100 / 150')
+
+    // Find the hidden background loader image
+    const hiddenLoader = wrapper.find('img[crossorigin="anonymous"]')
+    expect(hiddenLoader.exists()).toBe(true)
+    expect(hiddenLoader.attributes('src')).toBe('https://test.com/verifying.jpg')
+
+    // Simulate image loaded triggering verification
+    await (wrapper.vm as any).onImageLoaded()
+
+    // Assert skeleton state resolves
+    expect((wrapper.vm as any).isVerifying).toBe(false)
+  })
+
+  it('should support switching between site versions when badges are clicked', async () => {
+    const mockMultiplePost = {
+      id: 111,
+      source_site: 'danbooru',
+      preview_url: 'https://test.com/danbooru-prev.jpg',
+      rating: 's',
+      tags: ['tag1'],
+      width: 100,
+      height: 100,
+      hash: 'resolved-hash',
+      duplicate_sites: ['rule34'],
+      duplicates: [
+        {
+          id: 222,
+          source_site: 'rule34',
+          preview_url: 'https://test.com/rule34-prev.jpg',
+          rating: 'e',
+          tags: ['tag1', 'lewd'],
+          width: 120,
+          height: 120,
+          score: 45
+        }
+      ]
+    }
+
+    const wrapper = mount(PostCard, {
+      props: {
+        post: mockMultiplePost as any
+      },
+      global: {
+        plugins: [createTestingPinia({
+          createSpy: vi.fn,
+          initialState: {
+            lang: { t: (key: string) => key }
+          }
+        })],
+      }
+    })
+
+    // Both danbooru and + rule34 badges should be present
+    const badges = wrapper.findAll('.post-card-badge.interactive-badge')
+    expect(badges.length).toBe(2)
+    expect(badges[0].text()).toBe('danbooru')
+    expect(badges[1].text()).toBe('+ rule34')
+
+    // Danbooru badge should initially be the active site version
+    expect(badges[0].classes()).toContain('active-site')
+    expect((wrapper.vm as any).activeSite).toBe('danbooru')
+    expect((wrapper.vm as any).currentUrl).toBe('https://test.com/danbooru-prev.jpg')
+
+    // Switch to Rule34 version by clicking its badge
+    await badges[1].trigger('click')
+
+    expect((wrapper.vm as any).activeSite).toBe('rule34')
+    expect((wrapper.vm as any).currentUrl).toBe('https://test.com/rule34-prev.jpg')
+    expect(wrapper.find('.post-card-rating').text()).toBe('E')
+    expect(wrapper.find('.post-card-score').text()).toBe('★ 45')
   })
 })
