@@ -104,12 +104,49 @@ function addSkeletons(count: number) {
   }
 }
 
-// Watch for new posts appended
-watch(() => props.posts.length, () => {
+// Watch for posts array changes (new search, scroll append, or duplicate removal)
+watch(() => props.posts, (newVal, oldVal) => {
+  const isNewSearch = !oldVal || newVal.length === 0 || oldVal.length === 0 ||
+                      (newVal[0] && oldVal[0] && `${newVal[0].source_site}-${newVal[0].id}` !== `${oldVal[0].source_site}-${oldVal[0].id}`)
+  
   removeSkeletons()
-  placeNewPosts()
-  setTimeout(observeNewCards, 100)
-})
+
+  if (isNewSearch) {
+    initColumns()
+    placeNewPosts()
+    setTimeout(observeNewCards, 100)
+  } else {
+    // Incremental update (duplicate deletion or infinite scroll append)
+    // 1. Remove cards that are no longer in props.posts
+    for (const col of columns.value) {
+      const filtered = col.filter(item => {
+        if (item.key.startsWith('sk-')) return true // keep manual loading skeletons
+        const [site, id] = item.key.split('-')
+        return newVal.some(p => String(p.id) === id && p.source_site === site)
+      })
+      if (filtered.length !== col.length) {
+        col.length = 0
+        col.push(...filtered)
+      }
+    }
+
+    // 2. Identify and place new posts that are not yet in columns
+    const placedKeys = new Set(columns.value.flatMap(col => col.map(item => item.key)))
+    const newPosts = newVal.filter(p => !placedKeys.has(`${p.source_site}-${p.id}`))
+    
+    for (const post of newPosts) {
+      const idx = getShortestColIndex()
+      columns.value[idx].push({
+        key: `${post.source_site}-${post.id}`,
+        component: markRaw(PostCard),
+        props: { post },
+      })
+    }
+    
+    placedCount = newVal.length
+    setTimeout(observeNewCards, 100)
+  }
+}, { deep: true, flush: 'sync' })
 
 // Watch for card size changes
 watch(() => feed.cardSize, () => {
@@ -129,14 +166,6 @@ watch(() => props.skeletonCount, (count) => {
     removeSkeletons()
   }
 })
-
-// Full reset when posts array reference changes (new search)
-watch(() => props.posts, (newVal, oldVal) => {
-  if (newVal !== oldVal || newVal.length === 0) {
-    initColumns()
-    placeNewPosts()
-  }
-}, { flush: 'sync' })
 
 function onResize() {
   const newCount = getColCount()

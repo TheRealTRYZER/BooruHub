@@ -21,6 +21,7 @@ export interface Post {
   is_dislike?: boolean
   hash?: string
   duplicate_sites?: SiteName[]
+  duplicates?: Post[]
 }
 
 export interface User {

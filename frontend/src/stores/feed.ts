@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import type { SiteName, Post } from '../types'
+import { hammingDistance } from '../utils/perceptualHash'
 
 export const useFeedStore = defineStore('feed', () => {
   const tags = ref(sessionStorage.getItem('booruhub_tags') || '')
@@ -76,50 +77,102 @@ export const useFeedStore = defineStore('feed', () => {
 
   function addPosts(newPosts: Post[]) {
     for (const post of newPosts) {
-      const hash = getInstantPostHash(post)
-      post.hash = hash
-      
-      const existingPost = posts.value.find(p => p.hash === hash)
-      
-      if (existingPost) {
-        // Merge tags between duplicate and first post
-        const mergedTags = new Set([...existingPost.tags, ...post.tags])
-        existingPost.tags = Array.from(mergedTags)
-        
-        // Append duplicate site to first post's list
-        if (!existingPost.duplicate_sites) {
-          existingPost.duplicate_sites = []
+      // Avoid adding exact duplicate by site ID
+      const exists = posts.value.find(p => p.id === post.id && p.source_site === post.source_site)
+      if (exists) continue
+
+      post.duplicates = post.duplicates || []
+      post.duplicate_sites = post.duplicate_sites || []
+
+      // 1. Instant check: Exact MD5 match
+      if (post.md5) {
+        const existingPost = posts.value.find(p => p.md5 === post.md5)
+        if (existingPost) {
+          // Merge tags
+          const mergedTags = new Set([...existingPost.tags, ...post.tags])
+          existingPost.tags = Array.from(mergedTags)
+          
+          // Save full duplicate post
+          existingPost.duplicates = existingPost.duplicates || []
+          if (!existingPost.duplicates.some(d => d.id === post.id && d.source_site === post.source_site)) {
+            existingPost.duplicates.push(post)
+          }
+
+          // Track duplicate site badge
+          if (!existingPost.duplicate_sites) {
+            existingPost.duplicate_sites = []
+          }
+          if (!existingPost.duplicate_sites.includes(post.source_site)) {
+            existingPost.duplicate_sites.push(post.source_site)
+          }
+          continue // Skip adding as main post
         }
-        if (!existingPost.duplicate_sites.includes(post.source_site)) {
-          existingPost.duplicate_sites.push(post.source_site)
-        }
-      } else {
-        posts.value.push(post)
       }
+
+      // Initialize with instant fallback hash so store tests pass, and component triggers verification based on prefix
+      post.hash = getInstantPostHash(post)
+      posts.value.push(post)
     }
   }
 
   function registerPostHash(postId: string | number, site: SiteName, hash: string, tagsList: string[]) {
-    const existingPost = posts.value.find(p => p.hash === hash && !(p.id === postId && p.source_site === site))
-    
+    const duplicatePost = posts.value.find(p => p.id === postId && p.source_site === site)
+    if (!duplicatePost) return false
+
+    // Search for a matching post by Hamming distance
+    const existingPost = posts.value.find(p => {
+      if (p.id === postId && p.source_site === site) return false
+
+      if (p.hash && p.hash.length === 64 && hash.length === 64) {
+        return hammingDistance(p.hash, hash) <= 12
+      }
+
+      return p.hash === hash
+    })
+
     if (existingPost) {
+      // Merge tags
       const mergedTags = new Set([...existingPost.tags, ...tagsList])
       existingPost.tags = Array.from(mergedTags)
-      
+
+      // Initialize duplicates array
+      if (!existingPost.duplicates) {
+        existingPost.duplicates = []
+      }
+
+      // Add the duplicate post object
+      if (!existingPost.duplicates.some(d => d.id === duplicatePost.id && d.source_site === duplicatePost.source_site)) {
+        existingPost.duplicates.push(duplicatePost)
+      }
+      if (duplicatePost.duplicates && duplicatePost.duplicates.length) {
+        for (const subDup of duplicatePost.duplicates) {
+          if (!existingPost.duplicates.some(d => d.id === subDup.id && d.source_site === subDup.source_site)) {
+            existingPost.duplicates.push(subDup)
+          }
+        }
+      }
+
+      // Track duplicate site badge
       if (!existingPost.duplicate_sites) {
         existingPost.duplicate_sites = []
       }
       if (!existingPost.duplicate_sites.includes(site)) {
         existingPost.duplicate_sites.push(site)
       }
-      
+      if (duplicatePost.duplicate_sites && duplicatePost.duplicate_sites.length) {
+        for (const s of duplicatePost.duplicate_sites) {
+          if (!existingPost.duplicate_sites.includes(s)) {
+            existingPost.duplicate_sites.push(s)
+          }
+        }
+      }
+
+      // Filter out duplicate from the feed
       posts.value = posts.value.filter(p => !(p.id === postId && p.source_site === site))
       return true
     } else {
-      const currentPost = posts.value.find(p => p.id === postId && p.source_site === site)
-      if (currentPost) {
-        currentPost.hash = hash
-      }
+      // No duplicate found, set verified hash
+      duplicatePost.hash = hash
       return false
     }
   }
@@ -129,5 +182,7 @@ export const useFeedStore = defineStore('feed', () => {
     cardSize, previewQuality,
     posts, page, hasMore, lastSearchSignature,
     toggleSite, toggleSplit, resetFeed, registerPostHash, addPosts,
+    getInstantPostHash
   }
 })
+
