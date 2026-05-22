@@ -19,6 +19,8 @@ export interface Post {
   md5: string | null
   created_at: string | null
   is_dislike?: boolean
+  hash?: string
+  duplicate_sites?: SiteName[]
 }
 
 export interface User {

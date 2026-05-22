@@ -8,12 +8,17 @@
            :alt="'Post ' + post.id"
            loading="lazy"
            :style="{ opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease-in-out', width: '100%', height: '100%', objectFit: 'cover' }"
-           @load="loaded = true"
+           @load="onImageLoad"
            @error="onError" />
     </div>
     <div class="post-card-overlay">
       <div class="post-card-meta">
         <span class="post-card-badge" :class="post.source_site">{{ post.source_site }}</span>
+        <template v-if="post.duplicate_sites && post.duplicate_sites.length">
+          <span v-for="dupSite in post.duplicate_sites" :key="dupSite" class="post-card-badge duplicate-badge" :class="dupSite" :title="'Duplicate found on ' + dupSite">
+            + {{ dupSite }}
+          </span>
+        </template>
         <span class="post-card-rating" :class="ratingClass">{{ ratingLabel }}</span>
         <span v-if="isAnimated && !isFlash" class="post-card-badge" style="background:#ff4757;color:white;">▶</span>
         <span v-if="isFlash" class="post-card-badge" style="background:#f1c40f;color:black;font-weight:bold;">FLASH</span>
@@ -98,6 +103,86 @@ const mediaStyle = computed(() => {
   }
   return { minHeight: '200px', background: 'var(--bg-secondary)', overflow: 'hidden' }
 })
+
+function calculateAverageHash(img: HTMLImageElement): string {
+  const size = 8
+  const canvas = document.createElement('canvas')
+  canvas.width = size
+  canvas.height = size
+  const ctx = canvas.getContext('2d')
+  if (!ctx) throw new Error('Could not get 2d context')
+  
+  ctx.drawImage(img, 0, 0, size, size)
+  const imgData = ctx.getImageData(0, 0, size, size)
+  const data = imgData.data
+  
+  let sum = 0
+  const grays = new Uint8Array(size * size)
+  for (let i = 0; i < data.length; i += 4) {
+    const r = data[i]
+    const g = data[i + 1]
+    const b = data[i + 2]
+    const gray = Math.round(0.299 * r + 0.587 * g + 0.114 * b)
+    grays[i / 4] = gray
+    sum += gray
+  }
+  
+  const avg = sum / (size * size)
+  let hash = ''
+  for (let i = 0; i < grays.length; i++) {
+    hash += grays[i] >= avg ? '1' : '0'
+  }
+  
+  let hexHash = ''
+  for (let i = 0; i < hash.length; i += 4) {
+    const chunk = hash.substring(i, i + 4)
+    hexHash += parseInt(chunk, 2).toString(16)
+  }
+  return hexHash
+}
+
+function computePostHash(img: HTMLImageElement | null, post: Post): string {
+  if (img) {
+    try {
+      return calculateAverageHash(img)
+    } catch (e) {
+      // SecurityError (CORS) or other canvas drawing issue
+    }
+  }
+  
+  if (post.md5) {
+    return `md5-${post.md5}`
+  }
+  
+  const fileUrl = post.file_url || post.sample_url || post.preview_url || ''
+  if (fileUrl) {
+    const filename = fileUrl.substring(fileUrl.lastIndexOf('/') + 1)
+    let hash = 0
+    for (let i = 0; i < filename.length; i++) {
+      const char = filename.charCodeAt(i)
+      hash = (hash << 5) - hash + char
+      hash |= 0
+    }
+    return `fn-${hash}`
+  }
+  
+  return `id-${post.source_site}-${post.id}`
+}
+
+function onImageLoad(e: Event) {
+  const img = e.target as HTMLImageElement
+  if (img.src && img.src.startsWith('data:')) {
+    // Placeholder loaded, triggers real URL load
+    loaded.value = true
+    return
+  }
+  
+  loaded.value = true
+  
+  // Calculate average hash or fallback hash, and register in Pinia store
+  const hash = computePostHash(img, props.post)
+  feed.registerPostHash(props.post.id, props.post.source_site, hash, props.post.tags)
+}
 
 function onError() {
   const p = props.post
