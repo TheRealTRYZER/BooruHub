@@ -121,7 +121,7 @@ function setupObserver() {
         loadMore()
       }
     },
-    { rootMargin: '400px' }
+    { rootMargin: '2500px' }
   )
   nextTick(() => {
     if (sentinelRef.value) observer!.observe(sentinelRef.value)
