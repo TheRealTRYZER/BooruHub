@@ -76,38 +76,31 @@ describe('Feed Store', () => {
     expect(JSON.parse(localStorage.getItem('booruhub_sites') || '[]')).toEqual(['e621', 'rule34'])
   })
 
-  describe('Post Deduplication (registerPostHash)', () => {
-    it('should register a hash for a single post and return false', () => {
+  describe('Post Deduplication (addPosts & MD5)', () => {
+    it('should add unique posts and calculate their hash instantly', () => {
       const store = useFeedStore()
-      const post = { id: 1, source_site: 'danbooru', tags: ['safe', 'solo'], rating: 'g', score: 10 } as any
-      store.posts = [post]
-
-      const duplicateFound = store.registerPostHash(1, 'danbooru', 'abc123hash', ['safe', 'solo'])
-      expect(duplicateFound).toBe(false)
-      expect(store.posts[0].hash).toBe('abc123hash')
+      const post = { id: 1, source_site: 'danbooru', md5: 'abc123md5', tags: ['safe', 'solo'], rating: 'g', score: 10 } as any
+      
+      store.addPosts([post])
+      expect(store.posts).toHaveLength(1)
+      expect(store.posts[0].hash).toBe('md5-abc123md5')
     })
 
-    it('should deduplicate when a matching hash is found, merging tags and updating duplicate sites', () => {
+    it('should instantly filter duplicates, merge tags, and aggregate site badges upon adding', () => {
       const store = useFeedStore()
-      const post1 = { id: 1, source_site: 'danbooru', tags: ['safe', 'solo'], rating: 'g', score: 10 } as any
-      const post2 = { id: 2, source_site: 'e621', tags: ['funny', 'solo', 'digital_media'], rating: 'g', score: 15 } as any
+      const post1 = { id: 1, source_site: 'danbooru', md5: 'match_md5', tags: ['safe', 'solo'], rating: 'g', score: 10 } as any
+      const post2 = { id: 2, source_site: 'e621', md5: 'match_md5', tags: ['funny', 'solo', 'digital_media'], rating: 'g', score: 15 } as any
       
-      store.posts = [post1, post2]
+      store.addPosts([post1, post2])
 
-      // Register hash for first post (no duplicate yet)
-      const dup1 = store.registerPostHash(1, 'danbooru', 'hashA', ['safe', 'solo'])
-      expect(dup1).toBe(false)
-
-      // Register hash for second post (duplicate of first)
-      const dup2 = store.registerPostHash(2, 'e621', 'hashA', ['funny', 'solo', 'digital_media'])
-      expect(dup2).toBe(true)
-
-      // First post should survive and have merged tags (unique tags only)
+      // Only the first post should survive in the store
       expect(store.posts).toHaveLength(1)
       expect(store.posts[0].id).toBe(1)
+      
+      // Tags must be merged correctly
       expect(store.posts[0].tags.sort()).toEqual(['digital_media', 'funny', 'safe', 'solo'].sort())
-
-      // First post should list e621 as a duplicate site
+      
+      // The duplicate site name must be added to duplicate_sites badge list
       expect(store.posts[0].duplicate_sites).toEqual(['e621'])
     })
   })

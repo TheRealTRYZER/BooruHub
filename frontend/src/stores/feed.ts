@@ -54,6 +54,51 @@ export const useFeedStore = defineStore('feed', () => {
     hasMore.value = true
   }
 
+  function getInstantPostHash(post: Post): string {
+    if (post.md5) {
+      return `md5-${post.md5}`
+    }
+    
+    const fileUrl = post.file_url || post.sample_url || post.preview_url || ''
+    if (fileUrl) {
+      const filename = fileUrl.substring(fileUrl.lastIndexOf('/') + 1)
+      let hash = 0
+      for (let i = 0; i < filename.length; i++) {
+        const char = filename.charCodeAt(i)
+        hash = (hash << 5) - hash + char
+        hash |= 0
+      }
+      return `fn-${hash}`
+    }
+    
+    return `id-${post.source_site}-${post.id}`
+  }
+
+  function addPosts(newPosts: Post[]) {
+    for (const post of newPosts) {
+      const hash = getInstantPostHash(post)
+      post.hash = hash
+      
+      const existingPost = posts.value.find(p => p.hash === hash)
+      
+      if (existingPost) {
+        // Merge tags between duplicate and first post
+        const mergedTags = new Set([...existingPost.tags, ...post.tags])
+        existingPost.tags = Array.from(mergedTags)
+        
+        // Append duplicate site to first post's list
+        if (!existingPost.duplicate_sites) {
+          existingPost.duplicate_sites = []
+        }
+        if (!existingPost.duplicate_sites.includes(post.source_site)) {
+          existingPost.duplicate_sites.push(post.source_site)
+        }
+      } else {
+        posts.value.push(post)
+      }
+    }
+  }
+
   function registerPostHash(postId: string | number, site: SiteName, hash: string, tagsList: string[]) {
     const existingPost = posts.value.find(p => p.hash === hash && !(p.id === postId && p.source_site === site))
     
@@ -83,6 +128,6 @@ export const useFeedStore = defineStore('feed', () => {
     tags, siteTags, ratios, isSplit, sites,
     cardSize, previewQuality,
     posts, page, hasMore, lastSearchSignature,
-    toggleSite, toggleSplit, resetFeed, registerPostHash,
+    toggleSite, toggleSplit, resetFeed, registerPostHash, addPosts,
   }
 })

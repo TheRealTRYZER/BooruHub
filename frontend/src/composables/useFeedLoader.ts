@@ -58,7 +58,7 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
 
       if (newPosts.length > 0) {
         correctedTags.value = null
-        feed.posts = [...basePosts, ...newPosts]
+        feed.addPosts(newPosts)
         skeletonCount.value = 0
       }
 
