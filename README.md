@@ -28,4 +28,8 @@ Copy `.env.example` to `.env` and generate fresh values before exposing the stac
 ---
 
 ## License
-This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.s
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details
+
+---
+
+Completely vibecoded
