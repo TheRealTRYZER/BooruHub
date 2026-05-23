@@ -194,12 +194,12 @@ def _are_duplicates(a: dict, b: dict) -> bool:
         id_b = _extract_source_id(src_b)
         if id_a and id_b and id_a == id_b:
             # If they have different MD5s, they might be different pages of the same gallery.
-            # So only match if they also share at least 5 tags or have >= 60% Jaccard similarity.
+            # Only match if they share at least 60% of their tags (Jaccard similarity).
             tags_a = set(a.get("tags", []))
             tags_b = set(b.get("tags", []))
             if tags_a and tags_b:
                 intersection = tags_a & tags_b
-                if len(intersection) >= 5 or len(intersection) / len(tags_a | tags_b) >= 0.60:
+                if len(intersection) / len(tags_a | tags_b) >= 0.60:
                     return True
             else:
                 return True
@@ -212,7 +212,7 @@ def _are_duplicates(a: dict, b: dict) -> bool:
             tags_a = set(a.get("tags", []))
             tags_b = set(b.get("tags", []))
             intersection = tags_a & tags_b
-            if len(intersection) >= 6 or (tags_a and len(intersection) / len(tags_a | tags_b) >= 0.50):
+            if tags_a and len(intersection) / len(tags_a | tags_b) >= 0.60:
                 return True
                 
         # 4. Aspect Ratio match + sharing a high amount of tags
@@ -222,7 +222,7 @@ def _are_duplicates(a: dict, b: dict) -> bool:
             tags_a = set(a.get("tags", []))
             tags_b = set(b.get("tags", []))
             intersection = tags_a & tags_b
-            if len(intersection) >= 8 or (tags_a and len(intersection) / len(tags_a | tags_b) >= 0.55):
+            if tags_a and len(intersection) / len(tags_a | tags_b) >= 0.60:
                 return True
 
     return False
