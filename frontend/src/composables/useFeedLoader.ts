@@ -56,11 +56,13 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
         correctedTags.value = data.corrected_tags
       }
 
+      const previousCount = feed.posts.length
       if (newPosts.length > 0) {
         correctedTags.value = null
         feed.addPosts(newPosts)
         skeletonCount.value = 0
       }
+      const addedCount = feed.posts.length - previousCount
 
       const unfiltered = data.unfiltered_count || 0
       if (unfiltered === 0 || newPosts.length === 0) {
@@ -72,6 +74,12 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
           if (feed.hasMore && gen === loadGeneration) {
             setTimeout(() => { if (gen === loadGeneration) loadMore(sentinel) }, 50)
           }
+        }
+      } else if (addedCount === 0 && feed.hasMore) {
+        // All fetched posts were duplicates and skipped — automatically fetch next page
+        feed.page++
+        if (gen === loadGeneration) {
+          setTimeout(() => { if (gen === loadGeneration) loadMore(sentinel) }, 50)
         }
       } else {
         feed.page++
