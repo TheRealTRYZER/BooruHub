@@ -190,10 +190,10 @@ class BaseBooru(ABC):
             data = resp.json()
         except httpx.HTTPStatusError as e:
             logger.warning(f"[{self.__class__.__name__}] HTTP {e.response.status_code} for tags='{tags}'")
-            return [], 0
+            return [], -1
         except httpx.RequestError as e:
             logger.error(f"[{self.__class__.__name__}] Network error: {e}")
-            return [], 0
+            return [], -1
 
         # Unwrap posts from wrapper if needed (e.g. e621's {"posts": [...]})
         if self.is_wrapped:
