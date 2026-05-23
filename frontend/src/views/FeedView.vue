@@ -1,4 +1,4 @@
-<template>
+ <template>
   <div>
     <div class="search-bar">
       <div style="display:flex; flex-direction:column; gap:8px;">
