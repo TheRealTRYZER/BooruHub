@@ -175,7 +175,7 @@ export type TranslationKey =
   | 'no_favorites' | 'empty_list' | 'add_favorites_hint' | 'error_load_favorites'
   | 'settings_title' | 'settings_subtitle' | 'profile' | 'start_tags'
   | 'save_settings' | 'settings_saved'
-  | 'api_keys_section' | 'search_params' | 'posts_limit' | 'search_interval' | 'search_timeout' | 'advanced_settings' | 'root_margin'
+  | 'api_keys_section' | 'search_params' | 'posts_limit' | 'search_interval' | 'search_timeout' | 'advanced_settings' | 'root_margin' | 'search_timeout_desc' | 'search_interval_desc'
   | 'keys_not_set' | 'keys_configured' | 'api_error'
   | 'manual_mappings' | 'add_mapping' | 'update_mapping'
   | 'mapping_saved' | 'mapping_created' | 'mapping_deleted'

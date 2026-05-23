@@ -95,12 +95,14 @@
               <div>
                 <label class="input-label" style="font-size:10px;">{{ lang.t('search_timeout') }}</label>
                 <input type="number" class="input btn-sm" v-model.number="keys.search_timeout" min="1" max="120">
+                <div style="font-size:9px;color:var(--text-muted);margin-top:4px;line-height:1.2;">{{ lang.t('search_timeout_desc') }}</div>
               </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
               <div>
                 <label class="input-label" style="font-size:10px;">{{ lang.t('search_interval') }}</label>
                 <input type="number" class="input btn-sm" v-model.number="keys.search_interval" min="0" max="10" step="0.1">
+                <div style="font-size:9px;color:var(--text-muted);margin-top:4px;line-height:1.2;">{{ lang.t('search_interval_desc') }}</div>
               </div>
               <div>
                 <label class="input-label" style="font-size:10px;">{{ lang.t('root_margin') }}</label>
