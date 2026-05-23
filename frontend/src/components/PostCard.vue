@@ -1,7 +1,7 @@
 <template>
   <div ref="cardRef" v-show="!hidden" class="post-card" @click="handleCardClick"
        @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"
-       :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200) }">
+       :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200), willChange: swiping ? 'transform, opacity' : 'auto' }">
     
     <!-- Main Content (Always Visible Instantly) -->
     <div class="post-card-media" :style="mediaStyle">
@@ -9,6 +9,7 @@
            :src="loaded ? currentUrl : placeholder"
            :alt="'Post ' + displayedPost.id"
            loading="lazy"
+           decoding="async"
            :style="{ opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease-in-out', width: '100%', height: '100%', objectFit: 'cover' }"
            @load="onImageLoad"
            @error="onError" />

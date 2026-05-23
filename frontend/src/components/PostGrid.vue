@@ -118,13 +118,14 @@ watch(() => props.posts, (newVal, oldVal) => {
     placeNewPosts()
     setTimeout(observeNewCards, 100)
   } else {
-    // Incremental update (duplicate deletion or infinite scroll append)
-    // 1. Remove cards that are no longer in props.posts
+    // 1. Build a lookup set of active post keys in O(M) time
+    const activeKeys = new Set(newVal.map(p => `${p.source_site}-${p.id}`))
+
+    // 2. Filter out deleted cards in O(N) time
     for (const col of columns.value) {
       const filtered = col.filter(item => {
         if (item.key.startsWith('sk-')) return true // keep manual loading skeletons
-        const [site, id] = item.key.split('-')
-        return newVal.some(p => String(p.id) === id && p.source_site === site)
+        return activeKeys.has(item.key)
       })
       if (filtered.length !== col.length) {
         col.length = 0
@@ -132,7 +133,7 @@ watch(() => props.posts, (newVal, oldVal) => {
       }
     }
 
-    // 2. Identify and place new posts that are not yet in columns
+    // 3. Identify and place new posts that are not yet in columns in O(N + M) time
     const placedKeys = new Set(columns.value.flatMap(col => col.map(item => item.key)))
     const newPosts = newVal.filter(p => !placedKeys.has(`${p.source_site}-${p.id}`))
     
@@ -148,7 +149,7 @@ watch(() => props.posts, (newVal, oldVal) => {
     placedCount = newVal.length
     setTimeout(observeNewCards, 100)
   }
-}, { deep: true, flush: 'sync' })
+})
 
 // Watch for card size changes
 watch(() => feed.cardSize, () => {
@@ -185,18 +186,20 @@ let impressionTracker: ReturnType<typeof createImpressionObserver> | null = null
 function observeNewCards() {
   if (!gridEl.value || !impressionTracker) return
   const cards = gridEl.value.querySelectorAll('.post-card:not([data-observed])')
+  if (cards.length === 0) return
+
+  // Build a fast lookup Map of props.posts in O(N)
+  const postMap = new Map<string, Post>()
+  for (const post of props.posts) {
+    postMap.set(`${post.source_site}-${post.id}`, post)
+  }
+
   cards.forEach((el) => {
     const key = (el as HTMLElement).closest('[data-post-key]')?.getAttribute('data-post-key') || ''
-    // Find the post by parsing the key (format: site-id)
-    const sep = key.indexOf('-')
-    if (sep > 0) {
-      const site = key.substring(0, sep)
-      const id = key.substring(sep + 1)
-      const post = props.posts.find(p => String(p.id) === id && p.source_site === site)
-      if (post) {
-        impressionTracker!.observe(el as HTMLElement, post)
-        el.setAttribute('data-observed', '1')
-      }
+    const post = postMap.get(key)
+    if (post) {
+      impressionTracker!.observe(el as HTMLElement, post)
+      el.setAttribute('data-observed', '1')
     }
   })
 }
