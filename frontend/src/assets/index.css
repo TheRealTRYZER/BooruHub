@@ -337,8 +337,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   background: var(--bg-card); border-radius: var(--border-radius);
   overflow: hidden; cursor: pointer;
   transition: transform 0.2s var(--ease-out), box-shadow 0.2s;
-  content-visibility: auto;
-  contain-intrinsic-size: auto 250px;
+  transform: translate3d(0,0,0);
+  backface-visibility: hidden;
 }
 .post-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.4); }
 .post-card-media { background: var(--bg-secondary); overflow: hidden; }
