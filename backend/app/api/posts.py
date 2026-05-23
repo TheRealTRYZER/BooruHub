@@ -69,6 +69,8 @@ class PostResponse(BaseModel):
     tags: List[str] = []
     md5: Optional[str] = None
     is_dislike: Optional[bool] = False
+    duplicate_sites: Optional[List[str]] = None
+    duplicates: Optional[List["PostResponse"]] = None
 
 
 class FeedResponse(BaseModel):
