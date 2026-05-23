@@ -177,6 +177,9 @@ def _extract_source_id(source_url: str) -> Optional[str]:
     return None
 
 def _are_duplicates(a: dict, b: dict) -> bool:
+    if a.get("source_site") and b.get("source_site") and a.get("source_site") == b.get("source_site"):
+        return False
+
     # 1. Compare MD5s (either direct or from URL)
     md5_a = (a.get("md5") or "").strip().lower() or _extract_md5_from_url(a.get("file_url") or "") or _extract_md5_from_url(a.get("sample_url") or "")
     md5_b = (b.get("md5") or "").strip().lower() or _extract_md5_from_url(b.get("file_url") or "") or _extract_md5_from_url(b.get("sample_url") or "")
@@ -190,25 +193,36 @@ def _are_duplicates(a: dict, b: dict) -> bool:
         id_a = _extract_source_id(src_a)
         id_b = _extract_source_id(src_b)
         if id_a and id_b and id_a == id_b:
-            return True
+            # If they have different MD5s, they might be different pages of the same gallery.
+            # So only match if they also share at least 5 tags or have >= 60% Jaccard similarity.
+            tags_a = set(a.get("tags", []))
+            tags_b = set(b.get("tags", []))
+            if tags_a and tags_b:
+                intersection = tags_a & tags_b
+                if len(intersection) >= 5 or len(intersection) / len(tags_a | tags_b) >= 0.60:
+                    return True
+            else:
+                return True
 
-    # 3. Exact Dimension match + sharing at least 3 tags
+    # 3. Exact Dimension match + sharing a high amount of tags
     w_a, h_a = a.get("width"), a.get("height")
     w_b, h_b = b.get("width"), b.get("height")
     if w_a and h_a and w_b and h_b and w_a > 100 and h_a > 100:
-        if w_a == w_b and h_a == h_b and a.get("source_site") != b.get("source_site"):
+        if w_a == w_b and h_a == h_b:
             tags_a = set(a.get("tags", []))
             tags_b = set(b.get("tags", []))
-            if len(tags_a & tags_b) >= 3:
+            intersection = tags_a & tags_b
+            if len(intersection) >= 6 or (tags_a and len(intersection) / len(tags_a | tags_b) >= 0.50):
                 return True
                 
-        # 4. Aspect Ratio match + sharing at least 8 tags (for scaled/resized duplicates)
+        # 4. Aspect Ratio match + sharing a high amount of tags
         ratio_a = w_a / h_a
         ratio_b = w_b / h_b
-        if abs(ratio_a - ratio_b) / max(ratio_a, ratio_b) < 0.005 and a.get("source_site") != b.get("source_site"):
+        if abs(ratio_a - ratio_b) / max(ratio_a, ratio_b) < 0.005:
             tags_a = set(a.get("tags", []))
             tags_b = set(b.get("tags", []))
-            if len(tags_a & tags_b) >= 8:
+            intersection = tags_a & tags_b
+            if len(intersection) >= 8 or (tags_a and len(intersection) / len(tags_a | tags_b) >= 0.55):
                 return True
 
     return False
