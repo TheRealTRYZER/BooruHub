@@ -83,14 +83,14 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
         }
       } else {
         feed.page++
-        // Pre-fetch if sentinel is still visible
+        // Pre-fetch if sentinel is still within the observer's rootMargin threshold
         if (sentinel) {
           setTimeout(() => {
             if (gen === loadGeneration && sentinel && !loading.value && feed.hasMore) {
               const rect = sentinel.getBoundingClientRect()
-              if (rect.top <= window.innerHeight + 800) loadMore(sentinel)
+              if (rect.top <= window.innerHeight + feed.rootMargin) loadMore(sentinel)
             }
-          }, 500)
+          }, 300)
         }
       }
     } catch (e: any) {
