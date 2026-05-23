@@ -3,17 +3,23 @@
        @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"
        :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200) }">
     
+    <!-- Main Content (Always Visible Instantly) -->
     <div class="post-card-media" :style="mediaStyle">
-      <img ref="imgRef"
-           class="post-card-img"
+      <img class="post-card-img"
            :src="loaded ? currentUrl : placeholder"
            :alt="'Post ' + displayedPost.id"
            loading="lazy"
-           crossorigin="anonymous"
            :style="{ opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease-in-out', width: '100%', height: '100%', objectFit: 'cover' }"
            @load="onImageLoad"
            @error="onError" />
     </div>
+
+    <!-- Background Loaders for Hashing (Mounted Lazily in Background) -->
+    <template v-if="isVerifying && isInViewport">
+      <video v-if="isAnimated" ref="videoLoaderRef" :src="currentUrl" muted playsinline crossorigin="anonymous" style="display: none;" @loadeddata="onVideoLoaded" @error="onHashError"></video>
+      <img v-else ref="imgLoaderRef" :src="currentUrl" crossorigin="anonymous" style="display: none;" @load="onImageLoaded" @error="onHashError" />
+    </template>
+
     <div class="post-card-overlay">
       <div class="post-card-meta">
         <!-- Clickable Interactive Version Switcher Badges -->
@@ -81,7 +87,8 @@ const isVerifying = ref(
 const isInViewport = ref(typeof window === 'undefined' || !('IntersectionObserver' in window))
 const activeSite = ref<SiteName>(props.post.source_site)
 
-const imgRef = ref<HTMLImageElement | null>(null)
+const imgLoaderRef = ref<HTMLImageElement | null>(null)
+const videoLoaderRef = ref<HTMLVideoElement | null>(null)
 
 // Computed list of all site versions for this post
 const allSites = computed<SiteName[]>(() => {
@@ -150,20 +157,42 @@ const mediaStyle = computed(() => {
   return { minHeight: '200px', background: 'var(--bg-secondary)', overflow: 'hidden' }
 })
 
-// Lazy verification logic using the main rendered image element
-function checkAndVerify() {
-  if (isVerifying.value && isInViewport.value && loaded.value) {
-    const imgEl = imgRef.value
-    const isTest = import.meta.env?.MODE === 'test'
-    if (isTest || (imgEl && imgEl.complete && imgEl.naturalWidth > 0)) {
-      performVerification(imgEl)
-    } else if (imgEl && imgEl.complete && imgEl.naturalWidth === 0) {
-      performVerification(null)
-    }
+// Hashing Callbacks
+function onImageLoaded() {
+  const img = imgLoaderRef.value
+  if (img) {
+    performVerification(img)
   }
 }
 
-function performVerification(mediaEl: HTMLImageElement | null) {
+let videoTimeout: ReturnType<typeof setTimeout> | null = null
+
+function onVideoLoaded() {
+  const video = videoLoaderRef.value
+  if (!video) return
+  
+  // Seek to 1s or half duration to get a real frame instead of black screen
+  const seekTime = Math.min(1.0, video.duration / 2 || 0)
+  video.currentTime = seekTime
+  
+  // Set a backup timeout of 2 seconds in case seeked doesn't fire
+  videoTimeout = setTimeout(() => {
+    if (isVerifying.value) {
+      performVerification(video)
+    }
+  }, 2000)
+
+  video.addEventListener('seeked', () => {
+    if (videoTimeout) clearTimeout(videoTimeout)
+    performVerification(video)
+  }, { once: true })
+}
+
+function onHashError() {
+  performVerification(null)
+}
+
+function performVerification(mediaEl: HTMLImageElement | HTMLVideoElement | null) {
   if (!isVerifying.value) return
 
   let hash = ''
@@ -184,6 +213,8 @@ function performVerification(mediaEl: HTMLImageElement | null) {
   
   if (!isDuplicate) {
     isVerifying.value = false
+    loaded.value = false
+    updateUrl()
   }
 }
 
@@ -195,7 +226,6 @@ function switchActiveSite(site: SiteName) {
 
 function onImageLoad() {
   loaded.value = true
-  checkAndVerify()
 }
 
 function onError() {
@@ -221,7 +251,6 @@ function onError() {
   }
 
   loaded.value = true
-  checkAndVerify()
 }
 
 async function toggleFav() {
@@ -287,29 +316,35 @@ function updateMobileState() {
 }
 
 let observer: IntersectionObserver | null = null
+let hashTimeout: ReturnType<typeof setTimeout> | null = null
 
 onMounted(() => {
   updateUrl()
   updateMobileState()
   window.addEventListener('resize', updateMobileState)
 
-  if (isVerifying.value) {
-    if (!isInViewport.value) {
-      observer = new IntersectionObserver((entries) => {
-        if (entries[0].isIntersecting) {
-          isInViewport.value = true
-          checkAndVerify()
-          observer?.disconnect()
-          observer = null
+  if (isVerifying.value && !isInViewport.value) {
+    observer = new IntersectionObserver((entries) => {
+      const entry = entries[0]
+      if (entry.isIntersecting) {
+        if (!hashTimeout) {
+          hashTimeout = setTimeout(() => {
+            isInViewport.value = true
+            observer?.disconnect()
+            observer = null
+          }, 350) // 350ms debounce to prevent load thrashing on fast scrolls
         }
-      }, {
-        rootMargin: '200px'
-      })
-      if (cardRef.value) {
-        observer.observe(cardRef.value)
+      } else {
+        if (hashTimeout) {
+          clearTimeout(hashTimeout)
+          hashTimeout = null
+        }
       }
-    } else {
-      checkAndVerify()
+    }, {
+      rootMargin: '150px'
+    })
+    if (cardRef.value) {
+      observer.observe(cardRef.value)
     }
   }
 })
@@ -317,6 +352,8 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', updateMobileState)
   if (tapTimeout) clearTimeout(tapTimeout)
+  if (videoTimeout) clearTimeout(videoTimeout)
+  if (hashTimeout) clearTimeout(hashTimeout)
   if (observer) {
     observer.disconnect()
     observer = null

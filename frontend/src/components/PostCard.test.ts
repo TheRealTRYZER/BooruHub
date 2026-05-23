@@ -151,17 +151,15 @@ describe('PostCard.vue', () => {
     expect(mediaContainer.exists()).toBe(true)
     expect(mediaContainer.attributes('style')).toContain('aspect-ratio: 100 / 150')
 
-    // Find the main image and check that it exists
-    const mainImg = wrapper.find('img.post-card-img')
-    expect(mainImg.exists()).toBe(true)
+    // Find the hidden background loader image (rendered immediately in test environment fallback)
+    const hiddenLoader = wrapper.find('img[crossorigin="anonymous"]')
+    expect(hiddenLoader.exists()).toBe(true)
+    expect(hiddenLoader.attributes('src')).toBe('https://test.com/verifying.jpg')
 
-    // Simulate image loaded triggering verification
-    await (wrapper.vm as any).onImageLoad()
+    // Simulate background image loaded triggering verification
+    await (wrapper.vm as any).onImageLoaded()
 
-    // Assert main image source has resolved to the currentUrl containing test.com
-    expect(mainImg.attributes('src')).toContain('test.com')
-
-    // Assert state resolves
+    // Assert verification state resolves
     expect((wrapper.vm as any).isVerifying).toBe(false)
   })
 
