@@ -345,7 +345,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .post-card-img { width: 100%; display: block; object-fit: cover; }
 .post-card-overlay {
   position: absolute; bottom: 0; left: 0; right: 0;
-  padding: 30px 12px 12px;
+  padding: clamp(15px, calc(var(--card-size) * 0.12), 45px) clamp(6px, calc(var(--card-size) * 0.048), 18px) clamp(6px, calc(var(--card-size) * 0.048), 18px);
   background: linear-gradient(transparent, rgba(0,0,0,0.9));
   opacity: 0; transition: opacity 0.2s;
   pointer-events: none;
@@ -353,9 +353,11 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .post-card:hover .post-card-overlay {
   opacity: 1;
 }
-.post-card-meta { display: flex; gap: 6px; flex-wrap: wrap; }
+.post-card-meta { display: flex; gap: clamp(2px, calc(var(--card-size) * 0.024), 10px); flex-wrap: wrap; }
 .post-card-badge {
-  padding: 2px 6px; font-size: 10px; font-weight: 700; border-radius: 4px;
+  padding: clamp(1px, calc(var(--card-size) * 0.008), 4px) clamp(3px, calc(var(--card-size) * 0.024), 10px);
+  font-size: clamp(6px, calc(var(--card-size) * 0.04), 14px);
+  font-weight: 700; border-radius: 4px;
   background: rgba(255,255,255,0.2); color: #fff; text-transform: uppercase;
 }
 .post-card-badge.danbooru { background: var(--danbooru); }
@@ -363,21 +365,33 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 .post-card-badge.rule34 { background: var(--rule34); color: #222; }
 
 .post-card-rating {
-  padding: 2px 6px; font-size: 10px; font-weight: 700; border-radius: 4px;
+  padding: clamp(1px, calc(var(--card-size) * 0.008), 4px) clamp(3px, calc(var(--card-size) * 0.024), 10px);
+  font-size: clamp(6px, calc(var(--card-size) * 0.04), 14px);
+  font-weight: 700; border-radius: 4px;
 }
 .post-card-rating.safe { background: #2ecc71; color: #fff; }
 .post-card-rating.questionable { background: #f39c12; color: #fff; }
 .post-card-rating.explicit { background: #e74c3c; color: #fff; }
 
 .post-card-fav, .post-card-dislike {
-  position: absolute; right: 8px;
-  width: 32px; height: 32px; border-radius: 50%;
+  position: absolute;
+  right: clamp(4px, calc(var(--card-size) * 0.032), 16px);
+  width: clamp(16px, calc(var(--card-size) * 0.128), 48px);
+  height: clamp(16px, calc(var(--card-size) * 0.128), 48px);
+  border-radius: 50%;
   background: rgba(0,0,0,0.5); color: #fff; border: none;
   display: flex; align-items: center; justify-content: center;
-  font-size: 14px; cursor: pointer; opacity: 0; transition: all 0.2s;
+  font-size: clamp(8px, calc(var(--card-size) * 0.056), 20px);
+  cursor: pointer; opacity: 0; transition: all 0.2s;
 }
-.post-card-fav { top: 8px; }
-.post-card-dislike { top: 48px; }
+.post-card-fav { top: clamp(4px, calc(var(--card-size) * 0.032), 16px); }
+.post-card-dislike { top: clamp(24px, calc(var(--card-size) * 0.192), 72px); }
+
+.post-card-score {
+  font-size: clamp(7px, calc(var(--card-size) * 0.048), 16px);
+  font-weight: 600;
+  color: #fff;
+}
 
 .post-card:hover .post-card-fav, .post-card:hover .post-card-dislike { opacity: 1; }
 .post-card-fav:hover, .post-card-dislike:hover { background: rgba(0,0,0,0.8); transform: scale(1.1); }
