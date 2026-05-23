@@ -118,7 +118,7 @@ class Danbooru(BaseBooru):
             data = resp.json()
         except (httpx.HTTPStatusError, httpx.RequestError) as e:
             logger.warning(f"[Danbooru] Fetch failed: {e}")
-            return [], 0
+            return [], -1
 
         raw_posts = data if isinstance(data, list) else []
         normalised = []
