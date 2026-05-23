@@ -339,7 +339,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   transition: transform 0.2s var(--ease-out), box-shadow 0.2s;
   transform: translate3d(0,0,0);
   backface-visibility: hidden;
-  --r-unit: min(1px, calc(var(--card-size, 250px) / 150));
+  --r-unit: min(1, calc(var(--card-size, 250px) / 150px));
 }
 .post-card:hover { transform: translateY(-4px); box-shadow: 0 12px 24px rgba(0,0,0,0.4); }
 .post-card-media { background: var(--bg-secondary); overflow: hidden; }
