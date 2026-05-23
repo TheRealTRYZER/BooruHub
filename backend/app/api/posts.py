@@ -71,6 +71,8 @@ class PostResponse(BaseModel):
     is_dislike: Optional[bool] = False
     duplicate_sites: Optional[List[str]] = None
     duplicates: Optional[List["PostResponse"]] = None
+    parent_id: Optional[int] = None
+    has_children: Optional[bool] = False
 
 
 class FeedResponse(BaseModel):

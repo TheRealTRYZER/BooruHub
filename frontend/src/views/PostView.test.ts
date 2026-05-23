@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createTestingPinia } from '@pinia/testing'
 import PostView from './PostView.vue'
 import { useFeedStore } from '../stores/feed'
+import { useLangStore } from '../stores/lang'
 
 const mockRoute = {
   query: { id: '123', site: 'danbooru' }
@@ -180,5 +181,108 @@ describe('PostView.vue', () => {
     expect((wrapper.vm as any).activeSite).toBe('rule34')
     expect((wrapper.vm as any).mediaUrl).toBe('https://test.com/rule34.jpg')
     expect(wrapper.find('.post-card-rating').text()).toBe('E')
+  })
+
+  it('should render parent/child relationships panel if parent_id or has_children exists', async () => {
+    const mockPostWithParent = {
+      id: 123,
+      source_site: 'danbooru',
+      file_url: 'https://test.com/danbooru.jpg',
+      rating: 's',
+      tags: ['tag1'],
+      width: 100,
+      height: 100,
+      score: 10,
+      parent_id: 999,
+      has_children: false
+    }
+
+    // Mock apiSearch implementation for this test
+    const { apiSearch } = await import('../api')
+    vi.mocked(apiSearch).mockImplementation(((tags: string) => {
+      if (tags.includes('id:999')) {
+        return Promise.resolve({
+          posts: [{
+            id: 999,
+            source_site: 'danbooru',
+            preview_url: 'https://test.com/sibling.jpg',
+            file_url: 'https://test.com/sibling.jpg',
+            rating: 's',
+            tags: ['tag1'],
+            width: 100,
+            height: 100,
+            score: 5
+          }],
+          page: 1,
+          total: 1,
+          unfiltered_count: 1,
+          resolved_tags: ''
+        })
+      }
+      if (tags.includes('parent:999')) {
+        return Promise.resolve({
+          posts: [
+            {
+              id: 999,
+              source_site: 'danbooru',
+              preview_url: 'https://test.com/sibling.jpg',
+              file_url: 'https://test.com/sibling.jpg',
+              rating: 's',
+              tags: ['tag1'],
+              width: 100,
+              height: 100,
+              score: 5
+            },
+            {
+              id: 123,
+              source_site: 'danbooru',
+              preview_url: 'https://test.com/danbooru.jpg',
+              file_url: 'https://test.com/danbooru.jpg',
+              rating: 's',
+              tags: ['tag1'],
+              width: 100,
+              height: 100,
+              score: 10
+            }
+          ],
+          page: 1,
+          total: 2,
+          unfiltered_count: 2,
+          resolved_tags: ''
+        })
+      }
+      return Promise.resolve({ posts: [], page: 1, total: 0, unfiltered_count: 0, resolved_tags: '' })
+    }) as any)
+
+    const wrapper = mount(PostView, {
+      global: {
+        plugins: [createTestingPinia({
+          createSpy: vi.fn,
+          initialState: {
+            lang: { t: (key: string) => key },
+            feed: {
+              posts: [mockPostWithParent]
+            }
+          }
+        })]
+      }
+    })
+
+    const lang = useLangStore()
+    vi.mocked(lang.t).mockImplementation((key: string) => key)
+
+    // Allow async ticks for onMounted and api calls
+    await new Promise((resolve) => setTimeout(resolve, 50))
+    await wrapper.vm.$nextTick()
+
+    // Assert that the panel is visible and contains correct text and sibling thumbnails
+    expect(wrapper.find('.post-relationship-panel').exists()).toBe(true)
+    expect(wrapper.find('.post-relationship-header').text()).toContain('post_has_parent')
+    
+    const thumbs = wrapper.findAll('.post-relationship-thumb')
+    expect(thumbs.length).toBe(2)
+    expect(thumbs[0].attributes('src')).toBe('https://test.com/sibling.jpg')
+    expect(thumbs[1].attributes('src')).toBe('https://test.com/danbooru.jpg')
+    expect(thumbs[1].classes()).toContain('active')
   })
 })

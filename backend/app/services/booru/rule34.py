@@ -122,6 +122,12 @@ class Rule34(BaseBooru):
         if "." in file_url:
             ext = file_url.split("?")[0].rsplit(".", 1)[-1].lower()
 
+        p_id = raw.get("parent_id")
+        parent_id = int(p_id) if p_id and str(p_id) != "0" else None
+        
+        h_child = raw.get("has_children")
+        has_children = str(h_child).lower() in ("true", "1") if h_child is not None else False
+
         return {
             "id": str(raw.get("id", "")),
             "source_site": "rule34",
@@ -137,4 +143,6 @@ class Rule34(BaseBooru):
             "md5": raw.get("hash") or raw.get("md5", ""),
             "source": raw.get("source", ""),
             "created_at": raw.get("created_at", raw.get("change", "")),
+            "parent_id": parent_id,
+            "has_children": has_children,
         }

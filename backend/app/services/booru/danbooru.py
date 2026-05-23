@@ -205,6 +205,9 @@ class Danbooru(BaseBooru):
         )
 
         tag_str = raw.get("tag_string", "")
+        p_id = raw.get("parent_id")
+        parent_id = int(p_id) if p_id is not None else None
+        
         return {
             "id": str(raw["id"]),
             "source_site": "danbooru",
@@ -220,4 +223,6 @@ class Danbooru(BaseBooru):
             "md5": raw.get("md5", ""),
             "source": raw.get("source", ""),
             "created_at": raw.get("created_at", ""),
+            "parent_id": parent_id,
+            "has_children": bool(raw.get("has_children", False)),
         }

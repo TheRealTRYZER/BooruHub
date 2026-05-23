@@ -5,6 +5,29 @@
     <button class="btn btn-primary" @click="$router.push('/')">{{ lang.t('back_to_feed') }}</button>
   </div>
   <div v-else class="post-detail">
+    <!-- Parent/Child Relationships Panel -->
+    <div v-if="relationshipPosts.length > 1" class="post-relationship-panel">
+      <div class="post-relationship-header">
+        <span>
+          {{ displayedPost.parent_id ? lang.t('post_has_parent') : lang.t('post_has_children') }}
+        </span>
+        <span class="post-relationship-toggle" @click="showRelationshipPanel = !showRelationshipPanel">
+          « {{ showRelationshipPanel ? lang.t('hide') : lang.t('show') }}
+        </span>
+      </div>
+      <div v-if="showRelationshipPanel" class="post-relationship-thumbs">
+        <img 
+          v-for="p in relationshipPosts" 
+          :key="p.source_site + ':' + p.id"
+          :src="p.preview_url || p.sample_url || p.file_url || ''"
+          class="post-relationship-thumb"
+          :class="{ active: String(p.id) === String(displayedPost.id) }"
+          :alt="'Thumbnail ' + p.id"
+          @click="navigateToPost(p)"
+        >
+      </div>
+    </div>
+
     <div class="post-detail-image">
       <video v-if="isVideo" :src="mediaUrl" controls loop autoplay muted style="width:100%;max-height:85vh;"></video>
       <img v-else :src="mediaUrl" :alt="'Post ' + displayedPost.id" @click="openOriginal" style="cursor:zoom-in;">
@@ -69,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
@@ -194,7 +217,100 @@ async function switchActiveSite(site: SiteName) {
   await checkFav()
 }
 
-onMounted(async () => {
+// Relationships State & Loader
+const relationshipPosts = ref<Post[]>([])
+const loadingRelationships = ref(false)
+const showRelationshipPanel = ref(true)
+
+async function loadRelationships() {
+  const post = displayedPost.value
+  if (!post) {
+    relationshipPosts.value = []
+    return
+  }
+
+  const pId = post.parent_id
+  const hasChildren = post.has_children
+
+  if (!pId && !hasChildren) {
+    relationshipPosts.value = []
+    return
+  }
+
+  loadingRelationships.value = true
+  try {
+    const postsMap = new Map<string, Post>()
+    const addPost = (p: Post) => {
+      const key = `${p.source_site}:${p.id}`
+      postsMap.set(key, p)
+    }
+
+    addPost(post)
+
+    if (pId) {
+      // 1. Fetch parent
+      try {
+        const parentRes = await apiSearch(`id:${pId}`, post.source_site, 1, 1, true)
+        if (parentRes.posts && parentRes.posts.length > 0) {
+          addPost(parentRes.posts[0])
+        }
+      } catch (e) {
+        console.error("Error fetching parent post:", e)
+      }
+
+      // 2. Fetch siblings
+      try {
+        const childrenRes = await apiSearch(`parent:${pId}`, post.source_site, 1, 100, true)
+        if (childrenRes.posts) {
+          childrenRes.posts.forEach(addPost)
+        }
+      } catch (e) {
+        console.error("Error fetching sibling posts:", e)
+      }
+    } else if (hasChildren) {
+      // Fetch children
+      try {
+        const childrenRes = await apiSearch(`parent:${post.id}`, post.source_site, 1, 100, true)
+        if (childrenRes.posts) {
+          childrenRes.posts.forEach(addPost)
+        }
+      } catch (e) {
+        console.error("Error fetching children posts:", e)
+      }
+    }
+
+    const allPosts = Array.from(postsMap.values())
+    const targetParentId = pId || post.id
+    
+    // Sort: Parent always comes first, others sorted by numeric ID
+    allPosts.sort((a, b) => {
+      const aIsParent = String(a.id) === String(targetParentId)
+      const bIsParent = String(b.id) === String(targetParentId)
+      if (aIsParent) return -1
+      if (bIsParent) return 1
+      return Number(a.id) - Number(b.id)
+    })
+
+    relationshipPosts.value = allPosts
+  } catch (err) {
+    console.error("Error loading relationships:", err)
+  } finally {
+    loadingRelationships.value = false
+  }
+}
+
+function navigateToPost(p: Post) {
+  if (String(p.id) === String(displayedPost.value?.id)) return
+  router.push({
+    query: {
+      ...route.query,
+      id: String(p.id),
+      site: p.source_site
+    }
+  })
+}
+
+async function fetchAndSetPost() {
   const id = route.query.id as string
   const site = route.query.site as SiteName
   if (!id || !site) return
@@ -215,6 +331,7 @@ onMounted(async () => {
       logView(displayedPost.value)
     }
     await checkFav()
+    await loadRelationships()
     return
   }
   
@@ -227,9 +344,24 @@ onMounted(async () => {
         logView(displayedPost.value)
       }
       await checkFav()
+      await loadRelationships()
     }
   } catch(e) {
     toast.show(lang.t('error_load_post'), 'error')
   }
+}
+
+onMounted(async () => {
+  await fetchAndSetPost()
 })
+
+// Watch route parameter changes to load posts smoothly without a full page refresh
+watch(
+  () => [route.query.id, route.query.site],
+  async ([newId, newSite]) => {
+    if (newId && newSite) {
+      await fetchAndSetPost()
+    }
+  }
+)
 </script>

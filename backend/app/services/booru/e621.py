@@ -55,6 +55,11 @@ class E621(BaseBooru):
         sources = raw.get("sources") or []
         source_str = sources[0] if isinstance(sources, list) and sources else raw.get("source") or ""
 
+        relationships = raw.get("relationships") or {}
+        p_id = relationships.get("parent_id")
+        parent_id = int(p_id) if p_id is not None else None
+        has_children = bool(relationships.get("has_children", False))
+
         return {
             "id": str(raw["id"]),
             "source_site": "e621",
@@ -70,4 +75,6 @@ class E621(BaseBooru):
             "md5": file_data.get("md5", ""),
             "source": source_str,
             "created_at": raw.get("created_at", ""),
+            "parent_id": parent_id,
+            "has_children": has_children,
         }

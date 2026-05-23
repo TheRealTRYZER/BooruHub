@@ -22,6 +22,8 @@ export interface Post {
   hash?: string
   duplicate_sites?: SiteName[]
   duplicates?: Post[]
+  parent_id?: number | null
+  has_children?: boolean
 }
 
 export interface User {
@@ -185,7 +187,7 @@ export type TranslationKey =
   | 'create_title' | 'already_have' | 'register_btn' | 'registering'
   | 'post_not_found' | 'back_to_feed' | 'remove_from_fav' | 'add_to_fav'
   | 'original' | 'source' | 'post_id' | 'rating' | 'score' | 'size' | 'format'
-  | 'tags_count' | 'error_load_post'
+  | 'tags_count' | 'error_load_post' | 'post_has_children' | 'post_has_parent' | 'hide' | 'show'
   | 'guides_title' | 'guides_subtitle'
   | 'tab_tags' | 'tab_api' | 'tab_blacklist' | 'tab_mapping'
   | 'error' | 'loading' | 'back' | 'delete' | 'confirm_delete' | 'save'
