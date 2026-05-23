@@ -1,5 +1,5 @@
 <template>
-  <div ref="cardRef" v-show="!hidden" class="post-card" :class="{ 'is-verifying': isVerifying }" @click="handleCardClick"
+  <div ref="cardRef" v-show="!hidden" class="post-card" @click="handleCardClick"
        @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"
        :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200) }">
     
@@ -13,12 +13,6 @@
            @load="onImageLoad"
            @error="onError" />
     </div>
-
-    <!-- Background Loaders for Hashing (Mounted Lazily in Background) -->
-    <template v-if="isVerifying && isInViewport">
-      <video v-if="isAnimated" ref="videoLoaderRef" :src="currentUrl" muted playsinline crossorigin="anonymous" style="display: none;" @loadeddata="onVideoLoaded" @error="onHashError"></video>
-      <img v-else ref="imgLoaderRef" :src="currentUrl" crossorigin="anonymous" style="display: none;" @load="onImageLoaded" @error="onHashError" />
-    </template>
 
     <div class="post-card-overlay">
       <div class="post-card-meta">
@@ -62,7 +56,6 @@ import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite } from '../api'
 import { useEventLogger } from '../composables/useEventLogger'
 import { RATING_MAP, RATING_LABELS } from '../types'
 import type { Post, RatingClass, SiteName } from '../types'
-import { computeDifferenceHash } from '../utils/perceptualHash'
 
 const feed = useFeedStore()
 
@@ -77,18 +70,7 @@ const toast = useToastStore()
 const lang = useLangStore()
 const { logLike, logFavourite } = useEventLogger()
 
-// Hashing States
-const isVerifying = ref(
-  !props.post.hash ||
-  props.post.hash.startsWith('md5-') ||
-  props.post.hash.startsWith('fn-') ||
-  props.post.hash.startsWith('id-')
-)
-const isInViewport = ref(typeof window === 'undefined' || !('IntersectionObserver' in window))
 const activeSite = ref<SiteName>(props.post.source_site)
-
-const imgLoaderRef = ref<HTMLImageElement | null>(null)
-const videoLoaderRef = ref<HTMLVideoElement | null>(null)
 
 // Computed list of all site versions for this post
 const allSites = computed<SiteName[]>(() => {
@@ -157,66 +139,7 @@ const mediaStyle = computed(() => {
   return { minHeight: '200px', background: 'var(--bg-secondary)', overflow: 'hidden' }
 })
 
-// Hashing Callbacks
-function onImageLoaded() {
-  const img = imgLoaderRef.value
-  if (img) {
-    performVerification(img)
-  }
-}
 
-let videoTimeout: ReturnType<typeof setTimeout> | null = null
-
-function onVideoLoaded() {
-  const video = videoLoaderRef.value
-  if (!video) return
-  
-  // Seek to 1s or half duration to get a real frame instead of black screen
-  const seekTime = Math.min(1.0, video.duration / 2 || 0)
-  video.currentTime = seekTime
-  
-  // Set a backup timeout of 2 seconds in case seeked doesn't fire
-  videoTimeout = setTimeout(() => {
-    if (isVerifying.value) {
-      performVerification(video)
-    }
-  }, 2000)
-
-  video.addEventListener('seeked', () => {
-    if (videoTimeout) clearTimeout(videoTimeout)
-    performVerification(video)
-  }, { once: true })
-}
-
-function onHashError() {
-  performVerification(null)
-}
-
-function performVerification(mediaEl: HTMLImageElement | HTMLVideoElement | null) {
-  if (!isVerifying.value) return
-
-  let hash = ''
-  if (mediaEl) {
-    try {
-      hash = computeDifferenceHash(mediaEl, 16)
-    } catch (e) {
-      console.error('Failed to compute perceptual hash, fallback to instant hash', e)
-    }
-  }
-
-  // Fallback if hash calculation failed
-  if (!hash) {
-    hash = feed.getInstantPostHash(props.post)
-  }
-
-  const isDuplicate = feed.registerPostHash(props.post.id, props.post.source_site, hash, props.post.tags)
-  
-  if (!isDuplicate) {
-    isVerifying.value = false
-    loaded.value = false
-    updateUrl()
-  }
-}
 
 function switchActiveSite(site: SiteName) {
   activeSite.value = site
@@ -315,49 +238,15 @@ function updateMobileState() {
   isMobile.value = window.matchMedia('(max-width: 768px)').matches
 }
 
-let observer: IntersectionObserver | null = null
-let hashTimeout: ReturnType<typeof setTimeout> | null = null
-
 onMounted(() => {
   updateUrl()
   updateMobileState()
   window.addEventListener('resize', updateMobileState)
-
-  if (isVerifying.value && !isInViewport.value) {
-    observer = new IntersectionObserver((entries) => {
-      const entry = entries[0]
-      if (entry.isIntersecting) {
-        if (!hashTimeout) {
-          hashTimeout = setTimeout(() => {
-            isInViewport.value = true
-            observer?.disconnect()
-            observer = null
-          }, 350) // 350ms debounce to prevent load thrashing on fast scrolls
-        }
-      } else {
-        if (hashTimeout) {
-          clearTimeout(hashTimeout)
-          hashTimeout = null
-        }
-      }
-    }, {
-      rootMargin: '150px'
-    })
-    if (cardRef.value) {
-      observer.observe(cardRef.value)
-    }
-  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', updateMobileState)
   if (tapTimeout) clearTimeout(tapTimeout)
-  if (videoTimeout) clearTimeout(videoTimeout)
-  if (hashTimeout) clearTimeout(hashTimeout)
-  if (observer) {
-    observer.disconnect()
-    observer = null
-  }
 })
 
 function doLikeAnimation() {

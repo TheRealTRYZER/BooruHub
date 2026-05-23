@@ -9,11 +9,7 @@ vi.mock('vue-router', () => ({
   })
 }))
 
-// Mock our perceptual hash utility to avoid DOM Canvas errors in jsdom
-vi.mock('../utils/perceptualHash', () => ({
-  computeDifferenceHash: vi.fn(() => 'dhash-1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef'),
-  hammingDistance: vi.fn(() => 0)
-}))
+
 
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -120,48 +116,7 @@ describe('PostCard.vue', () => {
     expect((wrapper.vm as any).currentUrl).toBe('https://test.com/preview.jpg')
   })
 
-  it('should render main image directly and trigger verification when loaded', async () => {
-    const mockVerifyingPost = {
-      id: 456,
-      source_site: 'danbooru',
-      preview_url: 'https://test.com/verifying.jpg',
-      rating: 'q',
-      tags: ['tag3'],
-      width: 100,
-      height: 150,
-      hash: undefined // No hash triggers verification on load
-    }
 
-    const wrapper = mount(PostCard, {
-      props: {
-        post: mockVerifyingPost as any
-      },
-      global: {
-        plugins: [createTestingPinia({
-          createSpy: vi.fn,
-          initialState: {
-            lang: { t: (key: string) => key }
-          }
-        })],
-      }
-    })
-
-    // Assert main image is rendered matching media aspect ratio
-    const mediaContainer = wrapper.find('.post-card-media')
-    expect(mediaContainer.exists()).toBe(true)
-    expect(mediaContainer.attributes('style')).toContain('aspect-ratio: 100 / 150')
-
-    // Find the hidden background loader image (rendered immediately in test environment fallback)
-    const hiddenLoader = wrapper.find('img[crossorigin="anonymous"]')
-    expect(hiddenLoader.exists()).toBe(true)
-    expect(hiddenLoader.attributes('src')).toBe('https://test.com/verifying.jpg')
-
-    // Simulate background image loaded triggering verification
-    await (wrapper.vm as any).onImageLoaded()
-
-    // Assert verification state resolves
-    expect((wrapper.vm as any).isVerifying).toBe(false)
-  })
 
   it('should support switching between site versions when badges are clicked', async () => {
     const mockMultiplePost = {
