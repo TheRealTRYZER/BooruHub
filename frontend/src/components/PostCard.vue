@@ -6,7 +6,7 @@
     <!-- Main Content (Always Visible Instantly) -->
     <div class="post-card-media" :style="mediaStyle">
       <img class="post-card-img"
-           :src="loaded ? currentUrl : placeholder"
+           :src="currentUrl || placeholder"
            :alt="'Post ' + displayedPost.id"
            loading="lazy"
            decoding="async"

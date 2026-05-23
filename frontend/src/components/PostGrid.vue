@@ -106,10 +106,16 @@ function addSkeletons(count: number) {
   }
 }
 
+let lastFirstPostKey = ''
+
 // Watch for posts array changes (new search, scroll append, or duplicate removal)
-watch(() => [...props.posts], (newVal, oldVal) => {
-  const isNewSearch = !oldVal || newVal.length === 0 || oldVal.length === 0 ||
-                      (newVal[0] && oldVal[0] && `${newVal[0].source_site}-${newVal[0].id}` !== `${oldVal[0].source_site}-${oldVal[0].id}`)
+watch(() => props.posts, (newVal) => {
+  if (!newVal) return
+  const firstPost = newVal[0]
+  const firstPostKey = firstPost ? `${firstPost.source_site}-${firstPost.id}` : ''
+  const isNewSearch = newVal.length === 0 || firstPostKey !== lastFirstPostKey
+  
+  lastFirstPostKey = firstPostKey
   
   removeSkeletons()
 
@@ -149,7 +155,7 @@ watch(() => [...props.posts], (newVal, oldVal) => {
     placedCount = newVal.length
     setTimeout(observeNewCards, 100)
   }
-})
+}, { deep: true })
 
 // Watch for card size changes
 watch(() => feed.cardSize, () => {
