@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional, Union, Dict
 from pydantic import BaseModel, Field
 
-from fastapi import APIRouter, Depends, Query, BackgroundTasks
+from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
 from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
@@ -374,12 +374,21 @@ async def get_feed(
         user=user, ratios=ratio_dict, skip_interval=skip_interval,
     )
 
+    # Check if all active queried sites failed (returned -1)
+    active_failed = [s for s in site_list if site_counts.get(s) == -1]
+    if len(active_failed) == len(site_list) and site_list:
+        logger.error(f"[SEARCH_FAILURE] All queried providers failed: {active_failed}")
+        raise HTTPException(
+            status_code=502,
+            detail=f"Booru providers ({', '.join(active_failed)}) are temporarily unavailable. Please try again."
+        )
+
     # Post-processing
     if mappings:
         apply_reverse_mapping(posts, mappings)
 
     # Index raw posts BEFORE filtering (captures everything the API returns)
-    unfiltered_total = sum(site_counts.values())
+    unfiltered_total = sum(v for v in site_counts.values() if v >= 0)
     background_tasks.add_task(_index_posts_task, list(posts), db)
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
@@ -452,6 +461,12 @@ async def search(
             site, query_str, limit, page,
             user=user, skip_interval=skip_interval,
         )
+        if unfiltered_total == -1:
+            logger.error(f"[SEARCH_FAILURE] Single site provider {site} failed")
+            raise HTTPException(
+                status_code=502,
+                detail=f"Booru provider ({site}) is temporarily unavailable. Please try again."
+            )
 
     if mappings:
         apply_reverse_mapping(posts, mappings)
