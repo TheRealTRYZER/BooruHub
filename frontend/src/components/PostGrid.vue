@@ -44,8 +44,10 @@ let skeletonKeys: string[] = []
 
 function getColCount() {
   const w = window.innerWidth
+  const gap = w <= 768 ? 8 : 16
   const availableWidth = w - 40
-  return Math.max(1, Math.min(20, Math.floor(availableWidth / feed.cardSize)))
+  const cols = Math.floor((availableWidth + gap) / (feed.cardSize + gap))
+  return Math.max(1, Math.min(20, cols))
 }
 
 function initColumns() {
