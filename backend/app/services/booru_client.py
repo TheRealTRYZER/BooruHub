@@ -95,6 +95,13 @@ async def search_posts(
         logger.warning(f"Unknown provider: {site}")
         return [], 0
 
+    # Resolve adaptive timeout (use user setting or a highly responsive 10s default for guests)
+    if timeout == 30.0:
+        if user and getattr(user, "search_timeout", None):
+            timeout = user.search_timeout
+        else:
+            timeout = 10.0
+
     # Cache lookup
     cache_key = (site, tags, limit, page, user.id if user else None)
     cached = _cache.get(cache_key)
