@@ -1,7 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, watch } from 'vue'
 import type { SiteName, Post } from '../types'
-import { hammingDistance } from '../utils/perceptualHash'
 
 export const useFeedStore = defineStore('feed', () => {
   const tags = ref(sessionStorage.getItem('booruhub_tags') || '')
@@ -115,73 +114,11 @@ export const useFeedStore = defineStore('feed', () => {
     }
   }
 
-  function registerPostHash(postId: string | number, site: SiteName, hash: string, tagsList: string[]) {
-    const duplicatePost = posts.value.find(p => p.id === postId && p.source_site === site)
-    if (!duplicatePost) return false
-
-    // Search for a matching post by Hamming distance
-    const existingPost = posts.value.find(p => {
-      if (p.id === postId && p.source_site === site) return false
-
-      if (p.hash && p.hash.length === 64 && hash.length === 64) {
-        return hammingDistance(p.hash, hash) <= 12
-      }
-
-      return p.hash === hash
-    })
-
-    if (existingPost) {
-      // Merge tags
-      const mergedTags = new Set([...existingPost.tags, ...tagsList])
-      existingPost.tags = Array.from(mergedTags)
-
-      // Initialize duplicates array
-      if (!existingPost.duplicates) {
-        existingPost.duplicates = []
-      }
-
-      // Add the duplicate post object
-      if (!existingPost.duplicates.some(d => d.id === duplicatePost.id && d.source_site === duplicatePost.source_site)) {
-        existingPost.duplicates.push(duplicatePost)
-      }
-      if (duplicatePost.duplicates && duplicatePost.duplicates.length) {
-        for (const subDup of duplicatePost.duplicates) {
-          if (!existingPost.duplicates.some(d => d.id === subDup.id && d.source_site === subDup.source_site)) {
-            existingPost.duplicates.push(subDup)
-          }
-        }
-      }
-
-      // Track duplicate site badge
-      if (!existingPost.duplicate_sites) {
-        existingPost.duplicate_sites = []
-      }
-      if (!existingPost.duplicate_sites.includes(site)) {
-        existingPost.duplicate_sites.push(site)
-      }
-      if (duplicatePost.duplicate_sites && duplicatePost.duplicate_sites.length) {
-        for (const s of duplicatePost.duplicate_sites) {
-          if (!existingPost.duplicate_sites.includes(s)) {
-            existingPost.duplicate_sites.push(s)
-          }
-        }
-      }
-
-      // Filter out duplicate from the feed
-      posts.value = posts.value.filter(p => !(p.id === postId && p.source_site === site))
-      return true
-    } else {
-      // No duplicate found, set verified hash
-      duplicatePost.hash = hash
-      return false
-    }
-  }
-
   return {
     tags, siteTags, ratios, isSplit, sites,
     cardSize, previewQuality,
     posts, page, hasMore, lastSearchSignature,
-    toggleSite, toggleSplit, resetFeed, registerPostHash, addPosts,
+    toggleSite, toggleSplit, resetFeed, addPosts,
     getInstantPostHash
   }
 })
