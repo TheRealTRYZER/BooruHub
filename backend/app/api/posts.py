@@ -9,7 +9,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.database import get_db
-from app.db.models import User, BlacklistRule, CachedTag, Favorite, PostIndex
+from app.db.models import User, BlacklistRule, CachedTag, Favorite, PostIndex, UserEvent
 from app.api.deps import get_current_user
 from app.services.booru_client import search_posts, search_multi_site
 from app.services.blacklist import parse_blacklist, filter_posts
@@ -127,18 +127,144 @@ def _apply_blacklist(posts: List[dict], rules: List[BlacklistRule], dislikes: se
     return filter_posts(posts, groups)
 
 
-def _deduplicate_by_md5(posts: List[dict]) -> List[dict]:
-    """Remove duplicate posts from the list based on MD5 hash."""
-    seen_md5 = set()
-    unique_posts = []
+import re
+
+def _extract_md5_from_url(url: str) -> Optional[str]:
+    if not url:
+        return None
+    # Look for a 32-character hex string in the path/filename
+    match = re.search(r'\b([a-fA-F0-9]{32})\b', url)
+    if match:
+        return match.group(1).lower()
+    return None
+
+def _extract_source_id(source_url: str) -> Optional[str]:
+    if not source_url:
+        return None
+    # Pixiv artwork / illust ID
+    pixiv_match = re.search(r'pixiv\.net/(?:.*/)?artworks/(\d+)', source_url)
+    if pixiv_match:
+        return f"pixiv:{pixiv_match.group(1)}"
+    pixiv_query_match = re.search(r'illust_id=(\d+)', source_url)
+    if pixiv_query_match:
+        return f"pixiv:{pixiv_query_match.group(1)}"
+        
+    # Direct Pixiv image URL matching (e.g. i.pximg.net/.../12345678_p0.png)
+    pximg_match = re.search(r'pximg\.net/.*/(\d+)_p\d+', source_url)
+    if pximg_match:
+        return f"pixiv:{pximg_match.group(1)}"
+        
+    # Twitter status ID
+    twitter_match = re.search(r'(?:twitter|x)\.com/[^/]+/status/(\d+)', source_url)
+    if twitter_match:
+        return f"twitter:{twitter_match.group(1)}"
+        
+    # Cross-site Danbooru ID in source
+    danbooru_match = re.search(r'danbooru\.donmai\.us/posts/(\d+)', source_url)
+    if danbooru_match:
+        return f"danbooru:{danbooru_match.group(1)}"
+
+    # Cross-site e621 ID in source
+    e621_match = re.search(r'e621\.net/posts/(\d+)', source_url)
+    if e621_match:
+        return f"e621:{e621_match.group(1)}"
+
+    # Cross-site Rule34 ID in source
+    rule34_match = re.search(r'rule34\.xxx/index\.php\?page=post&s=view&id=(\d+)', source_url)
+    if rule34_match:
+        return f"rule34:{rule34_match.group(1)}"
+        
+    return None
+
+def _are_duplicates(a: dict, b: dict) -> bool:
+    # 1. Compare MD5s (either direct or from URL)
+    md5_a = (a.get("md5") or "").strip().lower() or _extract_md5_from_url(a.get("file_url") or "") or _extract_md5_from_url(a.get("sample_url") or "")
+    md5_b = (b.get("md5") or "").strip().lower() or _extract_md5_from_url(b.get("file_url") or "") or _extract_md5_from_url(b.get("sample_url") or "")
+    if md5_a and md5_b and md5_a == md5_b:
+        return True
+
+    # 2. Compare Source IDs
+    src_a = a.get("source") or ""
+    src_b = b.get("source") or ""
+    if src_a and src_b:
+        id_a = _extract_source_id(src_a)
+        id_b = _extract_source_id(src_b)
+        if id_a and id_b and id_a == id_b:
+            return True
+
+    # 3. Exact Dimension match + sharing at least 3 tags
+    w_a, h_a = a.get("width"), a.get("height")
+    w_b, h_b = b.get("width"), b.get("height")
+    if w_a and h_a and w_b and h_b and w_a > 100 and h_a > 100:
+        if w_a == w_b and h_a == h_b and a.get("source_site") != b.get("source_site"):
+            tags_a = set(a.get("tags", []))
+            tags_b = set(b.get("tags", []))
+            if len(tags_a & tags_b) >= 3:
+                return True
+                
+        # 4. Aspect Ratio match + sharing at least 8 tags (for scaled/resized duplicates)
+        ratio_a = w_a / h_a
+        ratio_b = w_b / h_b
+        if abs(ratio_a - ratio_b) / max(ratio_a, ratio_b) < 0.005 and a.get("source_site") != b.get("source_site"):
+            tags_a = set(a.get("tags", []))
+            tags_b = set(b.get("tags", []))
+            if len(tags_a & tags_b) >= 8:
+                return True
+
+    return False
+
+def _merge_duplicate_posts(posts: List[dict]) -> List[dict]:
+    """Group/merge duplicate posts together rather than discarding them."""
+    if not posts:
+        return []
+
+    groups: List[List[dict]] = []
+    
     for post in posts:
-        md5 = post.get("md5")
-        if md5:
-            if md5 in seen_md5:
-                continue
-            seen_md5.add(md5)
-        unique_posts.append(post)
-    return unique_posts
+        matched = False
+        for g in groups:
+            if _are_duplicates(post, g[0]):
+                g.append(post)
+                matched = True
+                break
+        if not matched:
+            groups.append([post])
+
+    site_priority = {"danbooru": 3, "e621": 2, "rule34": 1}
+    merged_posts: List[dict] = []
+    
+    for g in groups:
+        if len(g) == 1:
+            merged_posts.append(g[0])
+            continue
+            
+        # Sort group to pick primary post
+        g.sort(key=lambda p: (site_priority.get(p.get("source_site"), 0), p.get("score", 0)), reverse=True)
+        primary = g[0]
+        duplicates = g[1:]
+        
+        duplicate_sites = []
+        unique_duplicates = []
+        seen_sites = set()
+        
+        for d in duplicates:
+            site = d.get("source_site")
+            if site and site != primary.get("source_site") and site not in seen_sites:
+                duplicate_sites.append(site)
+                unique_duplicates.append(d)
+                seen_sites.add(site)
+        
+        if unique_duplicates:
+            primary["duplicate_sites"] = duplicate_sites
+            primary["duplicates"] = unique_duplicates
+            
+        merged_posts.append(primary)
+        
+    return merged_posts
+
+def _deduplicate_by_md5(posts: List[dict]) -> List[dict]:
+    """Fallback stub to route existing callers to the new merge function."""
+    return _merge_duplicate_posts(posts)
 
 
 async def _cache_tags_task(tag_sources: List[dict], db: AsyncSession):
@@ -392,7 +518,7 @@ async def get_feed(
     background_tasks.add_task(_index_posts_task, list(posts), db)
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
-    # MD5 deduplication is now handled inside search_multi_site
+    posts = _merge_duplicate_posts(posts)
 
     # Cache ONLY tags from results to avoid saving typos
     tag_sources = []
@@ -475,7 +601,7 @@ async def search(
     background_tasks.add_task(_index_posts_task, list(posts), db)
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
-    posts = _deduplicate_by_md5(posts) # Still needed for single-site search
+    posts = _merge_duplicate_posts(posts)
 
     # Cache ONLY tags from results to avoid saving typos
     tag_sources = []
@@ -508,8 +634,6 @@ async def suggest_tags(
     user: Optional[User] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
-    suggestions: List[TagSuggestion] = []
-    seen_tags = set()
     q_lower = q.lower()
     
     # Extract operator prefix if present
@@ -517,28 +641,57 @@ async def suggest_tags(
     if q_lower.startswith(("-", "~")):
         op_prefix = q_lower[0]
         q_lower = q_lower[1:]
-    
-    # 0. Collect all mapped tags (Starter + User)
+
+    # 1. Fetch user search counts from UserEvent (limit to last 200 search events for performance)
+    tag_search_counts = {}
+    if user:
+        try:
+            result = await db.execute(
+                select(UserEvent.query)
+                .where(UserEvent.user_id == user.id, UserEvent.type == "search")
+                .order_by(UserEvent.ts.desc())
+                .limit(200)
+            )
+            queries = result.scalars().all()
+            for q_str in queries:
+                if q_str:
+                    for tag in q_str.split():
+                        tag = tag.strip().lower()
+                        if tag.startswith(("-", "~")):
+                            tag = tag[1:]
+                        if tag:
+                            tag_search_counts[tag] = tag_search_counts.get(tag, 0) + 1
+        except Exception as e:
+            logger.error(f"Error fetching user search counts: {e}")
+
+    # Gather candidates from all sources
+    candidates = []
+    seen_tags = set()
+    global_popularity_map = {}
+
+    # Source A: Mapped tags (Starter + User)
     mapped_unitags = set()
     from app.core.defaults import STARTER_MAPPINGS
     for m in STARTER_MAPPINGS:
         mapped_unitags.add(m["unitag"])
     
     if user:
-        user_mappings = await get_user_mappings(user.id, db)
-        for m in user_mappings:
-            mapped_unitags.add(m.unitag)
-
-    # 1. Prioritize all mapped tags
-    for unitag in sorted(list(mapped_unitags)):
+        try:
+            user_mappings = await get_user_mappings(user.id, db)
+            for m in user_mappings:
+                mapped_unitags.add(m.unitag)
+        except Exception as e:
+            logger.error(f"Error fetching user mappings for suggest: {e}")
+            
+    for unitag in mapped_unitags:
         tag_name = unitag.lower()
         if tag_name.startswith(q_lower):
             full_tag = f"{op_prefix}{unitag}"
             if full_tag not in seen_tags:
-                suggestions.append(TagSuggestion(tag=full_tag, is_mapped=True))
+                candidates.append(TagSuggestion(tag=full_tag, is_mapped=True))
                 seen_tags.add(full_tag)
 
-    # 2. Provide Meta-Tag suggestions (only skip if prefix is present and meta-tags don't support it)
+    # Source B: Meta-tag suggestions
     if not op_prefix:
         meta_suggests = {
             "order:": ["score", "rank", "id", "hot", "change", "favcount", "random"],
@@ -548,7 +701,7 @@ async def suggest_tags(
         for p, values in meta_suggests.items():
             if p.startswith(q_lower):
                 if p not in seen_tags:
-                    suggestions.append(TagSuggestion(tag=p, is_mapped=False))
+                    candidates.append(TagSuggestion(tag=p, is_mapped=False))
                     seen_tags.add(p)
             if q_lower.startswith(p):
                 sub_q = q_lower[len(p):]
@@ -556,32 +709,60 @@ async def suggest_tags(
                     if val.startswith(sub_q):
                         full_p = f"{p}{val}"
                         if full_p not in seen_tags:
-                            suggestions.append(TagSuggestion(tag=full_p, is_mapped=False))
+                            candidates.append(TagSuggestion(tag=full_p, is_mapped=False))
                             seen_tags.add(full_p)
 
-    # 3. Fill remaining with global cached tags, sorted by popularity
-    remaining_limit = limit - len(suggestions)
-    if remaining_limit > 0 and q_lower:
-        result = await db.execute(
-            select(CachedTag)
-            .where(CachedTag.tag.like(f"{q_lower}%"))
-            .order_by(CachedTag.usage_count.desc())
-            .limit(remaining_limit + 20) # Over-fetch to filter duplicates and metadata results
-        )
-        cached_tags = result.scalars().all()
-        for ct in cached_tags:
-            full_tag = f"{op_prefix}{ct.tag}"
-            if full_tag not in seen_tags:
-                suggestions.append(TagSuggestion(
-                    tag=full_tag, 
-                    is_mapped=False,
-                    from_danbooru=ct.from_danbooru,
-                    from_e621=ct.from_e621,
-                    from_rule34=ct.from_rule34
-                ))
-                seen_tags.add(full_tag)
-                if len(suggestions) >= limit:
-                    break
+    # Source C: Global cached tags (Fetch up to 100 matching tags)
+    if q_lower:
+        try:
+            result = await db.execute(
+                select(CachedTag)
+                .where(CachedTag.tag.like(f"{q_lower}%"))
+                .order_by(CachedTag.usage_count.desc())
+                .limit(100)
+            )
+            cached_tags = result.scalars().all()
+            for ct in cached_tags:
+                full_tag = f"{op_prefix}{ct.tag}"
+                global_popularity_map[ct.tag.lower()] = ct.usage_count
+                if full_tag not in seen_tags:
+                    candidates.append(TagSuggestion(
+                        tag=full_tag, 
+                        is_mapped=False,
+                        from_danbooru=ct.from_danbooru,
+                        from_e621=ct.from_e621,
+                        from_rule34=ct.from_rule34
+                    ))
+                    seen_tags.add(full_tag)
+        except Exception as e:
+            logger.error(f"Error fetching cached tags for suggest: {e}")
 
-    return {"suggestions": suggestions[:limit]}
+    # Custom sorting function
+    def get_sort_key(suggestion: TagSuggestion):
+        tag_name = suggestion.tag.lower()
+        if tag_name.startswith(("-", "~")):
+            tag_name = tag_name[1:]
+        if tag_name.endswith(":"):
+            tag_name = tag_name[:-1]
+            
+        # 1. Primary: Personal search frequency
+        search_count = tag_search_counts.get(tag_name, 0)
+        
+        # 2. Secondary: Category priority (mapped, then meta, then cached)
+        if suggestion.is_mapped:
+            category_priority = 3
+        elif ":" in suggestion.tag:
+            category_priority = 2
+        else:
+            category_priority = 1
+            
+        # 3. Tertiary: Global cached usage count
+        global_pop = global_popularity_map.get(tag_name, 0)
+        
+        return (search_count, category_priority, global_pop)
+
+    # Sort candidates descending
+    candidates.sort(key=get_sort_key, reverse=True)
+
+    return {"suggestions": candidates[:limit]}
 

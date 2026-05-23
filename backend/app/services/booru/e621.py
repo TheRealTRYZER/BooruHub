@@ -52,6 +52,9 @@ class E621(BaseBooru):
                 return f"https://e621.net{url}"
             return url or ""
 
+        sources = raw.get("sources") or []
+        source_str = sources[0] if isinstance(sources, list) and sources else raw.get("source") or ""
+
         return {
             "id": str(raw["id"]),
             "source_site": "e621",
@@ -65,5 +68,6 @@ class E621(BaseBooru):
             "height": file_data.get("height", 0),
             "file_ext": file_data.get("ext", ""),
             "md5": file_data.get("md5", ""),
+            "source": source_str,
             "created_at": raw.get("created_at", ""),
         }

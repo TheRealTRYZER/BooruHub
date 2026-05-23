@@ -135,5 +135,6 @@ class Rule34(BaseBooru):
             "height": int(raw.get("height", 0)),
             "file_ext": ext,
             "md5": raw.get("hash") or raw.get("md5", ""),
+            "source": raw.get("source", ""),
             "created_at": raw.get("created_at", raw.get("change", "")),
         }
