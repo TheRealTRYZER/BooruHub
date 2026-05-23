@@ -107,7 +107,7 @@ function addSkeletons(count: number) {
 }
 
 // Watch for posts array changes (new search, scroll append, or duplicate removal)
-watch(() => props.posts, (newVal, oldVal) => {
+watch(() => [...props.posts], (newVal, oldVal) => {
   const isNewSearch = !oldVal || newVal.length === 0 || oldVal.length === 0 ||
                       (newVal[0] && oldVal[0] && `${newVal[0].source_site}-${newVal[0].id}` !== `${oldVal[0].source_site}-${oldVal[0].id}`)
   
