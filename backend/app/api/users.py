@@ -64,6 +64,8 @@ async def update_settings(
     # Search preferences
     if body.search_limit is not None:
         user.search_limit = max(1, min(body.search_limit, 200))
+    if body.search_timeout is not None:
+        user.search_timeout = max(1.0, min(body.search_timeout, 120.0))
     if body.search_interval is not None:
         user.search_interval = max(0.0, min(body.search_interval, 60.0))
 
@@ -84,6 +86,7 @@ async def get_keys_status(user: User = Depends(require_user)):
         "rule34": bool(user.rule34_api_key),
         "rule34_user_id": user.rule34_user_id or "",
         "search_limit": user.search_limit,
+        "search_timeout": user.search_timeout,
         "search_interval": user.search_interval,
         "data_consent": user.data_consent,
     }

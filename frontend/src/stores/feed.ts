@@ -12,6 +12,7 @@ export const useFeedStore = defineStore('feed', () => {
 
   const cardSize = ref(parseInt(localStorage.getItem('booruhub_card_size') || '250'))
   const previewQuality = ref(localStorage.getItem('booruhub_preview_quality') || 'sample')
+  const rootMargin = ref(parseInt(localStorage.getItem('booruhub_root_margin') || '2500'))
 
   const posts = ref<Post[]>([])
   const page = ref(1)
@@ -32,6 +33,10 @@ export const useFeedStore = defineStore('feed', () => {
 
   watch(previewQuality, (newVal) => {
     localStorage.setItem('booruhub_preview_quality', newVal)
+  })
+
+  watch(rootMargin, (newVal) => {
+    localStorage.setItem('booruhub_root_margin', String(newVal))
   })
 
   function toggleSite(site: SiteName) {
@@ -116,7 +121,7 @@ export const useFeedStore = defineStore('feed', () => {
 
   return {
     tags, siteTags, ratios, isSplit, sites,
-    cardSize, previewQuality,
+    cardSize, previewQuality, rootMargin,
     posts, page, hasMore, lastSearchSignature,
     toggleSite, toggleSplit, resetFeed, addPosts,
     getInstantPostHash

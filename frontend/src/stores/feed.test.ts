@@ -104,4 +104,18 @@ describe('Feed Store', () => {
       expect(store.posts[0].duplicate_sites).toEqual(['e621'])
     })
   })
+
+  describe('rootMargin Setting', () => {
+    it('should have a default value of 2500', () => {
+      const store = useFeedStore()
+      expect(store.rootMargin).toBe(2500)
+    })
+
+    it('should persist rootMargin changes to localStorage', async () => {
+      const store = useFeedStore()
+      store.rootMargin = 3000
+      await nextTick()
+      expect(localStorage.getItem('booruhub_root_margin')).toBe('3000')
+    })
+  })
 })

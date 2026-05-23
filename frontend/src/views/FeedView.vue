@@ -252,7 +252,7 @@ onMounted(() => {
     if (entries[0].isIntersecting && !loading.value && feed.hasMore) {
       loadMore(sentinel.value)
     }
-  }, { rootMargin: '1200px' })
+  }, { rootMargin: `${feed.rootMargin}px` })
 
   if (sentinel.value) observer.observe(sentinel.value)
 

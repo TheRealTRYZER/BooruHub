@@ -73,20 +73,6 @@
               </div>
             </div>
 
-            <div style="margin-top:8px; border-top:1px solid rgba(128,128,128,0.1); padding-top:12px;">
-              <div style="font-weight:600; font-size:12px; margin-bottom:8px;">⚙️ {{ lang.t('search_params') }}</div>
-              <div style="display:flex; gap:12px;">
-                <div style="flex:1;">
-                  <label class="input-label" style="font-size:10px;">{{ lang.t('posts_limit') }}</label>
-                  <input type="number" class="input btn-sm" v-model.number="keys.search_limit" min="10" max="100">
-                </div>
-                <div style="flex:1;">
-                  <label class="input-label" style="font-size:10px;">{{ lang.t('search_interval') }}</label>
-                  <input type="number" class="input btn-sm" v-model.number="keys.search_interval" min="0" max="10" step="0.1">
-                </div>
-              </div>
-            </div>
-            
             <button class="btn btn-primary btn-sm" @click="saveKeys" :disabled="savingKeys">{{ lang.t('save_settings') }}</button>
              <span v-if="keysConfiguredSites.length === 0" style="font-size:10px;color:var(--text-muted);margin-top:4px;">{{ lang.t('keys_not_set') }}</span>
              <span v-else style="font-size:10px;color:var(--text-muted);margin-top:4px;">
@@ -95,6 +81,33 @@
                  <span :style="{ color: `var(--${site})` }">{{ site }}</span><template v-if="i < keysConfiguredSites.length - 1">, </template>
                </template>
              </span>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-title">⚙️ {{ lang.t('advanced_settings') }}</div>
+          <div style="display:flex;flex-direction:column;gap:12px;">
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div>
+                <label class="input-label" style="font-size:10px;">{{ lang.t('posts_limit') }}</label>
+                <input type="number" class="input btn-sm" v-model.number="keys.search_limit" min="10" max="200">
+              </div>
+              <div>
+                <label class="input-label" style="font-size:10px;">{{ lang.t('search_timeout') }}</label>
+                <input type="number" class="input btn-sm" v-model.number="keys.search_timeout" min="1" max="120">
+              </div>
+            </div>
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
+              <div>
+                <label class="input-label" style="font-size:10px;">{{ lang.t('search_interval') }}</label>
+                <input type="number" class="input btn-sm" v-model.number="keys.search_interval" min="0" max="10" step="0.1">
+              </div>
+              <div>
+                <label class="input-label" style="font-size:10px;">{{ lang.t('root_margin') }}</label>
+                <input type="number" class="input btn-sm" v-model.number="rootMargin" min="100" max="5000" step="100">
+              </div>
+            </div>
+            <button class="btn btn-primary btn-sm" @click="saveAdvancedSettings" :disabled="savingAdvanced">{{ lang.t('save') }}</button>
           </div>
         </div>
 
@@ -229,6 +242,7 @@ import { ref, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
+import { useFeedStore } from '../stores/feed'
 import {
   apiUpdateDefaultTags, apiGetApiKeysStatus, apiUpdateApiKeys,
   apiGetMappings, apiCreateMapping, apiUpdateMapping, apiDeleteMapping,
@@ -241,6 +255,7 @@ import type { TagMapping, BlacklistRule, ApiKeysStatus, ApiKeysUpdate } from '..
 const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
+const feed = useFeedStore()
 
 const statusFlags = ref({ danbooru: false, e621: false, rule34: false })
 const defaultTags = ref('')
@@ -250,10 +265,13 @@ const keys = ref({
   danbooru_login: '', danbooru_api_key: '',
   e621_login: '', e621_api_key: '',
   rule34_user_id: '', rule34_api_key: '',
-  search_limit: 40, search_interval: 0.0
+  search_limit: 40, search_timeout: 30.0, search_interval: 0.0
 })
 const keysConfiguredSites = ref<string[]>([])
 const savingKeys = ref(false)
+
+const savingAdvanced = ref(false)
+const rootMargin = ref(feed.rootMargin)
 
 const mappings = ref<TagMapping[]>([])
 const editingMappingId = ref<number | null>(null)
@@ -328,6 +346,7 @@ async function loadKeysStatus() {
     keysConfiguredSites.value = s
     
     if (status.search_limit) keys.value.search_limit = status.search_limit
+    if ((status as any).search_timeout) keys.value.search_timeout = (status as any).search_timeout
     if (status.search_interval !== undefined && status.search_interval !== null) keys.value.search_interval = status.search_interval
     
     keys.value.danbooru_login = status.danbooru_login || ''
@@ -345,7 +364,14 @@ async function loadKeysStatus() {
 
 async function saveKeys() {
   savingKeys.value = true
-  const data: ApiKeysUpdate = { ...keys.value }
+  const data: ApiKeysUpdate = {
+    danbooru_login: keys.value.danbooru_login,
+    danbooru_api_key: keys.value.danbooru_api_key,
+    e621_login: keys.value.e621_login,
+    e621_api_key: keys.value.e621_api_key,
+    rule34_user_id: keys.value.rule34_user_id,
+    rule34_api_key: keys.value.rule34_api_key
+  }
   
   if(!data.danbooru_api_key) delete data.danbooru_api_key
   if(!data.e621_api_key) delete data.e621_api_key
@@ -362,6 +388,30 @@ async function saveKeys() {
     toast.show(e.message || e, 'error')
   } finally {
     savingKeys.value = false
+  }
+}
+
+async function saveAdvancedSettings() {
+  savingAdvanced.value = true
+  // 1. Save rootMargin locally in Pinia store and localStorage
+  feed.rootMargin = rootMargin.value
+  localStorage.setItem('booruhub_root_margin', String(rootMargin.value))
+
+  // 2. Save search preferences to the backend database
+  const data: ApiKeysUpdate = {
+    search_limit: keys.value.search_limit,
+    search_timeout: keys.value.search_timeout,
+    search_interval: keys.value.search_interval
+  }
+
+  try {
+    await apiUpdateApiKeys(data)
+    toast.show(lang.t('settings_saved'), 'success')
+    await loadKeysStatus()
+  } catch(e: any) {
+    toast.show(e.message || e, 'error')
+  } finally {
+    savingAdvanced.value = false
   }
 }
 
