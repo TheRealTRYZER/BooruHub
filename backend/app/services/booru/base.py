@@ -123,6 +123,10 @@ class BaseBooru(ABC):
         """Convert site-specific post JSON to unified BooruHub format."""
         ...
 
+    async def autocomplete_tags(self, q: str, user: Optional[User] = None) -> List[dict]:
+        """Search tags using the booru's autocomplete/tags API."""
+        return []
+
     def prepare_tags(self, tags: str) -> Tuple[str, List[str]]:
         """Apply site-specific tag transformations before querying.
 

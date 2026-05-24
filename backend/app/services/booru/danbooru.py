@@ -208,6 +208,14 @@ class Danbooru(BaseBooru):
         p_id = raw.get("parent_id")
         parent_id = int(p_id) if p_id is not None else None
         
+        # Build tag category metadata dictionary
+        tags_metadata = {}
+        for t in raw.get("tag_string_artist", "").split(): tags_metadata[t] = "artist"
+        for t in raw.get("tag_string_character", "").split(): tags_metadata[t] = "character"
+        for t in raw.get("tag_string_copyright", "").split(): tags_metadata[t] = "copyright"
+        for t in raw.get("tag_string_general", "").split(): tags_metadata[t] = "general"
+        for t in raw.get("tag_string_meta", "").split(): tags_metadata[t] = "metadata"
+        
         return {
             "id": str(raw["id"]),
             "source_site": "danbooru",
@@ -225,4 +233,57 @@ class Danbooru(BaseBooru):
             "created_at": raw.get("created_at", ""),
             "parent_id": parent_id,
             "has_children": bool(raw.get("has_children", False)),
+            "tags_metadata": tags_metadata,
         }
+
+    async def autocomplete_tags(self, q: str, user: Optional[User] = None) -> List[dict]:
+        """Search tags using Danbooru's tags API."""
+        client = self._get_client()
+        url = f"{self.base_url}/tags.json"
+        
+        search_pattern = f"*{q}*" if "*" not in q else q
+        params = {
+            "search[name_matches]": search_pattern,
+            "search[order]": "count",
+            "limit": 15
+        }
+        
+        # Resolve user auth to prevent rate limiting
+        auth = self.get_auth_params(user)
+        if auth:
+            params.update(auth)
+            
+        try:
+            resp = await client.get(url, params=params)
+            if resp.status_code != 200:
+                return []
+            
+            data = resp.json()
+            if not isinstance(data, list):
+                return []
+                
+            results = []
+            cat_map = {
+                0: "general",
+                1: "artist",
+                3: "copyright",
+                4: "character",
+                5: "metadata"
+            }
+            
+            for item in data:
+                if not isinstance(item, dict):
+                    continue
+                cat_num = item.get("category", 0)
+                results.append({
+                    "tag": item.get("name", ""),
+                    "category": cat_map.get(cat_num, "general"),
+                    "post_count": item.get("post_count", 0),
+                    "from_danbooru": True,
+                    "from_e621": False,
+                    "from_rule34": False
+                })
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching autocomplete from Danbooru: {e}")
+            return []

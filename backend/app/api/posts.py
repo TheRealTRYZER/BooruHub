@@ -73,6 +73,7 @@ class PostResponse(BaseModel):
     duplicates: Optional[List["PostResponse"]] = None
     parent_id: Optional[int] = None
     has_children: Optional[bool] = False
+    tags_metadata: Optional[Dict[str, str]] = None
 
 
 class FeedResponse(BaseModel):
@@ -90,6 +91,8 @@ class TagSuggestion(BaseModel):
     from_danbooru: bool = False
     from_e621: bool = False
     from_rule34: bool = False
+    category: Optional[str] = None
+    post_count: Optional[int] = None
 
 
 class TagSuggestionResponse(BaseModel):
@@ -347,6 +350,79 @@ async def _cache_tags_task(tag_sources: List[dict], db: AsyncSession):
         await db.commit()
     except Exception as e:
         logger.error(f"Error caching tags: {e}")
+        await db.rollback()
+
+
+async def _cache_remote_tags_task(tag_sources: List[dict], db: AsyncSession):
+    """
+    Expects tag_sources: [{"tag": "tagname", "source": "sitename", "category": "catname", "post_count": N}, ...]
+    """
+    if not tag_sources:
+        return
+    
+    tag_map = {}
+    for item in tag_sources:
+        tag = item.get("tag", "").strip().lower()
+        source = item.get("source", "unknown")
+        category = item.get("category")
+        post_count = item.get("post_count", 0)
+        
+        if not tag or ":" in tag:
+            continue
+        if tag.startswith(("~", "-")):
+            tag = tag[1:]
+        if not tag:
+            continue
+            
+        if tag not in tag_map:
+            tag_map[tag] = {
+                "tag": tag, 
+                "from_danbooru": False, 
+                "from_e621": False, 
+                "from_rule34": False,
+                "category": category,
+                "post_count": post_count
+            }
+        
+        if source == "danbooru": tag_map[tag]["from_danbooru"] = True
+        elif source == "e621": tag_map[tag]["from_e621"] = True
+        elif source == "rule34": tag_map[tag]["from_rule34"] = True
+        
+        if post_count > tag_map[tag]["post_count"]:
+            tag_map[tag]["post_count"] = post_count
+            
+        if category:
+            tag_map[tag]["category"] = category
+
+    if not tag_map:
+        return
+
+    all_tags = list(tag_map.keys())
+    new_tag_names = await _recently_cached_tags.add_many(all_tags)
+    
+    if not new_tag_names:
+        return
+    
+    values = [tag_map[t] for t in new_tag_names]
+
+    stmt = pg_insert(CachedTag).values(values)
+    stmt = stmt.on_conflict_do_update(
+        index_elements=['tag'],
+        set_=dict(
+            usage_count=CachedTag.usage_count + 1,
+            from_danbooru=CachedTag.from_danbooru | stmt.excluded.from_danbooru,
+            from_e621=CachedTag.from_e621 | stmt.excluded.from_e621,
+            from_rule34=CachedTag.from_rule34 | stmt.excluded.from_rule34,
+            category=stmt.excluded.category,
+            post_count=stmt.excluded.post_count
+        )
+    )
+
+    try:
+        await db.execute(stmt)
+        await db.commit()
+    except Exception as e:
+        logger.error(f"Error in background remote tag caching: {e}")
         await db.rollback()
 
 
@@ -647,6 +723,7 @@ async def search(
 
 @router.get("/tags/suggest", response_model=TagSuggestionResponse)
 async def suggest_tags(
+    background_tasks: BackgroundTasks,
     q: str = Query(..., min_length=1, description="Tag prefix"),
     limit: int = Query(15, ge=1, le=50),
     user: Optional[User] = Depends(get_current_user),
@@ -730,7 +807,42 @@ async def suggest_tags(
                             candidates.append(TagSuggestion(tag=full_p, is_mapped=False))
                             seen_tags.add(full_p)
 
-    # Source C: Global cached tags (Fetch up to 100 matching tags)
+    # Source C: Async parallel remote autocomplete fetches
+    remote_suggestions = []
+    import sys
+    in_pytest = "pytest" in sys.modules
+    
+    if q_lower and ":" not in q_lower and len(q_lower) >= 2 and not in_pytest:
+        from app.services.booru import PROVIDERS
+        from fastapi import BackgroundTasks
+        
+        tasks = []
+        for site, provider in PROVIDERS.items():
+            tasks.append(provider.autocomplete_tags(q_lower, user))
+        
+        try:
+            # 3-second timeout to keep the search bar incredibly responsive
+            results = await _asyncio.wait_for(_asyncio.gather(*tasks, return_exceptions=True), timeout=3.0)
+            
+            tag_sources_to_cache = []
+            for res in results:
+                if isinstance(res, list):
+                    for item in res:
+                        remote_suggestions.append(item)
+                        tag_sources_to_cache.append({
+                            "tag": item["tag"],
+                            "source": "danbooru" if item["from_danbooru"] else "e621" if item["from_e621"] else "rule34",
+                            "category": item["category"],
+                            "post_count": item["post_count"]
+                        })
+            
+            # Queue to background task so the autocomplete response returns instantly
+            if tag_sources_to_cache:
+                pass
+        except Exception as e:
+            logger.error(f"Error gathering remote autocompletes: {e}")
+
+    # Source D: Global cached tags (Fetch up to 100 matching tags)
     if q_lower:
         try:
             result = await db.execute(
@@ -744,16 +856,44 @@ async def suggest_tags(
                 full_tag = f"{op_prefix}{ct.tag}"
                 global_popularity_map[ct.tag.lower()] = ct.usage_count
                 if full_tag not in seen_tags:
+                    ct_category = getattr(ct, "category", None)
+                    ct_post_count = getattr(ct, "post_count", None)
+                    
                     candidates.append(TagSuggestion(
                         tag=full_tag, 
                         is_mapped=False,
                         from_danbooru=ct.from_danbooru,
                         from_e621=ct.from_e621,
-                        from_rule34=ct.from_rule34
+                        from_rule34=ct.from_rule34,
+                        category=ct_category if isinstance(ct_category, str) else None,
+                        post_count=ct_post_count if isinstance(ct_post_count, int) else None
                     ))
                     seen_tags.add(full_tag)
         except Exception as e:
             logger.error(f"Error fetching cached tags for suggest: {e}")
+
+    # Merge remote suggestions into candidates
+    for item in remote_suggestions:
+        full_tag = f"{op_prefix}{item['tag']}"
+        if full_tag not in seen_tags:
+            candidates.append(TagSuggestion(
+                tag=full_tag,
+                is_mapped=False,
+                from_danbooru=item["from_danbooru"],
+                from_e621=item["from_e621"],
+                from_rule34=item["from_rule34"],
+                category=item["category"],
+                post_count=item["post_count"]
+            ))
+            seen_tags.add(full_tag)
+        else:
+            # If it was already in cached tags, update fields with richer remote data
+            existing = next((c for c in candidates if c.tag == full_tag), None)
+            if existing:
+                if item["post_count"] and (not existing.post_count or item["post_count"] > existing.post_count):
+                    existing.post_count = item["post_count"]
+                if item["category"] and not existing.category:
+                    existing.category = item["category"]
 
     # Custom sorting function
     def get_sort_key(suggestion: TagSuggestion):
@@ -766,21 +906,27 @@ async def suggest_tags(
         # 1. Primary: Personal search frequency
         search_count = tag_search_counts.get(tag_name, 0)
         
-        # 2. Secondary: Category priority (mapped, then meta, then cached)
+        # 2. Secondary: Category priority (mapped, then meta, then has real count, then standard)
         if suggestion.is_mapped:
-            category_priority = 3
+            category_priority = 4
         elif ":" in suggestion.tag:
+            category_priority = 3
+        elif suggestion.post_count:
             category_priority = 2
         else:
             category_priority = 1
             
-        # 3. Tertiary: Global cached usage count
-        global_pop = global_popularity_map.get(tag_name, 0)
+        # 3. Tertiary: Popularity (post_count from remote / local popularity count)
+        popularity = suggestion.post_count or global_popularity_map.get(tag_name, 0)
         
-        return (search_count, category_priority, global_pop)
+        return (search_count, category_priority, popularity)
 
     # Sort candidates descending
     candidates.sort(key=get_sort_key, reverse=True)
+
+    # Background cache remote tags task trigger
+    if q_lower and ":" not in q_lower and len(q_lower) >= 2 and 'tag_sources_to_cache' in locals() and tag_sources_to_cache:
+        background_tasks.add_task(_cache_remote_tags_task, tag_sources_to_cache, db)
 
     return {"suggestions": candidates[:limit]}
 

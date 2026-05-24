@@ -32,7 +32,11 @@
              :class="{ mapped: tagObj.is_mapped }"
              @mousedown.prevent="selectSuggestion(tagObj.tag)">
           <span v-if="tagObj.is_mapped" class="mapped-star">⭐</span>
-          <span class="suggestion-text">{{ tagObj.tag.replace(/_/g, ' ') }}</span>
+          <span class="suggestion-text autocomplete-tag" :class="tagObj.category">{{ tagObj.tag.replace(/_/g, ' ') }}</span>
+          <span v-if="tagObj.category && tagObj.category !== 'general'" class="autocomplete-badge" :class="tagObj.category">{{ tagObj.category }}</span>
+          
+          <span v-if="tagObj.post_count" class="tag-count-indicator">{{ formatCount(tagObj.post_count) }}</span>
+          
           <div class="suggestion-sources">
             <span v-if="tagObj.from_danbooru" class="suggestion-source danbooru">db</span>
             <span v-if="tagObj.from_e621" class="suggestion-source e621">e6</span>
@@ -139,6 +143,17 @@ const emit = defineEmits<{
 
 const availableSites: SiteName[] = ['danbooru', 'e621', 'rule34']
 const suggestions = ref<any[]>([])
+
+function formatCount(num?: number): string {
+  if (!num) return ''
+  if (num >= 1000000) {
+    return (num / 1000000).toFixed(1).replace(/\.0$/, '') + 'M'
+  }
+  if (num >= 1000) {
+    return (num / 1000).toFixed(0) + 'k'
+  }
+  return String(num)
+}
 const showHistory = ref(false)
 let suggestTimeout: any = null
 

@@ -523,6 +523,65 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .tag-chip:hover { background: var(--bg-card-hover); color: var(--accent); }
 
+/* === TAG CATEGORIES === */
+.tag-chip.general { color: #38bdf8; border-color: rgba(56, 189, 248, 0.15); }
+.tag-chip.general:hover { background: rgba(56, 189, 248, 0.1); color: #7dd3fc; border-color: rgba(56, 189, 248, 0.3); }
+
+.tag-chip.character { color: #34d399; border-color: rgba(52, 211, 153, 0.15); }
+.tag-chip.character:hover { background: rgba(52, 211, 153, 0.1); color: #6ee7b7; border-color: rgba(52, 211, 153, 0.3); }
+
+.tag-chip.artist { color: #f43f5e; border-color: rgba(244, 63, 94, 0.15); }
+.tag-chip.artist:hover { background: rgba(244, 63, 94, 0.1); color: #fb7185; border-color: rgba(244, 63, 94, 0.3); }
+
+.tag-chip.copyright { color: #a78bfa; border-color: rgba(167, 139, 246, 0.15); }
+.tag-chip.copyright:hover { background: rgba(167, 139, 246, 0.1); color: #c084fc; border-color: rgba(167, 139, 246, 0.3); }
+
+.tag-chip.metadata, .tag-chip.meta { color: #fbbf24; border-color: rgba(251, 191, 36, 0.15); }
+.tag-chip.metadata:hover, .tag-chip.meta:hover { background: rgba(251, 191, 36, 0.1); color: #fcd34d; border-color: rgba(251, 191, 36, 0.3); }
+
+.tag-chip.species { color: #fb923c; border-color: rgba(251, 146, 60, 0.15); }
+.tag-chip.species:hover { background: rgba(251, 146, 60, 0.1); color: #fdba74; border-color: rgba(251, 146, 60, 0.3); }
+
+.tag-chip.lore, .tag-chip.invalid { color: #9ca3af; border-color: rgba(156, 163, 175, 0.15); }
+.tag-chip.lore:hover, .tag-chip.invalid:hover { background: rgba(156, 163, 175, 0.1); color: #d1d5db; border-color: rgba(156, 163, 175, 0.3); }
+
+/* Autocomplete Category Colors */
+.autocomplete-tag {
+  transition: color 0.15s;
+}
+.autocomplete-tag.general { color: #38bdf8 !important; }
+.autocomplete-tag.character { color: #34d399 !important; }
+.autocomplete-tag.artist { color: #f43f5e !important; }
+.autocomplete-tag.copyright { color: #a78bfa !important; }
+.autocomplete-tag.metadata, .autocomplete-tag.meta { color: #fbbf24 !important; }
+.autocomplete-tag.species { color: #fb923c !important; }
+
+/* Autocomplete Badges & Counters */
+.autocomplete-badge {
+  font-size: 8px;
+  font-weight: 700;
+  text-transform: uppercase;
+  padding: 1px 4px;
+  border-radius: 3px;
+  margin-left: 8px;
+  letter-spacing: 0.5px;
+  display: inline-block;
+  line-height: 1.2;
+}
+.autocomplete-badge.general { background: rgba(56, 189, 248, 0.15); color: #7dd3fc; }
+.autocomplete-badge.character { background: rgba(52, 211, 153, 0.15); color: #6ee7b7; }
+.autocomplete-badge.artist { background: rgba(244, 63, 94, 0.15); color: #fb7185; }
+.autocomplete-badge.copyright { background: rgba(167, 139, 246, 0.15); color: #c084fc; }
+.autocomplete-badge.metadata, .autocomplete-badge.meta { background: rgba(251, 191, 36, 0.15); color: #fcd34d; }
+.autocomplete-badge.species { background: rgba(251, 146, 60, 0.15); color: #fdba74; }
+
+.tag-count-indicator {
+  font-size: 11px;
+  color: var(--text-muted);
+  margin-left: auto;
+  font-weight: 500;
+}
+
 /* === SKELETON === */
 .skeleton {
   background: linear-gradient(90deg, var(--bg-secondary) 25%, #2a2a2a 50%, var(--bg-secondary) 75%);

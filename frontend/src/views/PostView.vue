@@ -83,8 +83,14 @@
 
       <div class="post-detail-tags" v-if="displayedPost.tags && displayedPost.tags.length">
         <div class="post-detail-tags-title">{{ lang.t('tags_count') }} ({{ displayedPost.tags.length }})</div>
-        <div class="post-detail-tags-list">
-          <TagChip v-for="tag in displayedPost.tags" :key="tag" :tag="tag" />
+        
+        <div v-for="group in groupedTags" :key="group.key" style="margin-bottom: 14px;">
+          <div style="font-size: 11px; font-weight: 700; text-transform: uppercase; color: var(--text-muted); margin-bottom: 6px; letter-spacing: 0.5px;">
+            {{ group.title }} ({{ group.tags.length }})
+          </div>
+          <div class="post-detail-tags-list" style="margin-bottom: 8px;">
+            <TagChip v-for="tag in group.tags" :key="tag" :tag="tag" :class="group.key" />
+          </div>
         </div>
       </div>
     </div>
@@ -160,6 +166,47 @@ const ratingClass = computed(() => {
   return RATING_MAP[(displayedPost.value.rating || '').toLowerCase()] || 'unknown'
 })
 const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
+
+// Group post tags dynamically by category
+const groupedTags = computed(() => {
+  const post = displayedPost.value
+  if (!post || !post.tags) return []
+  
+  const categoriesOrder = ['artist', 'character', 'copyright', 'species', 'general', 'metadata', 'lore', 'invalid']
+  const groups: Record<string, string[]> = {}
+  for (const cat of categoriesOrder) {
+    groups[cat] = []
+  }
+  
+  const uncategorizedKey = 'general'
+  
+  for (const tag of post.tags) {
+    const cat = post.tags_metadata?.[tag] || uncategorizedKey
+    if (!groups[cat]) {
+      groups[cat] = []
+    }
+    groups[cat].push(tag)
+  }
+  
+  const categoryTitles: Record<string, string> = {
+    artist: '👤 Artists',
+    character: '🎭 Characters',
+    copyright: '📚 Copyrights',
+    species: '🐾 Species',
+    general: '🏷️ General Tags',
+    metadata: '⚙️ Metadata',
+    lore: '📜 Lore',
+    invalid: '❌ Invalid'
+  }
+  
+  return categoriesOrder
+    .map(cat => ({
+      key: cat,
+      title: categoryTitles[cat] || cat,
+      tags: groups[cat] || []
+    }))
+    .filter(g => g.tags.length > 0)
+})
 
 function openOriginal() {
   if (displayedPost.value && displayedPost.value.file_url) {

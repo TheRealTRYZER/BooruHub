@@ -128,6 +128,18 @@ class Rule34(BaseBooru):
         h_child = raw.get("has_children")
         has_children = str(h_child).lower() in ("true", "1") if h_child is not None else False
 
+        # Build tag category metadata dictionary using heuristics
+        tags_metadata = {}
+        for t in (tag_str.split() if isinstance(tag_str, str) else []):
+            if t.endswith(("_(cosplay)", "_(character)")):
+                tags_metadata[t] = "character"
+            elif t.endswith(("_(artist)", "_(style)")):
+                tags_metadata[t] = "artist"
+            elif t.endswith(("_(anime)", "_(series)", "_(game)")):
+                tags_metadata[t] = "copyright"
+            else:
+                tags_metadata[t] = "general"
+
         return {
             "id": str(raw.get("id", "")),
             "source_site": "rule34",
@@ -145,4 +157,76 @@ class Rule34(BaseBooru):
             "created_at": raw.get("created_at", raw.get("change", "")),
             "parent_id": parent_id,
             "has_children": has_children,
+            "tags_metadata": tags_metadata,
         }
+
+    async def autocomplete_tags(self, q: str, user: Optional[User] = None) -> List[dict]:
+        """Search tags using Rule34's tags API."""
+        client = self._get_client()
+        url = f"{self.base_url}/index.php"
+        
+        search_pattern = f"{q}%"
+        params = {
+            "page": "dapi",
+            "s": "tag",
+            "q": "index",
+            "json": "1",
+            "name_pattern": search_pattern,
+            "limit": 15
+        }
+        
+        # Resolve user auth to prevent rate limiting
+        auth = self.get_auth_params(user)
+        if auth:
+            params.update(auth)
+            
+        try:
+            resp = await client.get(url, params=params)
+            if resp.status_code != 200:
+                return []
+            
+            data = resp.json()
+            tags_list = data
+            if isinstance(data, dict):
+                tags_list = data.get("tag", [])
+            if not isinstance(tags_list, list):
+                if isinstance(tags_list, dict):
+                    tags_list = [tags_list]
+                else:
+                    return []
+                
+            results = []
+            cat_map = {
+                0: "general",
+                1: "artist",
+                3: "copyright",
+                4: "character",
+                5: "metadata"
+            }
+            
+            for item in tags_list:
+                if not isinstance(item, dict):
+                    continue
+                type_val = item.get("type", 0)
+                try:
+                    cat_num = int(type_val)
+                except (ValueError, TypeError):
+                    cat_num = 0
+                
+                try:
+                    post_count = int(item.get("count", 0))
+                except (ValueError, TypeError):
+                    post_count = 0
+                    
+                results.append({
+                    "tag": item.get("name", ""),
+                    "category": cat_map.get(cat_num, "general"),
+                    "post_count": post_count,
+                    "from_danbooru": False,
+                    "from_e621": False,
+                    "from_rule34": True
+                })
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching autocomplete from Rule34: {e}")
+            return []

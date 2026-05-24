@@ -24,6 +24,7 @@ export interface Post {
   duplicates?: Post[]
   parent_id?: number | null
   has_children?: boolean
+  tags_metadata?: Record<string, string> | null
 }
 
 export interface User {
@@ -69,6 +70,8 @@ export interface TagSuggestion {
   from_danbooru?: boolean
   from_e621?: boolean
   from_rule34?: boolean
+  category?: string
+  post_count?: number
 }
 
 export interface TagSuggestResponse {
