@@ -6,7 +6,12 @@
           <!-- Tag Pills List -->
           <span v-for="(pill, idx) in pills" :key="pill + idx" 
                 class="tag-pill" 
-                :class="[getPillCategory(pill), { negated: pill.startsWith('-') }]"
+                :class="[getPillCategory(pill), { negated: pill.startsWith('-'), dragging: idx === dragIndex }]"
+                draggable="true"
+                @dragstart="dragStart($event, idx)"
+                @dragover.prevent
+                @drop="onDrop($event, idx)"
+                @dragend="dragEnd"
                 @click.stop="toggleNegation(idx)">
             <span class="tag-pill-text">{{ pill }}</span>
             <span class="tag-pill-remove" @click.stop="removeTagPill(idx)">×</span>
@@ -160,6 +165,32 @@ const suggestions = ref<any[]>([])
 const pills = ref<string[]>([])
 const inputVal = ref('')
 const inputEl = ref<HTMLInputElement | null>(null)
+
+// Drag and Drop reordering state & logic
+const dragIndex = ref<number | null>(null)
+
+function dragStart(e: DragEvent, idx: number) {
+  dragIndex.value = idx
+  if (e.dataTransfer) {
+    e.dataTransfer.effectAllowed = 'move'
+    e.dataTransfer.setData('text/plain', String(idx))
+  }
+}
+
+function onDrop(e: DragEvent, targetIdx: number) {
+  if (dragIndex.value === null) return
+  const sourceIdx = dragIndex.value
+  if (sourceIdx !== targetIdx) {
+    const pill = pills.value[sourceIdx]
+    pills.value.splice(sourceIdx, 1)
+    pills.value.splice(targetIdx, 0, pill)
+    syncToFeedStore()
+  }
+}
+
+function dragEnd() {
+  dragIndex.value = null
+}
 
 function focusActualInput() {
   if (inputEl.value) inputEl.value.focus()
