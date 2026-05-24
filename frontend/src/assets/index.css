@@ -336,7 +336,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   position: relative; width: 100%;
   background: var(--bg-card); border-radius: var(--border-radius);
   overflow: hidden; cursor: pointer;
-  border: 1px solid rgba(255, 255, 255, 0.05);
+  border: 2px solid rgba(255, 255, 255, 0.05);
   transition: transform 0.3s cubic-bezier(0.34, 1.56, 0.64, 1), box-shadow 0.3s, border-color 0.3s;
   transform: translate3d(0,0,0);
   backface-visibility: hidden;
@@ -344,20 +344,20 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .post-card:hover { 
   transform: translateY(-6px) scale(1.02); 
-  border-color: rgba(255, 255, 255, 0.15);
-  box-shadow: 0 12px 24px rgba(0,0,0,0.5); 
+  border-color: rgba(255, 255, 255, 0.3);
+  box-shadow: 0 0 15px rgba(255, 255, 255, 0.1), 0 12px 24px rgba(0,0,0,0.5); 
 }
 .post-card.safe:hover {
-  border-color: rgba(46, 204, 113, 0.4);
-  box-shadow: 0 12px 30px rgba(46, 204, 113, 0.15), 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-color: #2ecc71 !important;
+  box-shadow: 0 0 20px rgba(46, 204, 113, 0.65), 0 12px 30px rgba(0, 0, 0, 0.5) !important;
 }
 .post-card.questionable:hover {
-  border-color: rgba(243, 156, 18, 0.4);
-  box-shadow: 0 12px 30px rgba(243, 156, 18, 0.15), 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-color: #f39c12 !important;
+  box-shadow: 0 0 20px rgba(243, 156, 18, 0.65), 0 12px 30px rgba(0, 0, 0, 0.5) !important;
 }
 .post-card.explicit:hover {
-  border-color: rgba(231, 76, 60, 0.4);
-  box-shadow: 0 12px 30px rgba(231, 76, 60, 0.15), 0 4px 12px rgba(0, 0, 0, 0.3);
+  border-color: #e74c3c !important;
+  box-shadow: 0 0 20px rgba(231, 76, 60, 0.65), 0 12px 30px rgba(0, 0, 0, 0.5) !important;
 }
 .post-card-media { background: var(--bg-secondary); overflow: hidden; }
 .post-card-img { width: 100%; display: block; object-fit: cover; }
@@ -814,9 +814,20 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-weight: 600;
   color: #fff;
   border: 1px solid transparent;
-  transition: all 0.2s ease;
+  transition: all 0.15s ease;
   user-select: none;
-  cursor: pointer;
+  cursor: grab;
+}
+
+.tag-pill:active {
+  cursor: grabbing;
+}
+
+.tag-pill.dragging {
+  opacity: 0.35;
+  border-style: dashed !important;
+  border-color: var(--accent) !important;
+  background: rgba(139, 92, 246, 0.05) !important;
 }
 
 .tag-pill:not(.negated).general { background: rgba(56, 189, 248, 0.12); color: #38bdf8; border-color: rgba(56, 189, 248, 0.25); }
