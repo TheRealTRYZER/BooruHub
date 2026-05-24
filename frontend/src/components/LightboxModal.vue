@@ -43,14 +43,22 @@
 
       <!-- Right Column: Glassmorphic Tags Sidebar (Absolutely Positioned Far Right Edge) -->
       <div class="lightbox-sidebar">
-        <h3 class="sidebar-title">{{ lang.t('tags_count') || 'Tags' }}</h3>
+        <h3 class="sidebar-title">{{ lang.t('tags_count') || 'Tags' }} ({{ displayedPost.tags?.length || 0 }})</h3>
         <div class="lightbox-tags-list">
-          <span v-for="tag in displayedPost.tags" 
-                :key="tag" 
-                class="lightbox-tag-chip" 
-                @click="searchTag(tag)">
-            {{ tag.replace(/_/g, ' ') }}
-          </span>
+          <div v-for="group in groupedTags" :key="group.key" class="lightbox-tag-group">
+            <div class="lightbox-tag-group-title" :class="group.key">
+              {{ group.title }} ({{ group.tags.length }})
+            </div>
+            <div class="lightbox-tag-group-chips">
+              <span v-for="tag in group.tags" 
+                    :key="tag" 
+                    class="tag-chip" 
+                    :class="group.key"
+                    @click="searchTag(tag)">
+                {{ tag.replace(/_/g, ' ') }}
+              </span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -160,14 +168,59 @@ function switchActiveSite(site: SiteName) {
   checkFavoriteState()
 }
 
+const isVideo = computed(() => {
+  const ext = (displayedPost.value.file_ext || '').toLowerCase()
+  const url = (displayedPost.value.file_url || '').toLowerCase()
+  const videoExts = ['webm', 'mp4', 'm4v', 'mov', 'mkv', 'ogv']
+  return videoExts.includes(ext) || videoExts.some(ve => url.endsWith('.' + ve) || url.includes('.' + ve + '?'))
+})
+
 const mediaUrl = computed(() => {
   const p = displayedPost.value
+  if (isVideo.value) return p.file_url || ''
   return p.sample_url || p.file_url || p.preview_url || ''
 })
 
-const isVideo = computed(() =>
-  ['webm', 'mp4', 'm4v', 'mov', 'mkv'].includes((displayedPost.value.file_ext || '').toLowerCase())
-)
+// Group post tags dynamically by category
+const groupedTags = computed(() => {
+  const post = displayedPost.value
+  if (!post || !post.tags) return []
+  
+  const categoriesOrder = ['artist', 'character', 'copyright', 'species', 'general', 'metadata', 'lore', 'invalid']
+  const groups: Record<string, string[]> = {}
+  for (const cat of categoriesOrder) {
+    groups[cat] = []
+  }
+  
+  const uncategorizedKey = 'general'
+  
+  for (const tag of post.tags) {
+    const cat = post.tags_metadata?.[tag] || uncategorizedKey
+    if (!groups[cat]) {
+      groups[cat] = []
+    }
+    groups[cat].push(tag)
+  }
+  
+  const categoryTitles: Record<string, string> = {
+    artist: '👤 Artists',
+    character: '🎭 Characters',
+    copyright: '📚 Copyrights',
+    species: '🐾 Species',
+    general: '🏷️ General Tags',
+    metadata: '⚙️ Metadata',
+    lore: '📜 Lore',
+    invalid: '❌ Invalid'
+  }
+  
+  return categoriesOrder
+    .map(cat => ({
+      key: cat,
+      title: categoryTitles[cat] || cat,
+      tags: groups[cat] || []
+    }))
+    .filter(g => g.tags.length > 0)
+})
 
 const ratingClass = computed<RatingClass>(() => RATING_MAP[(displayedPost.value.rating || '').toLowerCase()] || 'unknown')
 const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
@@ -513,10 +566,8 @@ onUnmounted(() => {
 
 .lightbox-tags-list {
   display: flex;
-  flex-wrap: wrap;
-  align-content: flex-start;
-  align-items: flex-start;
-  gap: 6px;
+  flex-direction: column;
+  gap: 16px;
   overflow-y: auto;
   flex: 1;
   padding-right: 4px;
@@ -535,21 +586,44 @@ onUnmounted(() => {
   background: rgba(255, 255, 255, 0.3);
 }
 
-.lightbox-tag-chip {
+.lightbox-tag-group {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 100%;
+}
+
+.lightbox-tag-group-title {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.8px;
+  margin-bottom: 2px;
+  opacity: 0.85;
+  user-select: none;
+}
+.lightbox-tag-group-title.artist { color: #f43f5e; }
+.lightbox-tag-group-title.character { color: #34d399; }
+.lightbox-tag-group-title.copyright { color: #a78bfa; }
+.lightbox-tag-group-title.species { color: #fb923c; }
+.lightbox-tag-group-title.general { color: #38bdf8; }
+.lightbox-tag-group-title.metadata { color: #fbbf24; }
+.lightbox-tag-group-title.lore, .lightbox-tag-group-title.invalid { color: #9ca3af; }
+
+.lightbox-tag-group-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.lightbox-sidebar .tag-chip {
   font-size: 11px;
-  background: rgba(255, 255, 255, 0.08);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: var(--text-secondary);
   padding: 3px 8px;
-  border-radius: 10px;
-  cursor: pointer;
-  transition: all 0.15s ease;
+  border-radius: 8px;
+  display: inline-block;
+  line-height: 1.2;
 }
-.lightbox-tag-chip:hover {
-  background: var(--accent);
-  color: #fff;
-  border-color: var(--accent);
-}
+
 .lightbox-tag-more {
   font-size: 11px;
   color: var(--text-muted);
