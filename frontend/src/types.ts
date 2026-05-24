@@ -24,6 +24,7 @@ export interface Post {
   duplicates?: Post[]
   parent_id?: number | null
   has_children?: boolean
+  tags_metadata?: Record<string, string> | null
 }
 
 export interface User {
@@ -69,6 +70,8 @@ export interface TagSuggestion {
   from_danbooru?: boolean
   from_e621?: boolean
   from_rule34?: boolean
+  category?: string
+  post_count?: number
 }
 
 export interface TagSuggestResponse {
@@ -96,6 +99,7 @@ export interface FavoritesResponse {
 export interface FavoriteCheckResponse {
   is_favorite: boolean
   favorite_id: number | null
+  is_dislike?: boolean | null
 }
 
 export interface Bookmark {
@@ -204,6 +208,7 @@ export type TranslationKey =
   | 'privacy_sharing_title' | 'privacy_sharing_text'
   | 'card_size' | 'preview_quality' | 'quality_thumbnail' | 'quality_sample' | 'quality_full'
   | 'save_to_bookmarks'
+  | 'close' | 'download' | 'downloading' | 'download_success' | 'disliked'
 
 export type Locale = 'en' | 'ru'
 

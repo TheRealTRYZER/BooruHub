@@ -7,9 +7,10 @@ Quirks handled:
 - Rating uses 's' for safe instead of 'g'
 """
 import logging
-from typing import Optional
+from typing import List, Optional
 
 from app.services.booru.base import BaseBooru
+from app.db.models import User
 
 logger = logging.getLogger(__name__)
 
@@ -60,6 +61,23 @@ class E621(BaseBooru):
         parent_id = int(p_id) if p_id is not None else None
         has_children = bool(relationships.get("has_children", False))
 
+        # Build tag category metadata dictionary
+        raw_tags_dict = raw.get("tags") or {}
+        tags_metadata = {}
+        cat_map = {
+            "general": "general",
+            "artist": "artist",
+            "copyright": "copyright",
+            "character": "character",
+            "species": "species",
+            "invalid": "invalid",
+            "lore": "lore",
+            "meta": "metadata"
+        }
+        for cat_key, cat_name in cat_map.items():
+            for t in raw_tags_dict.get(cat_key, []):
+                tags_metadata[t] = cat_name
+
         return {
             "id": str(raw["id"]),
             "source_site": "e621",
@@ -77,4 +95,60 @@ class E621(BaseBooru):
             "created_at": raw.get("created_at", ""),
             "parent_id": parent_id,
             "has_children": has_children,
+            "tags_metadata": tags_metadata,
         }
+
+    async def autocomplete_tags(self, q: str, user: Optional[User] = None) -> List[dict]:
+        """Search tags using e621's tags API."""
+        client = self._get_client()
+        url = f"{self.base_url}/tags.json"
+        
+        search_pattern = f"*{q}*" if "*" not in q else q
+        params = {
+            "search[name_matches]": search_pattern,
+            "search[order]": "count",
+            "limit": 15
+        }
+        
+        # Resolve user auth to prevent rate limiting
+        auth = self.get_auth_params(user)
+        if auth:
+            params.update(auth)
+            
+        try:
+            resp = await client.get(url, params=params)
+            if resp.status_code != 200:
+                return []
+            
+            data = resp.json()
+            tags_list = data.get("tags") if isinstance(data, dict) else data
+            if not isinstance(tags_list, list):
+                return []
+                
+            results = []
+            cat_map = {
+                0: "general",
+                1: "artist",
+                3: "copyright",
+                4: "character",
+                5: "species",
+                7: "metadata",
+                8: "metadata"
+            }
+            
+            for item in tags_list:
+                if not isinstance(item, dict):
+                    continue
+                cat_num = item.get("category", 0)
+                results.append({
+                    "tag": item.get("name", ""),
+                    "category": cat_map.get(cat_num, "general"),
+                    "post_count": item.get("post_count", 0),
+                    "from_danbooru": False,
+                    "from_e621": True,
+                    "from_rule34": False
+                })
+            return results
+        except Exception as e:
+            logger.error(f"Error fetching autocomplete from e621: {e}")
+            return []

@@ -129,6 +129,8 @@ class CachedTag(Base):
     from_danbooru = Column(Boolean, default=False, server_default='false')
     from_e621 = Column(Boolean, default=False, server_default='false')
     from_rule34 = Column(Boolean, default=False, server_default='false')
+    category = Column(String(50), nullable=True)
+    post_count = Column(Integer, default=0, server_default='0')
     last_seen = Column(
         DateTime(timezone=True),
         default=lambda: datetime.now(timezone.utc),

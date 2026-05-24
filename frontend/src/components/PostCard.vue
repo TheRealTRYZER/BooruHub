@@ -1,5 +1,5 @@
 <template>
-  <div ref="cardRef" v-show="!hidden" class="post-card" @click="handleCardClick"
+  <div ref="cardRef" v-show="!hidden" class="post-card" :class="ratingClass" @click="handleCardClick"
        @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"
        :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200), willChange: swiping ? 'transform, opacity' : 'auto' }">
     
@@ -65,6 +65,10 @@ const props = defineProps<{
   favorite?: boolean
 }>()
 
+const emit = defineEmits<{
+  (e: 'click-media', post: Post): void
+}>()
+
 const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -105,18 +109,23 @@ const currentUrl = ref('')
 function updateUrl() {
   const q = feed.previewQuality // 'thumbnail' | 'sample' | 'full'
   const p = displayedPost.value
+  let newUrl = ''
   if (q === 'thumbnail') {
-    currentUrl.value = p.preview_url || p.sample_url || p.file_url || ''
+    newUrl = p.preview_url || p.sample_url || p.file_url || ''
   } else if (q === 'sample') {
-    currentUrl.value = p.sample_url || p.preview_url || p.file_url || ''
+    newUrl = p.sample_url || p.preview_url || p.file_url || ''
   } else { // 'full'
-    currentUrl.value = p.file_url || p.sample_url || p.preview_url || ''
+    newUrl = p.file_url || p.sample_url || p.preview_url || ''
+  }
+  
+  if (currentUrl.value !== newUrl) {
+    loaded.value = false
+    currentUrl.value = newUrl
   }
 }
 
-// Watch for quality setting changes or active post updates
+// Watch for quality setting changes or active post updates deeply
 watch([() => feed.previewQuality, displayedPost], () => {
-  loaded.value = false
   updateUrl()
 }, { deep: true })
 
@@ -257,10 +266,7 @@ function doLikeAnimation() {
 
 function handleCardClick() {
   if (!isMobile.value) {
-    router.push({ 
-      name: 'post', 
-      query: { id: String(displayedPost.value.id), site: displayedPost.value.source_site } 
-    })
+    emit('click-media', displayedPost.value)
     return
   }
 
@@ -274,10 +280,7 @@ function handleCardClick() {
   } else {
     lastTapTime = now
     tapTimeout = setTimeout(() => {
-      router.push({ 
-        name: 'post', 
-        query: { id: String(displayedPost.value.id), site: displayedPost.value.source_site } 
-      })
+      emit('click-media', displayedPost.value)
     }, 300)
   }
 }

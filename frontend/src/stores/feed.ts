@@ -82,7 +82,7 @@ export const useFeedStore = defineStore('feed', () => {
   function addPosts(newPosts: Post[]) {
     for (const post of newPosts) {
       // Avoid adding exact duplicate by site ID
-      const exists = posts.value.find(p => p.id === post.id && p.source_site === post.source_site)
+      const exists = posts.value.find(p => String(p.id) === String(post.id) && p.source_site === post.source_site)
       if (exists) continue
 
       post.duplicates = post.duplicates || []
@@ -98,7 +98,7 @@ export const useFeedStore = defineStore('feed', () => {
           
           // Save full duplicate post
           existingPost.duplicates = existingPost.duplicates || []
-          if (!existingPost.duplicates.some(d => d.id === post.id && d.source_site === post.source_site)) {
+          if (!existingPost.duplicates.some(d => String(d.id) === String(post.id) && d.source_site === post.source_site)) {
             existingPost.duplicates.push(post)
           }
 
