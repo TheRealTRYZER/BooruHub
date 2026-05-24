@@ -6,7 +6,7 @@
       @apply-correction="applyCorrection" 
     />
 
-    <PostGrid :posts="feed.posts" :skeletonCount="skeletonCount" />
+    <PostGrid :posts="feed.posts" :skeletonCount="skeletonCount" @click-media="openLightbox" />
     <div v-if="loading" class="loading-spinner" style="margin: 20px auto;"></div>
     <div v-if="!feed.hasMore && feed.posts.length > 0" class="loading-text" style="text-align:center; padding:40px; color:var(--text-muted); width:100%;">
       {{ lang.t('no_more_posts') }}
@@ -18,6 +18,14 @@
       <div class="empty-state-title" style="font-size:1.5rem; font-weight:700;">{{ lang.t('no_results') }}</div>
       <div class="empty-state-text" style="color:var(--text-muted);">{{ lang.t('try_changing') }}</div>
     </div>
+
+    <!-- Immersive Lightbox Slider Modal -->
+    <LightboxModal
+      v-if="selectedPost"
+      :post="selectedPost"
+      :posts="feed.posts"
+      @close="selectedPost = null"
+    />
   </div>
 </template>
 
@@ -32,7 +40,8 @@ import { useFeedLoader } from '../composables/useFeedLoader'
 import { useSearchHistory } from '../composables/useSearchHistory'
 import PostGrid from '../components/PostGrid.vue'
 import SearchToolbar from '../components/SearchToolbar.vue'
-import type { SiteName } from '../types'
+import LightboxModal from '../components/LightboxModal.vue'
+import type { Post, SiteName } from '../types'
 
 const route = useRoute()
 const auth = useAuthStore()
@@ -46,6 +55,11 @@ let observer: IntersectionObserver | null = null
 
 const { loading, skeletonCount, correctedTags, loadMore, reload } = useFeedLoader(feed, toast, lang, availableSites)
 const { addQuery: addSearchQuery } = useSearchHistory()
+
+const selectedPost = ref<Post | null>(null)
+function openLightbox(post: Post) {
+  selectedPost.value = post
+}
 
 const handleReload = () => {
   if (feed.tags.trim()) addSearchQuery(feed.tags.trim())

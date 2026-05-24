@@ -99,6 +99,7 @@ export interface FavoritesResponse {
 export interface FavoriteCheckResponse {
   is_favorite: boolean
   favorite_id: number | null
+  is_dislike?: boolean | null
 }
 
 export interface Bookmark {
@@ -207,6 +208,7 @@ export type TranslationKey =
   | 'privacy_sharing_title' | 'privacy_sharing_text'
   | 'card_size' | 'preview_quality' | 'quality_thumbnail' | 'quality_sample' | 'quality_full'
   | 'save_to_bookmarks'
+  | 'close' | 'download' | 'downloading' | 'download_success' | 'disliked'
 
 export type Locale = 'en' | 'ru'
 

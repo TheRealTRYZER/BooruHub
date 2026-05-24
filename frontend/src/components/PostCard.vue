@@ -1,5 +1,5 @@
 <template>
-  <div ref="cardRef" v-show="!hidden" class="post-card" @click="handleCardClick"
+  <div ref="cardRef" v-show="!hidden" class="post-card" :class="ratingClass" @click="handleCardClick"
        @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"
        :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200), willChange: swiping ? 'transform, opacity' : 'auto' }">
     
@@ -63,6 +63,10 @@ const feed = useFeedStore()
 const props = defineProps<{
   post: Post
   favorite?: boolean
+}>()
+
+const emit = defineEmits<{
+  (e: 'click-media', post: Post): void
 }>()
 
 const router = useRouter()
@@ -257,10 +261,7 @@ function doLikeAnimation() {
 
 function handleCardClick() {
   if (!isMobile.value) {
-    router.push({ 
-      name: 'post', 
-      query: { id: String(displayedPost.value.id), site: displayedPost.value.source_site } 
-    })
+    emit('click-media', displayedPost.value)
     return
   }
 
@@ -274,10 +275,7 @@ function handleCardClick() {
   } else {
     lastTapTime = now
     tapTimeout = setTimeout(() => {
-      router.push({ 
-        name: 'post', 
-        query: { id: String(displayedPost.value.id), site: displayedPost.value.source_site } 
-      })
+      emit('click-media', displayedPost.value)
     }, 300)
   }
 }

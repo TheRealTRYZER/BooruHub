@@ -5,6 +5,10 @@
     <button class="btn btn-primary" @click="$router.push('/')">{{ lang.t('back_to_feed') }}</button>
   </div>
   <div v-else class="post-detail">
+    <!-- Dynamic Ambilight Theatre Backdrop -->
+    <div class="ambient-glow-container">
+      <div class="ambient-glow-backdrop" :style="{ backgroundImage: `url(${mediaUrl})` }"></div>
+    </div>
     <!-- Parent/Child Relationships Panel -->
     <div v-if="relationshipPosts.length > 1" class="post-relationship-panel">
       <div class="post-relationship-header">

@@ -2,15 +2,26 @@
   <div class="search-toolbar-container">
     <div class="search-bar">
       <div class="search-bar-row">
-        <input type="text" class="input input-search"
-               :placeholder="lang.t('search_placeholder')"
-               v-model="feed.tags"
-               @input="onSearchInput"
-               @focus="onSearchFocus"
-               @blur="onSearchBlur"
-               @keydown.enter="triggerSearch"
-               @keydown.tab.prevent="onTabPress"
-               v-show="!feed.isSplit">
+        <div v-show="!feed.isSplit" class="search-input-wrapper" @click="focusActualInput">
+          <!-- Tag Pills List -->
+          <span v-for="(pill, idx) in pills" :key="pill + idx" 
+                class="tag-pill" 
+                :class="[getPillCategory(pill), { negated: pill.startsWith('-') }]"
+                @click.stop="toggleNegation(idx)">
+            <span class="tag-pill-text">{{ pill }}</span>
+            <span class="tag-pill-remove" @click.stop="removeTagPill(idx)">×</span>
+          </span>
+          
+          <!-- Invisible Actual Input Field for typing next tag -->
+          <input ref="inputEl" type="text" class="search-input-element"
+                 :placeholder="pills.length === 0 ? lang.t('search_placeholder') : ''"
+                 v-model="inputVal"
+                 @input="onSearchInput"
+                 @focus="onSearchFocus"
+                 @blur="onSearchBlur"
+                 @keydown="onKeydown"
+                 @keydown.tab.prevent="onTabPress" />
+        </div>
                
         <div class="search-actions">
           <button v-if="auth.isAuthenticated && !feed.isSplit" class="btn btn-secondary" @click="saveBookmark" :title="lang.t('save_to_bookmarks')" id="btn-bookmark">
@@ -119,7 +130,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useFeedStore } from '../stores/feed'
 import { useToastStore } from '../stores/toast'
@@ -144,6 +155,109 @@ const emit = defineEmits<{
 
 const availableSites: SiteName[] = ['danbooru', 'e621', 'rule34']
 const suggestions = ref<any[]>([])
+
+// Visual Tag Query Builder State & Logic
+const pills = ref<string[]>([])
+const inputVal = ref('')
+const inputEl = ref<HTMLInputElement | null>(null)
+
+function focusActualInput() {
+  if (inputEl.value) inputEl.value.focus()
+}
+
+function getPillCategory(pill: string): string {
+  const clean = pill.startsWith('-') ? pill.substring(1) : pill
+  if (clean.includes(':')) return 'metadata'
+  
+  // Lookup inside cache or fetched suggestions matching this tag name
+  const match = suggestions.value.find(s => s.tag === clean)
+  if (match && match.category) return match.category
+  
+  return 'general'
+}
+
+function toggleNegation(idx: number) {
+  const pill = pills.value[idx]
+  if (pill.startsWith('-')) {
+    pills.value[idx] = pill.substring(1)
+  } else {
+    pills.value[idx] = '-' + pill
+  }
+  syncToFeedStore()
+}
+
+function removeTagPill(idx: number) {
+  pills.value.splice(idx, 1)
+  syncToFeedStore()
+}
+
+function addTagPill(val: string) {
+  const clean = val.trim().toLowerCase()
+  if (clean) {
+    // If it's already in pills, don't duplicate
+    if (!pills.value.includes(clean)) {
+      pills.value.push(clean)
+    }
+  }
+  inputVal.value = ''
+  suggestions.value = []
+  syncToFeedStore()
+}
+
+function removeLastPill() {
+  if (pills.value.length > 0) {
+    pills.value.pop()
+    syncToFeedStore()
+  }
+}
+
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === ' ' || e.key === 'Enter') {
+    const val = inputVal.value.trim()
+    if (val) {
+      e.preventDefault()
+      addTagPill(val)
+      if (e.key === 'Enter') {
+        triggerSearch()
+      }
+    } else if (e.key === 'Enter') {
+      triggerSearch()
+    }
+  } else if (e.key === 'Backspace' && !inputVal.value) {
+    removeLastPill()
+  }
+}
+
+function syncToFeedStore() {
+  const combined = pills.value.join(' ')
+  feed.tags = combined + (inputVal.value ? ' ' + inputVal.value : '')
+}
+
+function parseExternalTags() {
+  const tagsStr = feed.tags.trim()
+  if (!tagsStr) {
+    pills.value = []
+    inputVal.value = ''
+    return
+  }
+  pills.value = tagsStr.split(/\s+/)
+  inputVal.value = ''
+}
+
+watch(inputVal, () => {
+  syncToFeedStore()
+})
+
+watch(() => feed.tags, (newVal) => {
+  const combined = pills.value.join(' ') + (inputVal.value ? ' ' + inputVal.value : '')
+  if (newVal.trim() !== combined.trim()) {
+    parseExternalTags()
+  }
+})
+
+onMounted(() => {
+  parseExternalTags()
+})
 
 function formatCount(num?: number): string {
   if (!num) return ''
@@ -193,12 +307,11 @@ async function saveBookmark() {
 
 function onSearchInput() {
   clearTimeout(suggestTimeout)
-  const val = feed.tags.trim()
-  const lastTag = val.split(/\s+/).pop()
-  if (lastTag && lastTag.length >= 2) {
+  const val = inputVal.value.trim()
+  if (val && val.length >= 2) {
     suggestTimeout = setTimeout(async () => {
       try {
-        const data = await apiSuggestTags(lastTag)
+        const data = await apiSuggestTags(val)
         suggestions.value = data.suggestions || []
       } catch (e) {
         suggestions.value = []
@@ -210,7 +323,7 @@ function onSearchInput() {
 }
 
 function onSearchFocus() {
-  if (!feed.tags.trim()) showHistory.value = true
+  if (pills.value.length === 0 && !inputVal.value.trim()) showHistory.value = true
 }
 
 function onSearchBlur() {
@@ -221,11 +334,7 @@ function onSearchBlur() {
 }
 
 function selectSuggestion(tag: string) {
-  const words = feed.tags.split(/\s+/)
-  words.pop() // remove partial word
-  words.push(tag)
-  feed.tags = words.join(' ') + ' '
-  suggestions.value = []
+  addTagPill(tag)
   triggerSearch()
 }
 

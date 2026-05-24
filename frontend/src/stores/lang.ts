@@ -151,6 +151,11 @@ const translations: Record<Locale, TranslationDict> = {
     quality_sample: "Medium",
     quality_full: "Full",
     save_to_bookmarks: "Save to Bookmarks",
+    close: "Close",
+    download: "Download",
+    downloading: "Downloading...",
+    download_success: "Download completed!",
+    disliked: "Post disliked",
   },
   ru: {
     search_placeholder: "Поиск по тегам... (напр. cat_ears 1girl)",
@@ -298,6 +303,11 @@ const translations: Record<Locale, TranslationDict> = {
     quality_sample: "Среднее",
     quality_full: "Оригинал (Фул)",
     save_to_bookmarks: "В закладки",
+    close: "Закрыть",
+    download: "Скачать",
+    downloading: "Скачивание...",
+    download_success: "Скачивание завершено!",
+    disliked: "Пост скрыт",
   },
 }
 

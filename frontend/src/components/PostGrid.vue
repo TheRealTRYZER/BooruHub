@@ -2,7 +2,7 @@
   <div class="post-grid" ref="gridEl" :style="{ '--card-size': feed.cardSize + 'px' }">
     <div v-for="(col, ci) in columns" :key="ci" class="post-column">
       <div v-for="item in col" :key="item.key" :data-post-key="item.key">
-        <component :is="item.component" v-bind="item.props" />
+        <component :is="item.component" v-bind="item.props" @click-media="handleCardClick" />
       </div>
     </div>
   </div>
@@ -17,6 +17,14 @@ import { useEventLogger } from '../composables/useEventLogger'
 import type { Post } from '../types'
 
 const feed = useFeedStore()
+
+const emit = defineEmits<{
+  (e: 'click-media', post: Post): void
+}>()
+
+function handleCardClick(post: Post) {
+  emit('click-media', post)
+}
 
 interface GridItem {
   key: string
