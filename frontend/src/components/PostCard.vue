@@ -109,18 +109,23 @@ const currentUrl = ref('')
 function updateUrl() {
   const q = feed.previewQuality // 'thumbnail' | 'sample' | 'full'
   const p = displayedPost.value
+  let newUrl = ''
   if (q === 'thumbnail') {
-    currentUrl.value = p.preview_url || p.sample_url || p.file_url || ''
+    newUrl = p.preview_url || p.sample_url || p.file_url || ''
   } else if (q === 'sample') {
-    currentUrl.value = p.sample_url || p.preview_url || p.file_url || ''
+    newUrl = p.sample_url || p.preview_url || p.file_url || ''
   } else { // 'full'
-    currentUrl.value = p.file_url || p.sample_url || p.preview_url || ''
+    newUrl = p.file_url || p.sample_url || p.preview_url || ''
+  }
+  
+  if (currentUrl.value !== newUrl) {
+    loaded.value = false
+    currentUrl.value = newUrl
   }
 }
 
-// Watch for quality setting changes or active post updates
+// Watch for quality setting changes or active post updates deeply
 watch([() => feed.previewQuality, displayedPost], () => {
-  loaded.value = false
   updateUrl()
 }, { deep: true })
 
