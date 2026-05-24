@@ -35,12 +35,13 @@
           <span class="suggestion-text autocomplete-tag" :class="tagObj.category">{{ tagObj.tag.replace(/_/g, ' ') }}</span>
           <span v-if="tagObj.category && tagObj.category !== 'general'" class="autocomplete-badge" :class="tagObj.category">{{ tagObj.category }}</span>
           
-          <span v-if="tagObj.post_count" class="tag-count-indicator">{{ formatCount(tagObj.post_count) }}</span>
-          
-          <div class="suggestion-sources">
-            <span v-if="tagObj.from_danbooru" class="suggestion-source danbooru">db</span>
-            <span v-if="tagObj.from_e621" class="suggestion-source e621">e6</span>
-            <span v-if="tagObj.from_rule34" class="suggestion-source rule34">r34</span>
+          <div class="suggestion-right-group">
+            <span v-if="tagObj.post_count" class="tag-count-indicator">{{ formatCount(tagObj.post_count) }}</span>
+            <div class="suggestion-sources">
+              <span v-if="tagObj.from_danbooru" class="suggestion-source danbooru">db</span>
+              <span v-if="tagObj.from_e621" class="suggestion-source e621">e6</span>
+              <span v-if="tagObj.from_rule34" class="suggestion-source rule34">r34</span>
+            </div>
           </div>
         </div>
       </div>
@@ -163,6 +164,7 @@ function triggerSearch() {
   if (feed.tags.trim()) {
     addSearchQuery(feed.tags.trim())
   }
+  suggestions.value = []
   showHistory.value = false
   emit('search')
 }
@@ -213,6 +215,7 @@ function onSearchFocus() {
 
 function onSearchBlur() {
   setTimeout(() => {
+    suggestions.value = []
     showHistory.value = false
   }, 200)
 }

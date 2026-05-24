@@ -582,6 +582,19 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-weight: 500;
 }
 
+.suggestion-right-group {
+  margin-left: auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.suggestion-right-group .tag-count-indicator {
+  margin-left: 0;
+}
+.suggestion-right-group .suggestion-sources {
+  margin-left: 0;
+}
+
 /* === SKELETON === */
 .skeleton {
   background: linear-gradient(90deg, var(--bg-secondary) 25%, #2a2a2a 50%, var(--bg-secondary) 75%);
