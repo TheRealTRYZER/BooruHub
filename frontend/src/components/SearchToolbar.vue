@@ -1,5 +1,5 @@
 <template>
-  <div class="search-toolbar-container" :class="{ 'toolbar-hidden': isScrollingDown }">
+  <div class="search-toolbar-container" :class="{ 'toolbar-hidden': isScrollingDown, 'is-sticky': isSticky }">
     <div class="search-bar">
       <div class="search-bar-row">
         <div v-show="!feed.isSplit" class="search-input-wrapper" @click="focusActualInput">
@@ -286,11 +286,14 @@ watch(() => feed.tags, (newVal) => {
   }
 })
 
+const isSticky = ref(false)
 const isScrollingDown = ref(false)
 let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0
 
 function handleScroll() {
   const currentScrollY = window.scrollY
+  
+  isSticky.value = currentScrollY > 40
   
   if (currentScrollY < 40) {
     isScrollingDown.value = false
@@ -419,17 +422,36 @@ function onTabPress() {
   flex-direction: column;
   gap: 16px;
   margin-bottom: 24px;
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, background-color 0.3s, padding 0.3s, border-radius 0.3s, box-shadow 0.3s;
+}
+
+/* Floating Sticky Glass Bar when scrolled down */
+.search-toolbar-container.is-sticky {
   position: sticky;
-  top: 60px; /* Under the fixed header navbar */
-  z-index: 99; /* Above content, below modals/lightbox overlay */
-  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  padding: 16px 20px;
-  margin-left: -20px;
-  margin-right: -20px;
-  border-bottom: 1px solid rgba(128, 128, 128, 0.12);
-  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease;
+  top: 76px; /* 16px floating gap below the 60px navbar */
+  z-index: 99; /* Above grid, below modals */
+  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--border-radius-lg);
+  padding: 12px 18px;
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  gap: 0;
+}
+
+[data-theme="light"] .search-toolbar-container.is-sticky {
+  background: color-mix(in srgb, var(--bg-card) 85%, transparent);
+  border-color: rgba(0, 0, 0, 0.08);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+}
+
+/* Smoothly hide the site filters & controls when sticky */
+.search-toolbar-container.is-sticky .filter-controls-row {
+  display: none;
+}
+.search-toolbar-container.is-sticky .split-search-container {
+  display: none;
 }
 .search-bar-row {
   display: flex;
@@ -474,15 +496,15 @@ function onTabPress() {
   margin-bottom: 0;
 }
 @media (max-width: 768px) {
-  .search-toolbar-container {
-    top: 60px;
-    padding: 12px 10px;
-    margin-left: -10px;
-    margin-right: -10px;
-    background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
+  .search-toolbar-container.is-sticky {
+    top: 70px; /* Small gap on mobile below fixed navbar */
+    padding: 8px 12px;
+    border-radius: var(--border-radius);
+    background: color-mix(in srgb, var(--bg-card) 90%, transparent);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
   }
   .search-toolbar-container.toolbar-hidden {
-    transform: translateY(-115%);
+    transform: translateY(-135%);
     opacity: 0;
     pointer-events: none;
   }
