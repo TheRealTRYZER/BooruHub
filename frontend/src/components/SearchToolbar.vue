@@ -425,33 +425,31 @@ function onTabPress() {
   transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, background-color 0.3s, padding 0.3s, border-radius 0.3s, box-shadow 0.3s;
 }
 
-/* Floating Sticky Glass Bar when scrolled down */
+/* Sticky Glass Container when scrolled down */
 .search-toolbar-container.is-sticky {
   position: sticky;
-  top: 76px; /* 16px floating gap below the 60px navbar */
+  top: 60px; /* Flush below the 60px navbar */
   z-index: 99; /* Above grid, below modals */
-  background: color-mix(in srgb, var(--bg-card) 78%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 85%, transparent);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--border-radius-lg);
-  padding: 12px 18px;
+  padding: 16px 20px;
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
-  gap: 0;
 }
 
 [data-theme="light"] .search-toolbar-container.is-sticky {
-  background: color-mix(in srgb, var(--bg-card) 85%, transparent);
+  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
   border-color: rgba(0, 0, 0, 0.08);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
 }
 
-/* Smoothly hide the site filters & controls when sticky */
-.search-toolbar-container.is-sticky .filter-controls-row {
-  display: none;
-}
-.search-toolbar-container.is-sticky .split-search-container {
-  display: none;
+/* Global scroll hide-on-down / show-on-up animation for all devices */
+.search-toolbar-container.toolbar-hidden {
+  transform: translateY(-115%);
+  opacity: 0;
+  pointer-events: none;
 }
 .search-bar-row {
   display: flex;
