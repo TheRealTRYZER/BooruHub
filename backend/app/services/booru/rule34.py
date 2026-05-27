@@ -47,6 +47,23 @@ class Rule34(BaseBooru):
         }
         return mapping.get(field_name, field_name)
 
+    def prepare_tags(self, tags: str) -> Tuple[str, List[str]]:
+        """Map rating:general tags to Rule34-compatible rating:safe."""
+        clean = tags.strip()
+        if not clean:
+            return "", []
+        
+        words = clean.split()
+        mapped = []
+        for w in words:
+            lower_w = w.lower()
+            if "rating:general" in lower_w:
+                w = w.replace("rating:general", "rating:safe")
+            elif "rating:s" in lower_w and "rating:safe" not in lower_w:
+                w = w.replace("rating:s", "rating:safe")
+            mapped.append(w)
+        return " ".join(mapped), []
+
     def calculate_page(self, page: int, limit: int) -> int:
         """Rule34 uses 0-indexed page-based pagination (pid = page)."""
         return page - 1

@@ -7,7 +7,7 @@ Quirks handled:
 - Rating uses 's' for safe instead of 'g'
 """
 import logging
-from typing import List, Optional
+from typing import List, Optional, Tuple
 
 from app.services.booru.base import BaseBooru
 from app.db.models import User
@@ -28,6 +28,21 @@ class E621(BaseBooru):
         self.auth_fields = [
             ("e621_login", "e621_api_key", "E621_LOGIN", "E621_API_KEY"),
         ]
+
+    def prepare_tags(self, tags: str) -> Tuple[str, List[str]]:
+        """Map rating:general tags to e621-compatible rating:safe."""
+        clean = tags.strip()
+        if not clean:
+            return "", []
+        
+        words = clean.split()
+        mapped = []
+        for w in words:
+            lower_w = w.lower()
+            if "rating:general" in lower_w:
+                w = w.replace("rating:general", "rating:safe")
+            mapped.append(w)
+        return " ".join(mapped), []
 
     def normalize_post(self, raw: dict) -> Optional[dict]:
         file_data = raw.get("file", {})
