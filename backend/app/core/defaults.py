@@ -15,7 +15,7 @@ STARTER_MAPPINGS = [
         "unitag": "rating:general",
         "danbooru_tags": "rating:general",
         "e621_tags": "rating:safe",
-        "rule34_tags": "rating:general"
+        "rule34_tags": "rating:safe"
     },
     {
         "unitag": "rating:explicit",
