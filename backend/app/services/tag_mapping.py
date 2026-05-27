@@ -112,8 +112,9 @@ def translate_tags(
                 site_val = ""
             site_val = site_val.strip()
             if not site_val:
-                logger.debug(f"[MAP] Site {site} has no mapping for unitag '{tag_name}', omitting from query")
-                continue
+                logger.info(f"[MAP] Site {site} has no mapping for unitag '{tag_name}', excluding site from search")
+                return None
+            
             
             # Map comma-separated values
             parts = [p.strip() for p in site_val.split(",") if p.strip()]
