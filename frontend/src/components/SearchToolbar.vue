@@ -1,5 +1,5 @@
 <template>
-  <div class="search-toolbar-container">
+  <div class="search-toolbar-container" :class="{ 'toolbar-hidden': isScrollingDown }">
     <div class="search-bar">
       <div class="search-bar-row">
         <div v-show="!feed.isSplit" class="search-input-wrapper" @click="focusActualInput">
@@ -135,7 +135,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useFeedStore } from '../stores/feed'
 import { useToastStore } from '../stores/toast'
@@ -286,8 +286,35 @@ watch(() => feed.tags, (newVal) => {
   }
 })
 
+const isScrollingDown = ref(false)
+let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0
+
+function handleScroll() {
+  const currentScrollY = window.scrollY
+  
+  if (currentScrollY < 40) {
+    isScrollingDown.value = false
+    lastScrollY = currentScrollY
+    return
+  }
+  
+  if (Math.abs(currentScrollY - lastScrollY) < 6) return
+
+  if (currentScrollY > lastScrollY) {
+    isScrollingDown.value = true
+  } else {
+    isScrollingDown.value = false
+  }
+  lastScrollY = currentScrollY
+}
+
 onMounted(() => {
   parseExternalTags()
+  window.addEventListener('scroll', handleScroll, { passive: true })
+})
+
+onUnmounted(() => {
+  window.removeEventListener('scroll', handleScroll)
 })
 
 function formatCount(num?: number): string {
@@ -392,6 +419,17 @@ function onTabPress() {
   flex-direction: column;
   gap: 16px;
   margin-bottom: 24px;
+  position: sticky;
+  top: 60px; /* Under the fixed header navbar */
+  z-index: 99; /* Above content, below modals/lightbox overlay */
+  background: color-mix(in srgb, var(--bg-primary) 85%, transparent);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  padding: 16px 20px;
+  margin-left: -20px;
+  margin-right: -20px;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.12);
+  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.3s ease;
 }
 .search-bar-row {
   display: flex;
@@ -436,6 +474,18 @@ function onTabPress() {
   margin-bottom: 0;
 }
 @media (max-width: 768px) {
+  .search-toolbar-container {
+    top: 60px;
+    padding: 12px 10px;
+    margin-left: -10px;
+    margin-right: -10px;
+    background: color-mix(in srgb, var(--bg-primary) 92%, transparent);
+  }
+  .search-toolbar-container.toolbar-hidden {
+    transform: translateY(-115%);
+    opacity: 0;
+    pointer-events: none;
+  }
   .search-bar-row {
     flex-wrap: wrap;
   }
