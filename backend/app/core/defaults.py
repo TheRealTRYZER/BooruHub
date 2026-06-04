@@ -15,7 +15,7 @@ STARTER_MAPPINGS = [
         "unitag": "rating:general",
         "danbooru_tags": "rating:general",
         "e621_tags": "rating:safe",
-        "rule34_tags": ""
+        "rule34_tags": ""  # Rule34 has no safe content, empty maps to exclusion (unless negated)
     },
     {
         "unitag": "rating:explicit",

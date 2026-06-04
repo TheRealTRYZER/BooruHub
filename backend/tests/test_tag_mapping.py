@@ -72,3 +72,16 @@ class TestTranslateTags:
         result = translate_tags([], "danbooru", {})
         # Empty list → empty or None
         assert result == "" or result is None
+
+    def test_translate_unmapped_positive_tag_excludes(self):
+        """it should exclude the site (return None) if a positive tag has an empty mapping"""
+        lookup = {"female": {"danbooru": ""}}
+        result = translate_tags(["cats", "female"], "danbooru", lookup)
+        assert result is None
+
+    def test_translate_unmapped_negative_tag_skips(self):
+        """it should skip the tag (keep searching others) if a negative tag has an empty mapping"""
+        lookup = {"female": {"danbooru": ""}}
+        result = translate_tags(["cats", "-female"], "danbooru", lookup)
+        assert result == "cats"
+

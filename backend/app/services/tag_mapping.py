@@ -112,6 +112,10 @@ def translate_tags(
                 site_val = ""
             site_val = site_val.strip()
             if not site_val:
+                if prefix == "-":
+                    # If it's a negative filter (e.g. -rating:general) and the site has no mapping for it
+                    # (e.g. Rule34 has no safe content mapped), we skip it so the site is still searched.
+                    continue
                 logger.info(f"[MAP] Site {site} has no mapping for unitag '{tag_name}', excluding site from search")
                 return None
             
