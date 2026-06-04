@@ -135,6 +135,10 @@ function updateUrl() {
     newUrl = getFirstNonVideo([p.file_url, p.sample_url, p.preview_url])
   }
   
+  if (isVideoExt(newUrl)) {
+    newUrl = ''
+  }
+  
   if (currentUrl.value !== newUrl) {
     loaded.value = false
     currentUrl.value = newUrl

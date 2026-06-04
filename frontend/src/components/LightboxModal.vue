@@ -199,7 +199,8 @@ const backdropUrl = computed(() => {
   if (p.file_url && !isVideoExt(p.file_url)) {
     return p.file_url
   }
-  return p.preview_url || p.sample_url || ''
+  const fallback = p.preview_url || p.sample_url || ''
+  return isVideoExt(fallback) ? '' : fallback
 })
 
 // Group post tags dynamically by category

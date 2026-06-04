@@ -185,7 +185,8 @@ const backdropUrl = computed(() => {
   if (p.file_url && !isVideoExt(p.file_url)) {
     return p.file_url
   }
-  return p.preview_url || p.sample_url || ''
+  const fallback = p.preview_url || p.sample_url || ''
+  return isVideoExt(fallback) ? '' : fallback
 })
 
 function getPostThumbnail(p: Post) {
@@ -199,7 +200,8 @@ function getPostThumbnail(p: Post) {
   if (p.preview_url && !isVideoExt(p.preview_url)) return p.preview_url
   if (p.sample_url && !isVideoExt(p.sample_url)) return p.sample_url
   if (p.file_url && !isVideoExt(p.file_url)) return p.file_url
-  return p.preview_url || p.sample_url || p.file_url || ''
+  const fallback = p.preview_url || p.sample_url || p.file_url || ''
+  return isVideoExt(fallback) ? '' : fallback
 }
 
 const ratingClass = computed(() => {
