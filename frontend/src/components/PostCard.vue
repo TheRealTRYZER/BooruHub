@@ -110,12 +110,29 @@ function updateUrl() {
   const q = feed.previewQuality // 'thumbnail' | 'sample' | 'full'
   const p = displayedPost.value
   let newUrl = ''
+  
+  const videoExtensions = ['mp4', 'webm', 'm4v', 'mov', 'mkv', 'swf', 'ogv']
+  const isVideoExt = (url: string) => {
+    if (!url) return false
+    const cleanUrl = url.split('?')[0].toLowerCase()
+    return videoExtensions.some(ext => cleanUrl.endsWith('.' + ext))
+  }
+
+  const getFirstNonVideo = (candidates: string[]) => {
+    for (const c of candidates) {
+      if (c && !isVideoExt(c)) {
+        return c
+      }
+    }
+    return candidates.find(c => c) || ''
+  }
+
   if (q === 'thumbnail') {
-    newUrl = p.preview_url || p.sample_url || p.file_url || ''
+    newUrl = getFirstNonVideo([p.preview_url, p.sample_url, p.file_url])
   } else if (q === 'sample') {
-    newUrl = p.sample_url || p.preview_url || p.file_url || ''
+    newUrl = getFirstNonVideo([p.sample_url, p.preview_url, p.file_url])
   } else { // 'full'
-    newUrl = p.file_url || p.sample_url || p.preview_url || ''
+    newUrl = getFirstNonVideo([p.file_url, p.sample_url, p.preview_url])
   }
   
   if (currentUrl.value !== newUrl) {
@@ -123,6 +140,7 @@ function updateUrl() {
     currentUrl.value = newUrl
   }
 }
+
 
 // Watch for quality setting changes or active post updates deeply
 watch([() => feed.previewQuality, displayedPost], () => {

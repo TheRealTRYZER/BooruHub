@@ -7,7 +7,7 @@
   <div v-else class="post-detail">
     <!-- Dynamic Ambilight Theatre Backdrop -->
     <div class="ambient-glow-container">
-      <div class="ambient-glow-backdrop" :style="{ backgroundImage: `url(${mediaUrl})` }"></div>
+      <div class="ambient-glow-backdrop" :style="{ backgroundImage: `url(${backdropUrl})` }"></div>
     </div>
     <!-- Parent/Child Relationships Panel -->
     <div v-if="relationshipPosts.length > 1" class="post-relationship-panel">
@@ -23,7 +23,7 @@
         <img 
           v-for="p in relationshipPosts" 
           :key="p.source_site + ':' + p.id"
-          :src="p.preview_url || p.sample_url || p.file_url || ''"
+          :src="getPostThumbnail(p)"
           class="post-relationship-thumb"
           :class="{ active: String(p.id) === String(displayedPost.id) }"
           :alt="'Thumbnail ' + p.id"
@@ -164,6 +164,43 @@ const mediaUrl = computed(() => {
   if (isVideo.value) return displayedPost.value.file_url || ''
   return displayedPost.value.sample_url || displayedPost.value.file_url || ''
 })
+
+const backdropUrl = computed(() => {
+  const p = displayedPost.value
+  if (!p) return ''
+  
+  const videoExtensions = ['mp4', 'webm', 'm4v', 'mov', 'mkv', 'swf', 'ogv']
+  const isVideoExt = (url: string) => {
+    if (!url) return false
+    const cleanUrl = url.split('?')[0].toLowerCase()
+    return videoExtensions.some(ext => cleanUrl.endsWith('.' + ext))
+  }
+  
+  if (p.sample_url && !isVideoExt(p.sample_url)) {
+    return p.sample_url
+  }
+  if (p.preview_url && !isVideoExt(p.preview_url)) {
+    return p.preview_url
+  }
+  if (p.file_url && !isVideoExt(p.file_url)) {
+    return p.file_url
+  }
+  return p.preview_url || p.sample_url || ''
+})
+
+function getPostThumbnail(p: Post) {
+  const videoExtensions = ['mp4', 'webm', 'm4v', 'mov', 'mkv', 'swf', 'ogv']
+  const isVideoExt = (url: string) => {
+    if (!url) return false
+    const cleanUrl = url.split('?')[0].toLowerCase()
+    return videoExtensions.some(ext => cleanUrl.endsWith('.' + ext))
+  }
+  
+  if (p.preview_url && !isVideoExt(p.preview_url)) return p.preview_url
+  if (p.sample_url && !isVideoExt(p.sample_url)) return p.sample_url
+  if (p.file_url && !isVideoExt(p.file_url)) return p.file_url
+  return p.preview_url || p.sample_url || p.file_url || ''
+}
 
 const ratingClass = computed(() => {
   if (!displayedPost.value) return 'unknown'

@@ -285,4 +285,41 @@ describe('PostView.vue', () => {
     expect(thumbs[1].attributes('src')).toBe('https://test.com/danbooru.jpg')
     expect(thumbs[1].classes()).toContain('active')
   })
+
+  it('should use a static image for backdropUrl and getPostThumbnail even if media is a video', async () => {
+    const mockVideoPost = {
+      id: 123,
+      source_site: 'danbooru',
+      preview_url: 'https://test.com/preview.jpg',
+      sample_url: 'https://test.com/sample.mp4',
+      file_url: 'https://test.com/file.mp4',
+      rating: 's',
+      tags: ['tag1'],
+      width: 100,
+      height: 100,
+      parent_id: null,
+      has_children: false
+    }
+
+    const wrapper = mount(PostView, {
+      global: {
+        plugins: [createTestingPinia({
+          createSpy: vi.fn,
+          initialState: {
+            lang: { t: (key: string) => key },
+            feed: {
+              posts: [mockVideoPost]
+            }
+          }
+        })]
+      }
+    })
+
+    // Allow onMounted ticks
+    await new Promise((resolve) => setTimeout(resolve, 0))
+
+    expect((wrapper.vm as any).backdropUrl).toBe('https://test.com/preview.jpg')
+    expect((wrapper.vm as any).getPostThumbnail(mockVideoPost)).toBe('https://test.com/preview.jpg')
+  })
 })
+

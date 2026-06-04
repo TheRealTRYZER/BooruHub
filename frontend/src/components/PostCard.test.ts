@@ -176,4 +176,37 @@ describe('PostCard.vue', () => {
     expect(wrapper.find('.post-card-rating').text()).toBe('E')
     expect(wrapper.find('.post-card-score').text()).toBe('★ 45')
   })
+
+  it('should filter out video URLs when resolving preview image source', async () => {
+    const mockVideoPost = {
+      id: 123,
+      source_site: 'danbooru',
+      preview_url: 'https://test.com/preview.jpg',
+      sample_url: 'https://test.com/sample.mp4',
+      file_url: 'https://test.com/file.mp4',
+      rating: 's',
+      tags: ['tag1'],
+      width: 100,
+      height: 100,
+      hash: 'existing-hash'
+    }
+
+    const wrapper = mount(PostCard, {
+      props: {
+        post: mockVideoPost as any
+      },
+      global: {
+        plugins: [createTestingPinia({
+          createSpy: vi.fn,
+          initialState: {
+            feed: { previewQuality: 'full' },
+            lang: { t: (key: string) => key }
+          }
+        })],
+      }
+    })
+
+    expect((wrapper.vm as any).currentUrl).toBe('https://test.com/preview.jpg')
+  })
 })
+

@@ -4,7 +4,7 @@
       
       <!-- Dynamic Ambilight Theatre Backdrop -->
       <div class="ambient-glow-container">
-        <div class="ambient-glow-backdrop" :style="{ backgroundImage: `url(${mediaUrl})` }"></div>
+        <div class="ambient-glow-backdrop" :style="{ backgroundImage: `url(${backdropUrl})` }"></div>
       </div>
 
       <!-- Close Button -->
@@ -179,6 +179,27 @@ const mediaUrl = computed(() => {
   const p = displayedPost.value
   if (isVideo.value) return p.file_url || ''
   return p.sample_url || p.file_url || p.preview_url || ''
+})
+
+const backdropUrl = computed(() => {
+  const p = displayedPost.value
+  const videoExtensions = ['mp4', 'webm', 'm4v', 'mov', 'mkv', 'swf', 'ogv']
+  const isVideoExt = (url: string) => {
+    if (!url) return false
+    const cleanUrl = url.split('?')[0].toLowerCase()
+    return videoExtensions.some(ext => cleanUrl.endsWith('.' + ext))
+  }
+  
+  if (p.sample_url && !isVideoExt(p.sample_url)) {
+    return p.sample_url
+  }
+  if (p.preview_url && !isVideoExt(p.preview_url)) {
+    return p.preview_url
+  }
+  if (p.file_url && !isVideoExt(p.file_url)) {
+    return p.file_url
+  }
+  return p.preview_url || p.sample_url || ''
 })
 
 // Group post tags dynamically by category
