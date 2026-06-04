@@ -1,12 +1,16 @@
 .env
 .env.local
-req.md
+
+.agents
 
 __pycache__/
 *.pyc
 *.pyo
-backend/venv/
-backend/.venv/
+venv/
+.venv/
+.pytest_cache/
+*.tsbuildinfo
+
 
 frontend/node_modules/
 frontend/dist/
