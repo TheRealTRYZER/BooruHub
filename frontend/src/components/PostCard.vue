@@ -118,13 +118,13 @@ function updateUrl() {
     return videoExtensions.some(ext => cleanUrl.endsWith('.' + ext))
   }
 
-  const getFirstNonVideo = (candidates: string[]) => {
+  const getFirstNonVideo = (candidates: (string | null | undefined)[]) => {
     for (const c of candidates) {
       if (c && !isVideoExt(c)) {
         return c
       }
     }
-    return candidates.find(c => c) || ''
+    return (candidates.find(c => c) || '') as string
   }
 
   if (q === 'thumbnail') {
