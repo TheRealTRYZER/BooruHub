@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach } from 'vitest'
 import { setActivePinia, createPinia } from 'pinia'
 import { nextTick } from 'vue'
-import { useFeedStore } from './feed'
+import { useFeedStore } from '../../stores/feed'
 
 describe('Feed Store', () => {
   beforeEach(() => {

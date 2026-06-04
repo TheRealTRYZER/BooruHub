@@ -1,9 +1,9 @@
 import { mount } from '@vue/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createTestingPinia } from '@pinia/testing'
-import PostView from './PostView.vue'
-import { useFeedStore } from '../stores/feed'
-import { useLangStore } from '../stores/lang'
+import PostView from '../../views/PostView.vue'
+import { useFeedStore } from '../../stores/feed'
+import { useLangStore } from '../../stores/lang'
 
 const mockRoute = {
   query: { id: '123', site: 'danbooru' }
@@ -18,7 +18,7 @@ vi.mock('vue-router', () => ({
   useRouter: () => mockRouter
 }))
 
-vi.mock('../api', () => ({
+vi.mock('../../api', () => ({
   apiCheckFavorite: vi.fn(() => Promise.resolve({ is_favorite: false, favorite_id: null })),
   apiAddFavorite: vi.fn(() => Promise.resolve()),
   apiRemoveFavorite: vi.fn(() => Promise.resolve()),
@@ -198,7 +198,7 @@ describe('PostView.vue', () => {
     }
 
     // Mock apiSearch implementation for this test
-    const { apiSearch } = await import('../api')
+    const { apiSearch } = await import('../../api')
     vi.mocked(apiSearch).mockImplementation(((tags: string) => {
       if (tags.includes('id:999')) {
         return Promise.resolve({
@@ -322,4 +322,3 @@ describe('PostView.vue', () => {
     expect((wrapper.vm as any).getPostThumbnail(mockVideoPost)).toBe('https://test.com/preview.jpg')
   })
 })
-

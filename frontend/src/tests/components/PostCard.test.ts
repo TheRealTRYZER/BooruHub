@@ -1,15 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createTestingPinia } from '@pinia/testing'
-import PostCard from './PostCard.vue'
-
-vi.mock('vue-router', () => ({
-  useRouter: () => ({
-    push: vi.fn()
-  })
-}))
-
-
+import PostCard from '../../components/PostCard.vue'
 
 beforeEach(() => {
   Object.defineProperty(window, 'matchMedia', {
@@ -116,8 +108,6 @@ describe('PostCard.vue', () => {
     expect((wrapper.vm as any).currentUrl).toBe('https://test.com/preview.jpg')
   })
 
-
-
   it('should support switching between site versions when badges are clicked', async () => {
     const mockMultiplePost = {
       id: 111,
@@ -209,4 +199,3 @@ describe('PostCard.vue', () => {
     expect((wrapper.vm as any).currentUrl).toBe('https://test.com/preview.jpg')
   })
 })
-

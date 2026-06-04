@@ -1,6 +1,6 @@
 import { mount } from '@vue/test-utils'
 import { describe, it, expect, vi } from 'vitest'
-import TagChip from './TagChip.vue'
+import TagChip from '../../components/TagChip.vue'
 
 describe('TagChip.vue', () => {
   it('should render the tag text with underscores replaced by spaces', () => {
