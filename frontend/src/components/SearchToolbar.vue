@@ -402,6 +402,10 @@ let suggestTimeout: any = null
 const { history: searchHistory, addQuery: addSearchQuery, removeQuery: removeSearchQuery } = useSearchHistory()
 
 function triggerSearch() {
+  const trimmed = inputVal.value.trim()
+  if (trimmed) {
+    addTagPill(trimmed)
+  }
   if (feed.tags.trim()) {
     addSearchQuery(feed.tags.trim())
   }
