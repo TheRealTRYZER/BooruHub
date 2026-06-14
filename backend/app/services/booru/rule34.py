@@ -69,28 +69,9 @@ class Rule34(BaseBooru):
         """Rule34 uses 0-indexed page-based pagination (pid = page)."""
         return page - 1
 
-    async def fetch_posts(
-        self,
-        tags: str,
-        page: int,
-        limit: int,
-        user: Optional[User],
-        timeout: float = 30.0,
-    ) -> Tuple[List[dict], int]:
-        """Override fetch_posts to handle Rule34's 'Missing authentication' quirk
-        where a 200 response contains a plain string instead of JSON."""
-        api_tags, extra_tags = self.prepare_tags(tags)
-        auth_params = self.get_auth_params(user)
-
-        params = {
-            **self.default_params,
-            "tags": api_tags,
-            "limit": min(limit, self.max_per_page),
-            "pid": self.calculate_page(page, limit),
-            **auth_params,
-        }
-
-        # Extract id from tags if present
+    def modify_params(self, params: dict) -> None:
+        """Extract id from tags if present for Rule34 API."""
+        api_tags = params.get("tags", "")
         post_id_match = re.search(r'\bid:(\d+)\b', api_tags)
         if post_id_match:
             post_id = post_id_match.group(1)
@@ -98,42 +79,27 @@ class Rule34(BaseBooru):
             api_tags = re.sub(r'\bid:\d+\b', '', api_tags).strip()
             params["tags"] = api_tags
 
-        url = f"{self.base_url}{self.posts_path}"
-        client = self._get_client(timeout)
+    def validate_response_text(self, text: str) -> bool:
+        """Validate Rule34 response text, checking for authentication and JSON format."""
+        cleaned = text.strip()
+        if not cleaned:
+            logger.warning("[rule34] Empty response from API.")
+            return False
 
-        try:
-            resp = await client.get(url, params=params)
-            if resp.status_code != 200:
-                return [], 0
+        logger.info(f"[rule34] Response snippet: {cleaned[:100]}")
 
-            text = resp.text.strip()
-            if not text:
-                logger.warning(f"[rule34] Empty response from API. Status: {resp.status_code}")
-                return [], 0
+        if "Missing authentication" in cleaned:
+            logger.error(
+                "[rule34] API requires authentication. "
+                "Set User ID and API Key in Settings → Rule34."
+            )
+            return False
 
-            logger.info(f"[rule34] Response status: {resp.status_code}, snippet: {text[:100]}")
+        # Safety check: if it looks like XML or not like JSON, skip
+        if cleaned.startswith("<") or not (cleaned.startswith("[") or cleaned.startswith("{")):
+            return False
 
-            if "Missing authentication" in text:
-                logger.error(
-                    "[rule34] API requires authentication. "
-                    "Set User ID and API Key in Settings → Rule34."
-                )
-                return [], 0
-
-            # Safety check: if it looks like XML or not like JSON, skip
-            if text.startswith("<") or not (text.startswith("[") or text.startswith("{")):
-                return [], 0
-
-            data = resp.json()
-            if not isinstance(data, list):
-                return [], 0
-
-            posts = [p for p in (self.normalize_post(r) for r in data) if p]
-            return posts, len(data)
-
-        except (httpx.RequestError, ValueError, Exception) as e:
-            logger.error(f"[rule34] Request failed: {e}")
-            return [], 0
+        return True
 
     def normalize_post(self, raw: dict) -> Optional[dict]:
         file_url = raw.get("file_url")

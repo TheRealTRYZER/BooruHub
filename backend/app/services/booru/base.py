@@ -150,6 +150,14 @@ class BaseBooru(ABC):
         response or the original to let the caller raise."""
         return resp
 
+    def modify_params(self, params: dict) -> None:
+        """Optional hook to modify query parameters before requesting."""
+        pass
+
+    def validate_response_text(self, text: str) -> bool:
+        """Optional hook to validate raw response text before parsing JSON."""
+        return True
+
     # ------------------------------------------------------------------ #
     #  Core fetch logic                                                   #
     # ------------------------------------------------------------------ #
@@ -178,6 +186,7 @@ class BaseBooru(ABC):
             self.page_param: actual_page,
             **auth_params,
         }
+        self.modify_params(params)
 
         url = f"{self.base_url}{self.posts_path}"
         client = self._get_client(timeout)
@@ -189,6 +198,10 @@ class BaseBooru(ABC):
                 resp = await self.handle_error_response(resp, client, url, params, tags)
 
             resp.raise_for_status()
+            
+            if not self.validate_response_text(resp.text):
+                return [], 0
+
             data = resp.json()
         except httpx.HTTPStatusError as e:
             logger.warning(f"[{self.__class__.__name__}] HTTP {e.response.status_code} for tags='{tags}'")
