@@ -17,7 +17,7 @@
         <button class="tab-btn" :class="{active: showDislikes}" @click="switchTab(true)">👎 {{ lang.t('dislikes_tab') || 'Dislikes' }}</button>
       </div>
 
-      <PostGrid :posts="posts" :skeletonCount="loading ? 15 : 0" />
+      <PostGrid :posts="posts" :skeletonCount="loading ? 15 : 0" @favorite-changed="onFavoriteChanged" />
 
       <div v-if="!loading && posts.length === 0" class="empty-state">
         <div class="empty-state-icon">💫</div>
@@ -101,6 +101,7 @@ async function loadMore() {
       md5: null,
       created_at: null,
       is_dislike: showDislikes.value,
+      favorite: !showDislikes.value,
     }))
 
     posts.value.push(...mapped)
@@ -110,6 +111,18 @@ async function loadMore() {
     toast.show(lang.t('error_load_favorites') + ': ' + (e.message || e), 'error')
   } finally {
     loading.value = false
+  }
+}
+
+function onFavoriteChanged(payload: { sourceSite: string, postId: string | number, isFav: boolean, isDislike: boolean }) {
+  if (showDislikes.value) {
+    if (!payload.isDislike) {
+      posts.value = posts.value.filter(p => !(p.source_site === payload.sourceSite && String(p.id) === String(payload.postId)))
+    }
+  } else {
+    if (!payload.isFav) {
+      posts.value = posts.value.filter(p => !(p.source_site === payload.sourceSite && String(p.id) === String(payload.postId)))
+    }
   }
 }
 

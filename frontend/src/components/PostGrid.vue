@@ -2,7 +2,7 @@
   <div class="post-grid" ref="gridEl" :style="{ '--card-size': feed.cardSize + 'px' }">
     <div v-for="(col, ci) in columns" :key="ci" class="post-column">
       <div v-for="item in col" :key="item.key" :data-post-key="item.key">
-        <component :is="item.component" v-bind="item.props" @click-media="handleCardClick" />
+        <component :is="item.component" v-bind="item.props" @click-media="handleCardClick" @favorite-changed="handleFavoriteChanged" />
       </div>
     </div>
   </div>
@@ -14,16 +14,21 @@ import { useFeedStore } from '../stores/feed'
 import PostCard from './PostCard.vue'
 import SkeletonCard from './SkeletonCard.vue'
 import { useEventLogger } from '../composables/useEventLogger'
-import type { Post } from '../types'
+import type { Post, SiteName } from '../types'
 
 const feed = useFeedStore()
 
 const emit = defineEmits<{
   (e: 'click-media', post: Post): void
+  (e: 'favorite-changed', payload: { sourceSite: SiteName, postId: string | number, isFav: boolean, isDislike: boolean }): void
 }>()
 
 function handleCardClick(post: Post) {
   emit('click-media', post)
+}
+
+function handleFavoriteChanged(payload: { sourceSite: SiteName, postId: string | number, isFav: boolean, isDislike: boolean }) {
+  emit('favorite-changed', payload)
 }
 
 interface GridItem {

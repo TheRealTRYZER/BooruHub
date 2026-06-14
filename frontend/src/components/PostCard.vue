@@ -61,12 +61,13 @@ import type { Post, RatingClass, SiteName } from '../types'
 const feed = useFeedStore()
 
 const props = defineProps<{
-  post: Post
+  post: Post & { favorite?: boolean }
   favorite?: boolean
 }>()
 
 const emit = defineEmits<{
   (e: 'click-media', post: Post): void
+  (e: 'favorite-changed', payload: { sourceSite: SiteName, postId: string | number, isFav: boolean, isDislike: boolean }): void
 }>()
 
 const router = useRouter()
@@ -101,7 +102,7 @@ const displayedPost = computed<Post>(() => {
 
 const loaded = ref(false)
 const cardRef = ref<HTMLElement | null>(null)
-const isFav = ref(props.favorite ?? false)
+const isFav = ref(props.favorite ?? props.post.favorite ?? false)
 const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="10" height="10"%3E%3C/svg%3E'
 
 const currentUrl = ref('')
@@ -219,18 +220,21 @@ async function toggleFav() {
       if (check.favorite_id) await apiRemoveFavorite(check.favorite_id)
       isFav.value = false
       toast.show(lang.t('removed_fav'), 'info')
+      emit('favorite-changed', { sourceSite: displayedPost.value.source_site, postId: displayedPost.value.id, isFav: false, isDislike: false })
     } else {
       await apiAddFavorite(displayedPost.value)
       isFav.value = true
       isDisliked.value = false
       logFavourite(displayedPost.value)
       toast.show(lang.t('added_fav'), 'success')
+      emit('favorite-changed', { sourceSite: displayedPost.value.source_site, postId: displayedPost.value.id, isFav: true, isDislike: false })
     }
   } catch (e) {
     toast.show((e as Error).message, 'error')
   }
 }
 
+const hidden = ref(false)
 const isDisliked = ref(displayedPost.value.is_dislike || false)
 
 async function doDislike() {
@@ -245,17 +249,36 @@ async function doDislike() {
       if (check.favorite_id) await apiRemoveFavorite(check.favorite_id)
     } catch { /* ignore */ }
     isDisliked.value = false
-    hidden.value = true
+    hidden.value = false
     toast.show(lang.t('removed_fav') || 'Removed', 'info')
+    emit('favorite-changed', { sourceSite: displayedPost.value.source_site, postId: displayedPost.value.id, isFav: false, isDislike: false })
   } else {
-    apiAddFavorite(displayedPost.value, true).catch(() => {})
+    try {
+      await apiAddFavorite(displayedPost.value, true)
+    } catch { /* ignore */ }
     isDisliked.value = true
     isFav.value = false
     hidden.value = true
+    emit('favorite-changed', { sourceSite: displayedPost.value.source_site, postId: displayedPost.value.id, isFav: false, isDislike: true })
+
+    toast.show(
+      lang.t('removed_fav') || 'Post hidden',
+      'info',
+      {
+        label: 'Undo',
+        callback: async () => {
+          try {
+            const check = await apiCheckFavorite(displayedPost.value.source_site, String(displayedPost.value.id))
+            if (check.favorite_id) await apiRemoveFavorite(check.favorite_id)
+          } catch { /* ignore */ }
+          isDisliked.value = false
+          hidden.value = false
+          emit('favorite-changed', { sourceSite: displayedPost.value.source_site, postId: displayedPost.value.id, isFav: false, isDislike: false })
+        }
+      }
+    )
   }
 }
-
-const hidden = ref(false)
 const showLikeAnimation = ref(false)
 const swipeDiff = ref(0)
 const swiping = ref(false)
@@ -336,7 +359,26 @@ function onTouchEnd() {
         apiAddFavorite(displayedPost.value, true).catch(() => {})
       }
       isFav.value = false
+      isDisliked.value = true
       hidden.value = true
+      emit('favorite-changed', { sourceSite: displayedPost.value.source_site, postId: displayedPost.value.id, isFav: false, isDislike: true })
+
+      toast.show(
+        lang.t('removed_fav') || 'Post hidden',
+        'info',
+        {
+          label: 'Undo',
+          callback: async () => {
+            try {
+              const check = await apiCheckFavorite(displayedPost.value.source_site, String(displayedPost.value.id))
+              if (check.favorite_id) await apiRemoveFavorite(check.favorite_id)
+            } catch { /* ignore */ }
+            isDisliked.value = false
+            hidden.value = false
+            emit('favorite-changed', { sourceSite: displayedPost.value.source_site, postId: displayedPost.value.id, isFav: false, isDislike: false })
+          }
+        }
+      )
     }, 300)
   } else {
     swipeDiff.value = 0
