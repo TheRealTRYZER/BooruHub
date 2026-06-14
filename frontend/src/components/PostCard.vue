@@ -352,12 +352,15 @@ function onTouchMove(e: TouchEvent) {
 function onTouchEnd() {
   swiping.value = false
   if (Math.abs(swipeDiff.value) > 80) {
+    if (!auth.isAuthenticated) {
+      toast.show(lang.t('login_to_fav'), 'error')
+      swipeDiff.value = 0
+      return
+    }
     const dir = swipeDiff.value > 0 ? 1 : -1
     swipeDiff.value = dir * window.innerWidth
     setTimeout(() => {
-      if (auth.isAuthenticated) {
-        apiAddFavorite(displayedPost.value, true).catch(() => {})
-      }
+      apiAddFavorite(displayedPost.value, true).catch(() => {})
       isFav.value = false
       isDisliked.value = true
       hidden.value = true

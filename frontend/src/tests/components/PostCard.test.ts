@@ -198,4 +198,27 @@ describe('PostCard.vue', () => {
 
     expect((wrapper.vm as any).currentUrl).toBe('https://test.com/preview.jpg')
   })
+
+  it('should not allow guest users to swipe-dislike', async () => {
+    const wrapper = mount(PostCard, {
+      props: {
+        post: mockPost as any
+      },
+      global: {
+        plugins: [createTestingPinia({
+          createSpy: vi.fn,
+          initialState: {
+            auth: { isAuthenticated: false },
+            lang: { t: (key: string) => key }
+          }
+        })],
+      }
+    })
+
+    const vm = wrapper.vm as any
+    vm.swipeDiff = -100 // Swiped left
+    vm.onTouchEnd()
+
+    expect(vm.swipeDiff).toBe(0) // Should have snapped back
+  })
 })
