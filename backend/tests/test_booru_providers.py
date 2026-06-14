@@ -27,6 +27,16 @@ def test_danbooru_score_floor_injection():
     assert "score:>=10" not in api_tags
     assert "order:score" in api_tags
 
+def test_danbooru_score_floor_injection_with_rating():
+    db = Danbooru()
+    # If order:score is present and rating:general is enforced (making it 2 tags),
+    # it should prioritize score:>=10 floor injection over rating and push rating to extra tags
+    api_tags, extra = db.prepare_tags("order:score rating:general")
+    assert "score:>=10" in api_tags
+    assert "order:score" in api_tags
+    assert "rating:general" not in api_tags
+    assert "rating:general" in extra
+
 def test_danbooru_normalization():
     db = Danbooru()
     raw = {

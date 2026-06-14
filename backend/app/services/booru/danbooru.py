@@ -51,11 +51,15 @@ class Danbooru(BaseBooru):
         if content and len(api_list) < 2:
             api_list.append(content[0])
             
-        # Priority 3: rating: (if we still have room)
+        # Priority 3: score floor if order:score is present and no content tag (prevents 500s)
+        if any(t == "order:score" for t in api_list) and not content and len(api_list) < 2:
+            api_list.append("score:>=10")
+
+        # Priority 4: rating: (if we still have room)
         if ratings and len(api_list) < 2:
             api_list.append(ratings[0])
             
-        # Priority 4: second content tag if room
+        # Priority 5: second content tag if room
         if len(content) > 1 and len(api_list) < 2:
             api_list.append(content[1])
             
@@ -84,7 +88,8 @@ class Danbooru(BaseBooru):
         if resp.status_code == 500 and "order:score" in params.get("tags", ""):
             logger.info("Danbooru 500 -> trying score floors")
             for floor in (1000, 500, 100):
-                retry_params = {**params, "tags": f"score:>={floor} {params.get('tags', '')}"}
+                # Replace tags with a clean 2-tag query to avoid 422 errors due to tag limits
+                retry_params = {**params, "tags": f"order:score score:>={floor}"}
                 try:
                     r = await client.get(url, params=retry_params)
                     if r.status_code == 200:
