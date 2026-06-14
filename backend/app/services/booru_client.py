@@ -24,32 +24,39 @@ _CACHE_MAX = 256
 _CACHE_TTL = 300  # seconds
 
 class _LRUCache:
-    """Thread-safe bounded LRU cache with TTL."""
+    """Thread-safe bounded LRU cache with TTL using asyncio.Lock."""
 
-    __slots__ = ("_data", "_max")
+    __slots__ = ("_data", "_max", "_lock")
 
     def __init__(self, maxsize: int = _CACHE_MAX) -> None:
         self._data: OrderedDict[tuple, tuple] = OrderedDict()
         self._max = maxsize
+        self._lock: Optional[asyncio.Lock] = None
 
-    def get(self, key: tuple) -> Optional[tuple]:
-        entry = self._data.get(key)
-        if entry is None:
-            return None
-        value, expiry = entry
-        if time.monotonic() > expiry:
-            self._data.pop(key, None)
-            return None
-        self._data.move_to_end(key)
-        return value
+    async def get(self, key: tuple) -> Optional[tuple]:
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        async with self._lock:
+            entry = self._data.get(key)
+            if entry is None:
+                return None
+            value, expiry = entry
+            if time.monotonic() > expiry:
+                self._data.pop(key, None)
+                return None
+            self._data.move_to_end(key)
+            return value
 
-    def put(self, key: tuple, value: tuple) -> None:
+    async def put(self, key: tuple, value: tuple) -> None:
         if not value:
             return
-        self._data[key] = (value, time.monotonic() + _CACHE_TTL)
-        self._data.move_to_end(key)
-        while len(self._data) > self._max:
-            self._data.popitem(last=False)
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+        async with self._lock:
+            self._data[key] = (value, time.monotonic() + _CACHE_TTL)
+            self._data.move_to_end(key)
+            while len(self._data) > self._max:
+                self._data.popitem(last=False)
 
 
 _cache = _LRUCache()
@@ -104,7 +111,7 @@ async def search_posts(
 
     # Cache lookup
     cache_key = (site, tags, limit, page, user.id if user else None)
-    cached = _cache.get(cache_key)
+    cached = await _cache.get(cache_key)
     if cached is not None:
         return cached
 
@@ -127,7 +134,7 @@ async def search_posts(
         posts, count = await provider.fetch_posts(tags, page, limit, user, timeout)
 
     result = (posts, count)
-    _cache.put(cache_key, result)
+    await _cache.put(cache_key, result)
     logger.debug(f"[{site}] {len(posts)} posts (tags='{tags}' page={page})")
     return result
 
