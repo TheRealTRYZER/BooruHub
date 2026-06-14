@@ -8,6 +8,7 @@ Quirks handled:
 - Tags are a single space-separated string, not an array
 """
 import logging
+import re
 from typing import Dict, List, Optional, Tuple
 
 import httpx
@@ -88,6 +89,14 @@ class Rule34(BaseBooru):
             "pid": self.calculate_page(page, limit),
             **auth_params,
         }
+
+        # Extract id from tags if present
+        post_id_match = re.search(r'\bid:(\d+)\b', api_tags)
+        if post_id_match:
+            post_id = post_id_match.group(1)
+            params["id"] = post_id
+            api_tags = re.sub(r'\bid:\d+\b', '', api_tags).strip()
+            params["tags"] = api_tags
 
         url = f"{self.base_url}{self.posts_path}"
         client = self._get_client(timeout)
