@@ -53,7 +53,7 @@ class Danbooru(BaseBooru):
             
         # Priority 3: score floor if order:score is present and no content tag (prevents 500s)
         if any(t == "order:score" for t in api_list) and not content and len(api_list) < 2:
-            api_list.append("score:>=10")
+            api_list.append("score:>=250")
 
         # Priority 4: rating: (if we still have room)
         if ratings and len(api_list) < 2:
@@ -66,13 +66,12 @@ class Danbooru(BaseBooru):
         # Score floor injection for order:score to prevent Danbooru 500s
         # Only inject if we have 'order:score' and room in api_list
         if any(t == "order:score" for t in api_list) and len(api_list) < 2:
-            api_list.append("score:>=10")
+            api_list.append("score:>=250")
 
         api_tags = " ".join(api_list)
         
         # Everything else goes to local filtering
-        # Note: order tags NOT in api_list are useless globally but we keep them for debug? No.
-        extra_tags = [t for t in all_tags if t not in api_list and not t.startswith("order:") and t != "score:>=10"]
+        extra_tags = [t for t in all_tags if t not in api_list and not t.startswith("order:") and t != "score:>=250"]
         
         return api_tags, extra_tags
 
@@ -84,15 +83,42 @@ class Danbooru(BaseBooru):
         params: dict,
         original_tags: str,
     ) -> httpx.Response:
-        """Handle Danbooru 500 by attempting progressive score floors."""
+        """Handle Danbooru 500 by attempting progressive score floors and/or stripping auth."""
         if resp.status_code == 500 and "order:score" in params.get("tags", ""):
-            logger.info("Danbooru 500 -> trying score floors")
-            for floor in (1000, 500, 100):
-                # Replace tags with a clean 2-tag query to avoid 422 errors due to tag limits
+            logger.info("Danbooru 500 -> trying score floors and/or stripping auth")
+            
+            # Step 1: Try stripping auth first with the same query (hitting cached read replica)
+            if "login" in params or "api_key" in params:
+                no_auth_params = {k: v for k, v in params.items() if k not in ("login", "api_key")}
+                try:
+                    r = await client.get(url, params=no_auth_params)
+                    if r.status_code == 200:
+                        logger.info("Danbooru 500 -> resolved by stripping auth")
+                        return r
+                except Exception as e:
+                    logger.warning(f"Danbooru retry without auth failed: {e}")
+            
+            # Step 2: Progressive score floors starting at 250 and raising (both without and with auth)
+            for floor in (250, 500, 1000, 2000):
+                # Try without auth first as it's much more likely to succeed
+                if "login" in params or "api_key" in params:
+                    retry_params_no_auth = {
+                        k: v for k, v in params.items() if k not in ("login", "api_key")
+                    }
+                    retry_params_no_auth["tags"] = f"order:score score:>={floor}"
+                    try:
+                        r = await client.get(url, params=retry_params_no_auth)
+                        if r.status_code == 200:
+                            logger.info(f"Danbooru 500 -> resolved with floor {floor} (no auth)")
+                            return r
+                    except Exception as e:
+                        logger.warning(f"Danbooru retry failed for floor {floor} without auth: {e}")
+                # Fallback to with auth
                 retry_params = {**params, "tags": f"order:score score:>={floor}"}
                 try:
                     r = await client.get(url, params=retry_params)
                     if r.status_code == 200:
+                        logger.info(f"Danbooru 500 -> resolved with floor {floor} (with auth)")
                         return r
                 except Exception as e:
                     logger.warning(f"Danbooru retry failed for floor {floor}: {e}")
