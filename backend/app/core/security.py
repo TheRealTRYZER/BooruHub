@@ -50,6 +50,9 @@ def _get_encryption_fernets() -> list[Fernet]:
     if settings.ENCRYPTION_KEY:
         key_sources.append(settings.ENCRYPTION_KEY)
     key_sources.extend(settings.encryption_key_fallback_list)
+    # If no other keys are configured, fallback to JWT_SECRET to keep legacy credentials decryptable
+    if not key_sources and settings.JWT_SECRET:
+        key_sources.append(settings.JWT_SECRET)
 
     seen: set[str] = set()
     fernets: list[Fernet] = []
