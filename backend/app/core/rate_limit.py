@@ -21,11 +21,14 @@ class _SlidingWindow:
 
     def __init__(self, max_keys: int = 10000) -> None:
         self._windows: dict[str, list[float]] = defaultdict(list)
-        self._lock = asyncio.Lock()
+        self._lock: Optional[asyncio.Lock] = None
         self._max_keys = max_keys
 
     async def check(self, key: str, max_requests: int, window_seconds: int) -> bool:
         """Return True if the request is allowed, False if rate-limited."""
+        if self._lock is None:
+            self._lock = asyncio.Lock()
+
         now = time.monotonic()
         cutoff = now - window_seconds
 
