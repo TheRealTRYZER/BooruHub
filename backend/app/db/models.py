@@ -164,7 +164,14 @@ class UserEvent(Base):
 
 
 class PostIndex(Base):
-    """Global index of all posts seen by the system."""
+    """
+    Global index of all posts seen by the system.
+    TODO: This model and its background indexing task are currently populating 
+    the database with post metadata (id, source_site, md5, tags_str) but 
+    are not yet queried/read anywhere in the application. In future updates, 
+    this index will be used for cross-site search optimization, system-wide 
+    tag analytics, and advanced recommendation algorithms.
+    """
     __tablename__ = "post_index"
     __table_args__ = (
         UniqueConstraint("source_site", "post_id", name="uq_postindex_site_post"),
