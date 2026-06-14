@@ -642,11 +642,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   position: fixed; bottom: 20px; right: 20px; z-index: 9999;
   display: flex; flex-direction: column; gap: 10px; pointer-events: none;
 }
+
+
 .toast {
   display: flex; align-items: center; gap: 10px;
   padding: 12px 16px; border-radius: var(--border-radius-sm); color: #fff;
   font-size: 14px; font-weight: 500; min-width: 250px; background: #333;
   box-shadow: 0 4px 12px rgba(0,0,0,0.5); border-left: 4px solid transparent;
+  pointer-events: auto;
 }
 .toast-success { background: #064e3b; border-color: var(--success); }
 .toast-error { background: #450a0a; border-color: var(--danger); }
