@@ -79,6 +79,7 @@ async def list_favorites(
                 "tags": f.tags or [],
                 "rating": f.rating,
                 "score": f.score,
+                "is_dislike": f.is_dislike,
             }
             for f in favs
         ],
