@@ -8,9 +8,23 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
   const skeletonCount = ref(0)
   const correctedTags = ref<string | null>(null)
   let loadGeneration = 0
+  let autoFetchCount = 0
 
-  async function loadMore(sentinel?: HTMLElement | null) {
+  async function loadMore(sentinel?: HTMLElement | null, isAuto = false) {
     if (loading.value || !feed.hasMore) return
+
+    if (!isAuto) {
+      autoFetchCount = 0
+    } else {
+      autoFetchCount++
+      if (autoFetchCount >= 5) {
+        console.warn("Max automatic load attempts reached (5). Stopping to prevent infinite loops.")
+        loading.value = false
+        skeletonCount.value = 0
+        return
+      }
+    }
+
     loading.value = true
     skeletonCount.value = 12
     const gen = ++loadGeneration
@@ -64,6 +78,10 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
       }
       const addedCount = feed.posts.length - previousCount
 
+      if (addedCount > 0) {
+        autoFetchCount = 0
+      }
+
       const unfiltered = data.unfiltered_count || 0
       if (unfiltered === 0 || newPosts.length === 0) {
         if (unfiltered === 0) {
@@ -72,14 +90,14 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
           // Backend returned matches but all were filtered — try next page
           feed.page++
           if (feed.hasMore && gen === loadGeneration) {
-            setTimeout(() => { if (gen === loadGeneration) loadMore(sentinel) }, 50)
+            setTimeout(() => { if (gen === loadGeneration) loadMore(sentinel, true) }, 50)
           }
         }
       } else if (addedCount === 0 && feed.hasMore) {
         // All fetched posts were duplicates and skipped — automatically fetch next page
         feed.page++
         if (gen === loadGeneration) {
-          setTimeout(() => { if (gen === loadGeneration) loadMore(sentinel) }, 50)
+          setTimeout(() => { if (gen === loadGeneration) loadMore(sentinel, true) }, 50)
         }
       } else {
         feed.page++
