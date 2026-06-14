@@ -235,21 +235,64 @@ def _are_duplicates(a: dict, b: dict) -> bool:
     return False
 
 def _merge_duplicate_posts(posts: List[dict]) -> List[dict]:
-    """Group/merge duplicate posts together rather than discarding them."""
+    """Group/merge duplicate posts together using O(1) dict lookups for MD5 and Source ID."""
     if not posts:
         return []
 
     groups: List[List[dict]] = []
-    
+    md5_groups = {}
+    source_groups = {}
+
     for post in posts:
-        matched = False
-        for g in groups:
-            if _are_duplicates(post, g[0]):
-                g.append(post)
-                matched = True
-                break
-        if not matched:
-            groups.append([post])
+        matched_group = None
+        
+        # 1. Try matching by MD5
+        md5 = (post.get("md5") or "").strip().lower() or _extract_md5_from_url(post.get("file_url") or "") or _extract_md5_from_url(post.get("sample_url") or "")
+        if md5:
+            matched_group = md5_groups.get(md5)
+            
+        # 2. Try matching by Source ID
+        if not matched_group:
+            src = post.get("source") or ""
+            source_id = _extract_source_id(src) if src else None
+            if source_id:
+                matched_group = source_groups.get(source_id)
+                if matched_group:
+                    # Check Jaccard similarity to prevent page collisions in galleries
+                    tags_a = set(post.get("tags", []))
+                    tags_b = set(matched_group[0].get("tags", []))
+                    if tags_a and tags_b:
+                        intersection = tags_a & tags_b
+                        if len(intersection) / len(tags_a | tags_b) < 0.60:
+                            matched_group = None
+
+        # 3. Fallback to standard O(N) check for dimension / aspect ratio matches
+        if not matched_group:
+            for g in groups:
+                if _are_duplicates(post, g[0]):
+                    matched_group = g
+                    break
+
+        # 4. Group or insert
+        if matched_group is not None:
+            # Don't merge duplicates from the same site
+            if not any(p.get("source_site") == post.get("source_site") for p in matched_group):
+                matched_group.append(post)
+                if md5:
+                    md5_groups[md5] = matched_group
+                src = post.get("source") or ""
+                source_id = _extract_source_id(src) if src else None
+                if source_id:
+                    source_groups[source_id] = matched_group
+        else:
+            new_group = [post]
+            groups.append(new_group)
+            if md5:
+                md5_groups[md5] = new_group
+            src = post.get("source") or ""
+            source_id = _extract_source_id(src) if src else None
+            if source_id:
+                source_groups[source_id] = new_group
 
     site_priority = {"danbooru": 3, "e621": 2, "rule34": 1}
     merged_posts: List[dict] = []
