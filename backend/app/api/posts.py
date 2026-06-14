@@ -134,6 +134,21 @@ def _apply_blacklist(posts: List[dict], rules: List[BlacklistRule], dislikes: se
     return filter_posts(posts, groups)
 
 
+def _enforce_guest_rating(tag_list: List[str], context_name: str = "general") -> List[str]:
+    """Enforce rating:general for guest requests (override other rating filters)."""
+    is_relation_lookup = any(t.startswith(("id:", "parent:")) for t in tag_list)
+    if not is_relation_lookup:
+        logger.info(f"[GUEST_MODE] Enforcing rating:general in {context_name}")
+        def _is_rating_tag(t: str) -> bool:
+            ct = t.lower()
+            if ct.startswith(("-", "~")):
+                ct = ct[1:]
+            return ct.startswith("rating:")
+        tag_list = [t for t in tag_list if not _is_rating_tag(t)]
+        tag_list.append("rating:general")
+    return tag_list
+
+
 import re
 
 def _extract_md5_from_url(url: str) -> Optional[str]:
@@ -612,16 +627,7 @@ async def get_feed(
     
     # Enforce rating:general for guests (override any provided rating)
     if user is None:
-        is_relation_lookup = any(t.startswith(("id:", "parent:")) for t in tag_list)
-        if not is_relation_lookup:
-            logger.info(f"[GUEST_MODE] Enforcing rating:general for unauthorized user")
-            def _is_rating_tag(t: str) -> bool:
-                ct = t.lower()
-                if ct.startswith(("-", "~")):
-                    ct = ct[1:]
-                return ct.startswith("rating:")
-            tag_list = [t for t in tag_list if not _is_rating_tag(t)]
-            tag_list.append("rating:general")
+        tag_list = _enforce_guest_rating(tag_list, "feed")
     else:
         logger.info(f"[USER_MODE] User {user.id} search tags: '{tags}'")
 
@@ -702,16 +708,7 @@ async def search(
     
     # Enforce rating:general for guests (override any provided rating)
     if user is None:
-        is_relation_lookup = any(t.startswith(("id:", "parent:")) for t in tag_list)
-        if not is_relation_lookup:
-            logger.info(f"[GUEST_MODE] Enforcing rating:general in search")
-            def _is_rating_tag(t: str) -> bool:
-                ct = t.lower()
-                if ct.startswith(("-", "~")):
-                    ct = ct[1:]
-                return ct.startswith("rating:")
-            tag_list = [t for t in tag_list if not _is_rating_tag(t)]
-            tag_list.append("rating:general")
+        tag_list = _enforce_guest_rating(tag_list, "search")
     else:
         logger.info(f"[USER_MODE] User {user.id} search tags: '{tags}'")
 

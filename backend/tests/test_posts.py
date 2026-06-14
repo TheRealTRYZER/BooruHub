@@ -68,3 +68,30 @@ async def test_guest_mode_feed_strips_negated_rating(client):
         
     app.dependency_overrides = {}
 
+
+def test_enforce_guest_rating():
+    from app.api.posts import _enforce_guest_rating
+    
+    # 1. Normal tags -> rating:general appended
+    res = _enforce_guest_rating(["1girl", "solo"])
+    assert "rating:general" in res
+    assert "1girl" in res
+    
+    # 2. Rating tag present -> stripped and replaced by rating:general
+    res = _enforce_guest_rating(["1girl", "-rating:explicit", "rating:safe"])
+    assert "rating:general" in res
+    assert "-rating:explicit" not in res
+    assert "rating:safe" not in res
+    assert "1girl" in res
+    
+    # 3. Relationship lookup by ID -> no rating:general appended
+    res = _enforce_guest_rating(["id:123"])
+    assert "rating:general" not in res
+    assert "id:123" in res
+    
+    # 4. Relationship lookup by parent -> no rating:general appended
+    res = _enforce_guest_rating(["parent:456"])
+    assert "rating:general" not in res
+    assert "parent:456" in res
+
+
