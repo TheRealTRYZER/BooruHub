@@ -4,7 +4,7 @@
       <div class="search-bar-row">
         <div v-show="!feed.isSplit" class="search-input-wrapper" @click="focusActualInput">
           <!-- Tag Pills List -->
-          <span v-for="(pill, idx) in pills" :key="pill + idx" 
+          <span v-for="(pill, idx) in pills" :key="pill" 
                 class="tag-pill" 
                 :class="[getPillCategory(pill), { negated: pill.startsWith('-'), dragging: idx === dragIndex }]"
                 draggable="true"
@@ -80,10 +80,38 @@
           <span class="site-filter-dot" :class="site"></span>
           <span class="split-search-site" :class="site">{{ site }}</span>
         </div>
-        <input type="text" class="input btn-sm split-tag-input"
-               :placeholder="lang.t('tags_for') + ' ' + site + '...'"
-               v-model="feed.siteTags[site]"
-               @keydown.enter="triggerSearch">
+        <div style="flex: 1; position: relative; display: flex; align-items: center;">
+          <input type="text" class="input btn-sm split-tag-input"
+                 :placeholder="lang.t('tags_for') + ' ' + site + '...'"
+                 v-model="feed.siteTags[site]"
+                 @input="onSplitSearchInput(site)"
+                 @focus="onSplitSearchFocus(site)"
+                 @blur="onSplitSearchBlur(site)"
+                 @keydown.enter="triggerSearch">
+          
+          <!-- Split Suggestions Dropdown -->
+          <div class="search-suggestions split-suggestions" 
+               :class="{ visible: activeSplitSite === site && splitSuggestions.length > 0 }"
+               style="top: 100%; left: 0; width: 100%; max-height: 200px; z-index: 101;">
+            <div v-for="tagObj in splitSuggestions" :key="tagObj.tag" 
+                 class="search-suggestion-item" 
+                 :class="{ mapped: tagObj.is_mapped }"
+                 @mousedown.prevent="selectSplitSuggestion(site, tagObj.tag)">
+              <span v-if="tagObj.is_mapped" class="mapped-star">⭐</span>
+              <span class="suggestion-text autocomplete-tag" :class="tagObj.category">{{ tagObj.tag.replace(/_/g, ' ') }}</span>
+              <span v-if="tagObj.category && tagObj.category !== 'general'" class="autocomplete-badge" :class="tagObj.category">{{ tagObj.category }}</span>
+              
+              <div class="suggestion-right-group">
+                <span v-if="tagObj.post_count" class="tag-count-indicator">{{ formatCount(tagObj.post_count) }}</span>
+                <div class="suggestion-sources">
+                  <span v-if="tagObj.from_danbooru" class="suggestion-source danbooru">db</span>
+                  <span v-if="tagObj.from_e621" class="suggestion-source e621">e6</span>
+                  <span v-if="tagObj.from_rule34" class="suggestion-source rule34">r34</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
         <button class="btn btn-primary btn-sm" @click="triggerSearch">🔍</button>
         <div class="ratio-slider-container">
           <input type="range" class="ratio-slider"
@@ -113,6 +141,19 @@
           <label class="feed-control-label">🎚️ {{ lang.t('card_size') }}</label>
           <input type="range" min="75" max="400" step="5" v-model.number="feed.cardSize" class="size-slider">
           <span class="size-val">{{ feed.cardSize }}px</span>
+          <div class="col-select-dropdown">
+            <button class="col-select-btn" @click.stop="toggleColDropdown">
+              <span>🔢</span>
+              <span style="font-size: 8px; margin-left: 2px;">▼</span>
+            </button>
+            <div v-if="showColDropdown" class="col-dropdown-menu">
+              <div v-for="c in [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]" :key="c" 
+                   class="col-dropdown-item" 
+                   @click.stop="selectColCount(c)">
+                {{ c }} {{ c === 1 ? 'post' : 'posts' }}
+              </div>
+            </div>
+          </div>
         </div>
         
         <div class="feed-control-group">
@@ -311,13 +352,38 @@ function handleScroll() {
   lastScrollY = currentScrollY
 }
 
+const showColDropdown = ref(false)
+
+function toggleColDropdown() {
+  showColDropdown.value = !showColDropdown.value
+}
+
+function selectColCount(cols: number) {
+  showColDropdown.value = false
+  const w = window.innerWidth
+  const gap = w <= 768 ? 8 : 16
+  const availableWidth = w - 40
+  
+  let targetSize = Math.floor((availableWidth + gap) / cols) - gap
+  targetSize = Math.max(75, Math.min(400, targetSize))
+  feed.cardSize = targetSize
+}
+
+function closeDropdowns(e: MouseEvent) {
+  if (showColDropdown.value) {
+    showColDropdown.value = false
+  }
+}
+
 onMounted(() => {
   parseExternalTags()
   window.addEventListener('scroll', handleScroll, { passive: true })
+  document.addEventListener('click', closeDropdowns)
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
+  document.removeEventListener('click', closeDropdowns)
 })
 
 function formatCount(num?: number): string {
@@ -413,6 +479,59 @@ function onTabPress() {
   if (suggestions.value.length > 0) {
     selectSuggestion(suggestions.value[0].tag)
   }
+}
+
+// Split Search Autocomplete Logic
+const splitSuggestions = ref<any[]>([])
+const activeSplitSite = ref<SiteName | null>(null)
+let splitSuggestTimeout: any = null
+
+function onSplitSearchInput(site: SiteName) {
+  clearTimeout(splitSuggestTimeout)
+  activeSplitSite.value = site
+  const text = feed.siteTags[site] || ''
+  const words = text.split(/\s+/)
+  const lastWord = words[words.length - 1] || ''
+  
+  if (lastWord && lastWord.length >= 2) {
+    splitSuggestTimeout = setTimeout(async () => {
+      try {
+        const data = await apiSuggestTags(lastWord)
+        splitSuggestions.value = data.suggestions || []
+      } catch (e) {
+        splitSuggestions.value = []
+      }
+    }, 300)
+  } else {
+    splitSuggestions.value = []
+  }
+}
+
+function onSplitSearchFocus(site: SiteName) {
+  activeSplitSite.value = site
+  onSplitSearchInput(site)
+}
+
+function onSplitSearchBlur(site: SiteName) {
+  setTimeout(() => {
+    if (activeSplitSite.value === site) {
+      splitSuggestions.value = []
+      activeSplitSite.value = null
+    }
+  }, 200)
+}
+
+function selectSplitSuggestion(site: SiteName, tag: string) {
+  const text = feed.siteTags[site] || ''
+  const words = text.split(/\s+/)
+  if (words.length > 0) {
+    words[words.length - 1] = tag
+    feed.siteTags[site] = words.join(' ') + ' '
+  } else {
+    feed.siteTags[site] = tag + ' '
+  }
+  splitSuggestions.value = []
+  activeSplitSite.value = null
 }
 </script>
 
@@ -526,5 +645,56 @@ function onTabPress() {
   .feed-controls {
     width: 100%;
   }
+}
+
+.col-select-dropdown {
+  position: relative;
+  display: inline-block;
+  margin-left: 8px;
+}
+.col-select-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  background: var(--bg-input);
+  border: 1px solid rgba(128,128,128,0.25);
+  border-radius: var(--border-radius-sm);
+  color: var(--text-primary);
+  font-size: 13px;
+  cursor: pointer;
+  height: 32px;
+  padding: 0 10px;
+  transition: background-color 0.2s;
+}
+.col-select-btn:hover {
+  background: var(--bg-card-hover);
+}
+.col-dropdown-menu {
+  position: absolute;
+  top: 100%;
+  right: 0;
+  margin-top: 8px;
+  background: var(--bg-secondary);
+  border: 1px solid rgba(128,128,128,0.25);
+  border-radius: var(--border-radius-sm);
+  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  z-index: 102;
+  min-width: 130px;
+  display: flex;
+  flex-direction: column;
+  padding: 4px 0;
+}
+.col-dropdown-item {
+  padding: 8px 16px;
+  font-size: 13px;
+  cursor: pointer;
+  color: var(--text-secondary);
+  text-align: left;
+  transition: background-color 0.15s, color 0.15s;
+}
+.col-dropdown-item:hover {
+  background: var(--bg-card-hover);
+  color: var(--accent);
 }
 </style>
