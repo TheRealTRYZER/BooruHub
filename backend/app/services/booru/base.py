@@ -221,6 +221,20 @@ class BaseBooru(ABC):
 
             if extra_tags:
                 post_tags = {t.lower() for t in item.get("tags", [])}
+                
+                # Inject rating as a meta-tag for local filtering
+                r = item.get("rating", "g").lower()
+                if r == "e":
+                    post_tags.add("rating:explicit")
+                elif r == "q":
+                    post_tags.add("rating:questionable")
+                elif r == "s":
+                    post_tags.add("rating:sensitive")
+                    post_tags.add("rating:safe")
+                elif r == "g":
+                    post_tags.add("rating:general")
+                    post_tags.add("rating:safe")
+
                 if required and not required.issubset(post_tags):
                     continue
                 if excluded and any(et in post_tags for et in excluded):

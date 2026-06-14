@@ -72,100 +72,26 @@ class Danbooru(BaseBooru):
         
         return api_tags, extra_tags
 
-    async def fetch_posts(
+    async def handle_error_response(
         self,
-        tags: str,
-        page: int,
-        limit: int,
-        user: Optional[User],
-        timeout: float = 30.0,
-    ) -> Tuple[List[dict], int]:
-        """Fetch with local filtering for tags 3+."""
-        api_tags, extra_tags = self.prepare_tags(tags)
-        
-        # Fetching more posts if filtering is needed
-        fetch_limit = limit * 3 if extra_tags else limit
-        fetch_limit = min(fetch_limit, self.max_per_page)
-        
-        actual_page = self.calculate_page(page, limit)
-        auth_params = self.get_auth_params(user)
-
-        params = {
-            **self.default_params,
-            "tags": api_tags,
-            "limit": fetch_limit,
-            "page": actual_page,
-            **auth_params,
-        }
-
-        url = f"{self.base_url}{self.posts_path}"
-        client = self._get_client(timeout)
-
-        try:
-            resp = await client.get(url, params=params)
-            
-            # Handle 500 error fallback (common on Danbooru for large tag sets)
-            if resp.status_code == 500 and "order:score" in api_tags:
-                logger.info("Danbooru 500 -> trying score floors")
-                for floor in (1000, 500, 100):
-                    retry_params = {**params, "tags": f"score:>={floor} {api_tags}"}
+        resp: httpx.Response,
+        client: httpx.AsyncClient,
+        url: str,
+        params: dict,
+        original_tags: str,
+    ) -> httpx.Response:
+        """Handle Danbooru 500 by attempting progressive score floors."""
+        if resp.status_code == 500 and "order:score" in params.get("tags", ""):
+            logger.info("Danbooru 500 -> trying score floors")
+            for floor in (1000, 500, 100):
+                retry_params = {**params, "tags": f"score:>={floor} {params.get('tags', '')}"}
+                try:
                     r = await client.get(url, params=retry_params)
                     if r.status_code == 200:
-                        resp = r
-                        break
-
-            resp.raise_for_status()
-            data = resp.json()
-        except (httpx.HTTPStatusError, httpx.RequestError) as e:
-            logger.warning(f"[Danbooru] Fetch failed: {e}")
-            return [], -1
-
-        raw_posts = data if isinstance(data, list) else []
-        normalised = []
-        
-        # Filter by extra tags locally (supports -, ~ and required tags)
-        required = {t.lower() for t in extra_tags if not t.startswith('~') and not t.startswith('-')}
-        excluded = {t.lower()[1:] for t in extra_tags if t.startswith('-')}
-        optional = {t.lower()[1:] for t in extra_tags if t.startswith('~')}
-        
-        for raw in raw_posts:
-            post = self.normalize_post(raw)
-            if not post:
-                continue
-                
-            post_tags = {t.lower() for t in post.get("tags", [])}
-            
-            # Inject rating as a meta-tag for local filtering
-            r = post.get("rating", "g").lower()
-            if r == "e":
-                post_tags.add("rating:explicit")
-            elif r == "q":
-                post_tags.add("rating:questionable")
-            elif r == "s":
-                post_tags.add("rating:sensitive")
-                post_tags.add("rating:safe")
-            elif r == "g":
-                post_tags.add("rating:general")
-                post_tags.add("rating:safe")
-            
-            # Debug: Log tags for the very first post to see what's happening
-            if raw == raw_posts[0]:
-                logger.info(f"[Danbooru] Debug post tags: {list(post_tags)[:20]}...")
-            
-            # Match logic
-            if required and not required.issubset(post_tags):
-                continue
-            if excluded and any(et in post_tags for et in excluded):
-                continue
-            if optional and not any(ot in post_tags for ot in optional):
-                continue
-            
-            normalised.append(post)
-
-        if extra_tags:
-            logger.info(f"[Danbooru] Local filter: {len(normalised)}/{len(raw_posts)} posts matched extra tags {extra_tags}")
-
-        return normalised, len(raw_posts)
+                        return r
+                except Exception as e:
+                    logger.warning(f"Danbooru retry failed for floor {floor}: {e}")
+        return resp
 
     def normalize_post(self, raw: dict) -> Optional[dict]:
         # Extract variants mapping for robust fallbacks
