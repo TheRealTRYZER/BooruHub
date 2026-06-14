@@ -6,7 +6,7 @@ export const useToastStore = defineStore('toast', () => {
   const toasts = ref<ToastItem[]>([])
   let nextId = 0
 
-  function show(message: string, type: 'success' | 'error' | 'info' = 'info') {
+  function show(message: string, type: 'success' | 'error' | 'info' = 'info', action?: { label: string; callback: () => void }) {
     const id = nextId++
     const icons: Record<string, string> = { success: '✓', error: '✕', info: 'ℹ' }
 
@@ -16,11 +16,12 @@ export const useToastStore = defineStore('toast', () => {
       type,
       icon: icons[type] || 'ℹ',
       removing: false,
+      action
     })
 
     setTimeout(() => {
       remove(id)
-    }, 3000)
+    }, action ? 6000 : 3000)
   }
 
   function remove(id: number) {
@@ -33,5 +34,5 @@ export const useToastStore = defineStore('toast', () => {
     }
   }
 
-  return { toasts, show }
+  return { toasts, show, remove }
 })

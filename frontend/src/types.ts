@@ -164,6 +164,10 @@ export interface ToastItem {
   type: 'success' | 'error' | 'info'
   icon: string
   removing: boolean
+  action?: {
+    label: string
+    callback: () => void
+  }
 }
 
 export type TranslationKey =
