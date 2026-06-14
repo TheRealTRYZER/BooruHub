@@ -69,3 +69,31 @@ class TestClientIpResolution:
         request = _make_request("127.0.0.1", "198.51.100.77, 127.0.0.1")
         assert _get_client_ip(request) == "198.51.100.77"
         config_module.get_settings.cache_clear()
+
+
+@pytest.mark.asyncio
+async def test_events_batch_rate_limit(client):
+    from app.main import app
+    from app.api.deps import require_user
+    from app.db.models import User
+    from app.core.rate_limit import _window
+    
+    # Clear sliding windows to ensure clean slate
+    _window._windows.clear()
+    
+    dummy_user = User(id=1, username="testuser", email="test@test.com", data_consent=True)
+    app.dependency_overrides[require_user] = lambda: dummy_user
+
+    payload = {"events": [{"type": "view", "post_id": "123"}]}
+
+    # First 10 requests should succeed (202 Accepted)
+    for _ in range(10):
+        response = await client.post("/api/events/batch", json=payload)
+        assert response.status_code == 202
+
+    # 11th request should be rate-limited (429 Too Many Requests)
+    response = await client.post("/api/events/batch", json=payload)
+    assert response.status_code == 429
+
+    app.dependency_overrides = {}
+
