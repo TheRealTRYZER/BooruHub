@@ -111,7 +111,12 @@ async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
 
   if (isCacheable) {
     cache.set(url, { data, expiry: Date.now() + CACHE_TTL })
-    if (cache.size > 100) cache.delete(cache.keys().next().value!)
+    if (cache.size > 100) {
+      const nextKey = cache.keys().next().value
+      if (nextKey !== undefined) {
+        cache.delete(nextKey)
+      }
+    }
   }
 
   return data as T
