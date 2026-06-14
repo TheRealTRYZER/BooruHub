@@ -462,13 +462,11 @@ function onSearchBlur() {
 
 function selectSuggestion(tag: string) {
   addTagPill(tag)
-  triggerSearch()
 }
 
 function selectHistory(q: string) {
   feed.tags = q
   showHistory.value = false
-  triggerSearch()
 }
 
 function removeHistory(q: string) {
