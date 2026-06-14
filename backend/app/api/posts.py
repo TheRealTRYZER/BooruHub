@@ -780,6 +780,7 @@ async def suggest_tags(
     db: AsyncSession = Depends(get_db),
 ):
     q_lower = q.lower()
+    tag_sources_to_cache = []
     
     # Extract operator prefix if present
     op_prefix = ""
@@ -874,7 +875,6 @@ async def suggest_tags(
             # 3-second timeout to keep the search bar incredibly responsive
             results = await _asyncio.wait_for(_asyncio.gather(*tasks, return_exceptions=True), timeout=3.0)
             
-            tag_sources_to_cache = []
             for res in results:
                 if isinstance(res, list):
                     for item in res:
@@ -975,7 +975,7 @@ async def suggest_tags(
     candidates.sort(key=get_sort_key, reverse=True)
 
     # Background cache remote tags task trigger
-    if q_lower and ":" not in q_lower and len(q_lower) >= 2 and 'tag_sources_to_cache' in locals() and tag_sources_to_cache:
+    if tag_sources_to_cache:
         background_tasks.add_task(_cache_remote_tags_task, tag_sources_to_cache, db)
 
     return {"suggestions": candidates[:limit]}
