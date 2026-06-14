@@ -29,7 +29,9 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
     skeletonCount.value = 12
     const gen = ++loadGeneration
 
-    const activeSites = (feed.sites.length > 0 ? feed.sites : availableSites) as SiteName[]
+    const activeSites = feed.isSplit
+      ? (availableSites.filter(s => (feed.ratios[s] ?? 1) > 0) as SiteName[])
+      : ((feed.sites.length > 0 ? feed.sites : availableSites) as SiteName[])
 
     const siteTagSig = feed.isSplit ? JSON.stringify(feed.siteTags) : ''
     feed.lastSearchSignature = `${feed.tags}|${feed.sites.join(',')}|${feed.isSplit}|${siteTagSig}`
@@ -39,7 +41,7 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
     try {
       // Build a single request — let the backend handle multi-site interleaving
       const options: Record<string, any> = {
-        tags: feed.tags,
+        tags: feed.isSplit ? '' : feed.tags,
         sites: activeSites.join(','),
         page: feed.page,
         limit: 45,
@@ -48,9 +50,7 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
       // Pass per-site tag overrides for split search
       if (feed.isSplit) {
         for (const site of activeSites) {
-          if (feed.siteTags[site]) {
-            options[`${site}_tags`] = feed.siteTags[site]
-          }
+          options[`${site}_tags`] = feed.siteTags[site] || ''
         }
       }
 
