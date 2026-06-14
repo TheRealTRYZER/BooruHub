@@ -89,9 +89,8 @@ class BaseBooru(ABC):
             if user:
                 login_val = self._read_user_credential(user, user_login_field)
                 key_val = self._read_user_credential(user, user_key_field, encrypted=True)
-                if login_val:
+                if login_val and key_val:
                     params[self._auth_param_name(user_login_field)] = login_val
-                if key_val:
                     params[self._auth_param_name(user_key_field)] = key_val
 
             # Fallback to env if nothing found from user
@@ -99,9 +98,8 @@ class BaseBooru(ABC):
                 settings = get_settings()
                 env_login = getattr(settings, env_login_var, "")
                 env_key = getattr(settings, env_key_var, "")
-                if env_login and env_login.strip():
+                if env_login and env_login.strip() and env_key and env_key.strip():
                     params[self._auth_param_name(user_login_field)] = env_login.strip()
-                if env_key and env_key.strip():
                     params[self._auth_param_name(user_key_field)] = env_key.strip()
 
         return params
