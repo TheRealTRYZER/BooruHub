@@ -49,8 +49,6 @@ def _get_encryption_fernets() -> list[Fernet]:
 
     if settings.ENCRYPTION_KEY:
         key_sources.append(settings.ENCRYPTION_KEY)
-    if settings.JWT_SECRET:
-        key_sources.append(settings.JWT_SECRET)
     key_sources.extend(settings.encryption_key_fallback_list)
 
     seen: set[str] = set()
