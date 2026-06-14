@@ -486,7 +486,12 @@ async def _cache_remote_tags_task(tag_sources: List[dict], db: AsyncSession):
 
 
 async def _index_posts_task(posts: List[dict], db: AsyncSession):
-    """Save all seen posts (id, source_site, tags) to the global post index in batches."""
+    """Save all seen posts (id, source_site, tags) to the global post index in batches.
+    
+    TODO: The PostIndex is currently write-only. It saves posts for future cross-site 
+    search optimization and recommendation algorithms but is not currently used by 
+    any read operations.
+    """
     if not posts:
         return
 
@@ -634,7 +639,7 @@ async def get_feed(
 
     site_queries = {}
     for site in site_list:
-        if overrides.get(site):
+        if overrides.get(site) is not None:
             site_queries[site] = overrides[site]
         else:
             query = translate_tags(tag_list, site, lookup) if tag_list else ""
@@ -642,6 +647,13 @@ async def get_feed(
                 site_queries[site] = query
                 if tags or not user:
                     logger.info(f"[MAP] {site}: '{query}' (from '{tags}')")
+
+    # Enforce rating:general for guests on all final queries (including overrides)
+    if user is None:
+        for s in list(site_queries.keys()):
+            q_list = site_queries[s].split()
+            q_list = _enforce_guest_rating(q_list, s)
+            site_queries[s] = " ".join(q_list)
 
     # Fetch
     posts, site_counts = await search_multi_site(
