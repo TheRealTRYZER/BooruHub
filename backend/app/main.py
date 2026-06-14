@@ -54,8 +54,6 @@ async def lifespan(app: FastAPI):
     # 1. Basic schema creation & extensions
     async with engine.begin() as conn:
         await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
-        await conn.execute(text("ALTER TABLE cached_tags ADD COLUMN IF NOT EXISTS category VARCHAR(50);"))
-        await conn.execute(text("ALTER TABLE cached_tags ADD COLUMN IF NOT EXISTS post_count INTEGER DEFAULT 0;"))
         await conn.run_sync(Base.metadata.create_all)
             
     logger.info("Database initialized")
