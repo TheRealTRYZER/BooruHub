@@ -54,6 +54,9 @@ async function _tryRefreshToken(): Promise<boolean> {
     const data = await resp.json()
     if (data.access_token) {
       localStorage.setItem('booruhub_token', data.access_token)
+      if (data.refresh_token) {
+        localStorage.setItem('booruhub_refresh_token', data.refresh_token)
+      }
       return true
     }
     return false
@@ -64,10 +67,13 @@ async function _tryRefreshToken(): Promise<boolean> {
 
 async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
   const isCacheable = !opts.method || opts.method === 'GET'
-  if (isCacheable && cache.has(url)) {
-    const entry = cache.get(url)!
+  const token = localStorage.getItem('booruhub_token')
+  const cacheKey = token ? `${url}|${token.slice(-8)}` : url
+
+  if (isCacheable && cache.has(cacheKey)) {
+    const entry = cache.get(cacheKey)!
     if (Date.now() < entry.expiry) return entry.data as T
-    cache.delete(url)
+    cache.delete(cacheKey)
   }
 
   opts.headers = { ...getHeaders(), ...(opts.headers || {}) }
@@ -110,7 +116,7 @@ async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
   if (!resp.ok) throw new Error((data.detail as string) || `HTTP ${resp.status}`)
 
   if (isCacheable) {
-    cache.set(url, { data, expiry: Date.now() + CACHE_TTL })
+    cache.set(cacheKey, { data, expiry: Date.now() + CACHE_TTL })
     if (cache.size > 100) {
       const nextKey = cache.keys().next().value
       if (nextKey !== undefined) {
@@ -138,6 +144,13 @@ export async function apiRegister(username: string, email: string, password: str
   return _fetch<AuthResponse>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ username, email, password, data_consent: dataConsent }),
+  })
+}
+
+export async function apiLogout(refreshToken: string): Promise<{ ok: boolean }> {
+  return _fetch<{ ok: boolean }>('/auth/logout', {
+    method: 'POST',
+    body: JSON.stringify({ refresh_token: refreshToken }),
   })
 }
 

@@ -86,8 +86,8 @@ function toggleLang() {
   lang.setLocale(lang.locale === 'en' ? 'ru' : 'en')
 }
 
-function doLogout() {
-  auth.logout()
+async function doLogout() {
+  await auth.logout()
   toast.show(lang.t('logged_out'), 'info')
   router.push('/')
 }

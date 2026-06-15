@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { apiLogin, apiRegister, apiClearCache } from '../api'
+import { apiLogin, apiRegister, apiClearCache, apiLogout } from '../api'
 import type { User } from '../types'
 
 export const useAuthStore = defineStore('auth', () => {
@@ -37,7 +37,15 @@ export const useAuthStore = defineStore('auth', () => {
     return data
   }
 
-  function logout() {
+  async function logout() {
+    const refreshToken = localStorage.getItem('booruhub_refresh_token')
+    if (refreshToken) {
+      try {
+        await apiLogout(refreshToken)
+      } catch (e) {
+        console.error('Logout request failed:', e)
+      }
+    }
     token.value = null
     user.value = null
     localStorage.removeItem('booruhub_token')
