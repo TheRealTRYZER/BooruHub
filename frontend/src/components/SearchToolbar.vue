@@ -543,6 +543,8 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
   flex-direction: column;
   gap: 16px;
   margin-bottom: 24px;
+  position: relative;
+  z-index: 100;
   transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, background-color 0.3s, padding 0.3s, border-radius 0.3s, box-shadow 0.3s;
 }
 
@@ -550,7 +552,7 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
 .search-toolbar-container.is-sticky {
   position: sticky;
   top: 60px; /* Flush below the 60px navbar */
-  z-index: 99; /* Above grid, below modals */
+  z-index: 100; /* Above grid, below modals */
   background: color-mix(in srgb, var(--bg-card) 85%, transparent);
   backdrop-filter: blur(20px);
   -webkit-backdrop-filter: blur(20px);
