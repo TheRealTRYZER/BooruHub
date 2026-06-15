@@ -73,12 +73,43 @@ body {
   margin: 0;
   padding: 0;
   font-family: 'Inter', system-ui, -apple-system, sans-serif;
-  background: var(--bg-primary);
   color: var(--text-primary);
   min-height: 100vh;
   padding-top: 64px; /* nav offset */
   letter-spacing: -0.011em;
 }
+
+body::before {
+  content: "";
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: -1;
+  background: linear-gradient(-45deg, #09090b, #120922, #08111e, #09090b);
+  background-size: 400% 400%;
+  animation: gradientBG 20s ease infinite;
+  pointer-events: none;
+}
+
+[data-theme="light"] body::before {
+  background: linear-gradient(-45deg, #f8fafc, #ece6fc, #e4effc, #f8fafc);
+  background-size: 400% 400%;
+}
+
+@keyframes gradientBG {
+  0% {
+    background-position: 0% 50%;
+  }
+  50% {
+    background-position: 100% 50%;
+  }
+  100% {
+    background-position: 0% 50%;
+  }
+}
+
 
 h1, h2, h3, h4, h5, h6, .nav-logo {
   font-family: 'Outfit', 'Inter', system-ui, sans-serif;
