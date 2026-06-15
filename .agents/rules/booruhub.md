@@ -7,7 +7,7 @@ trigger: always_on
 ## ⚙️ Core Architectures & Quirks
 - **Media Rendering (CRITICAL)**: Never use video URLs (`.mp4`/`.webm`) in `<img>` or CSS `background-image` (causes browser blocks & 429s). Use static `preview_url`/`sample_url` images for `PostCard.vue`, relationship thumbs, and backdrops. Render videos exclusively in `<video>`.
 - **Danbooru Tag Limit**: Free accounts limited to 2 tags. Extra tags are stripped and filtered locally in Python.
-- **Danbooru Score 500s**: `order:score` without a floor causes Danbooru 500s. Provider injects score floors (e.g. `score:>=100`).
+- **Danbooru Score 500s**: `order:score` without a floor causes Danbooru 500s due to search timeouts. Provider injects score floors (e.g. `score:>=100`).
 - **Rule34 Auth**: Requires `user_id` and `api_key` in config; returns plain string `"Missing authentication"` on error.
 - **Rule34 Safe Category**: Rule34 has no native `safe` category (empty maps to exclusion unless negated).
 - **Guest Mode**: Enforces `rating:general` (strips user rating filters including negative/optional prefixes).

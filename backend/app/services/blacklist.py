@@ -108,7 +108,19 @@ def matches_rule(post: dict, group: BlacklistGroup) -> bool:
             
     # Rating check (g, s, q, e)
     if group.rating_filter:
-        if group.rating_filter[0] != post_rating:
+        rating_map = {
+            "safe": "g",
+            "general": "g",
+            "sensitive": "s",
+            "questionable": "q",
+            "explicit": "e",
+            "g": "g",
+            "s": "s",
+            "q": "q",
+            "e": "e",
+        }
+        filter_val = rating_map.get(group.rating_filter.lower(), group.rating_filter.lower()[:1])
+        if filter_val != post_rating:
             return False
             
     # Score comparison

@@ -87,6 +87,11 @@ class Danbooru(BaseBooru):
         if resp.status_code == 500 and "order:score" in params.get("tags", ""):
             logger.info("Danbooru 500 -> trying score floors and/or stripping auth")
             
+            # Clean original_tags of any existing score filters
+            orig_words = original_tags.strip().split()
+            filtered_words = [w for w in orig_words if not w.lower().startswith("score:")]
+            base_tags = " ".join(filtered_words)
+
             # Step 1: Try stripping auth first with the same query (hitting cached read replica)
             if "login" in params or "api_key" in params:
                 no_auth_params = {k: v for k, v in params.items() if k not in ("login", "api_key")}
@@ -100,12 +105,13 @@ class Danbooru(BaseBooru):
             
             # Step 2: Progressive score floors starting at 250 and raising (both without and with auth)
             for floor in (250, 500, 1000, 2000):
+                retry_tags = f"{base_tags} score:>={floor}"
                 # Try without auth first as it's much more likely to succeed
                 if "login" in params or "api_key" in params:
                     retry_params_no_auth = {
                         k: v for k, v in params.items() if k not in ("login", "api_key")
                     }
-                    retry_params_no_auth["tags"] = f"order:score score:>={floor}"
+                    retry_params_no_auth["tags"] = retry_tags
                     try:
                         r = await client.get(url, params=retry_params_no_auth)
                         if r.status_code == 200:
@@ -114,7 +120,7 @@ class Danbooru(BaseBooru):
                     except Exception as e:
                         logger.warning(f"Danbooru retry failed for floor {floor} without auth: {e}")
                 # Fallback to with auth
-                retry_params = {**params, "tags": f"order:score score:>={floor}"}
+                retry_params = {**params, "tags": retry_tags}
                 try:
                     r = await client.get(url, params=retry_params)
                     if r.status_code == 200:

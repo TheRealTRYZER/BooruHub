@@ -32,8 +32,6 @@ class Settings(BaseSettings):
     RULE34_API_KEY: str = ""
     RULE34_USER_ID: str = ""
 
-    # Tag aliases file
-    TAG_ALIASES_PATH: str = "/app/tag_aliases.csv"
 
     @computed_field  # type: ignore[prop-decorator]
     def cors_origin_list(self) -> list[str]:

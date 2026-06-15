@@ -23,7 +23,6 @@ services:
     volumes:
       - ./backend/app:/app/app
       - ./backend/alembic:/app/alembic
-      - ./tag_aliases.csv:/app/tag_aliases.csv:ro
     expose:
       - "8000"
 

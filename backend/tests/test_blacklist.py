@@ -85,6 +85,22 @@ class TestMatchesRule:
         post = {"tags": [], "rating": "g", "score": 0}
         assert not matches_rule(post, rules[0])
 
+    def test_rating_safe_matches_g_not_s(self):
+        """it should match 'g' rating for 'rating:safe' but not 's' (sensitive) rating"""
+        rules = parse_blacklist("rating:safe")
+        post_g = {"tags": [], "rating": "g", "score": 0}
+        post_s = {"tags": [], "rating": "s", "score": 0}
+        assert matches_rule(post_g, rules[0])
+        assert not matches_rule(post_s, rules[0])
+
+    def test_rating_sensitive_matches_s_not_g(self):
+        """it should match 's' rating for 'rating:sensitive' but not 'g' rating"""
+        rules = parse_blacklist("rating:sensitive")
+        post_g = {"tags": [], "rating": "g", "score": 0}
+        post_s = {"tags": [], "rating": "s", "score": 0}
+        assert not matches_rule(post_g, rules[0])
+        assert matches_rule(post_s, rules[0])
+
 
 class TestFilterPosts:
     def test_filter_matching_posts(self):
