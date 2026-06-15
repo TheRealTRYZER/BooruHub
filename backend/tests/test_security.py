@@ -99,3 +99,12 @@ class TestJWT:
 
     def test_decode_expired_refresh_token(self, security):
         assert security.decode_refresh_token("expired.garbage.token") is None
+
+    def test_hash_refresh_token(self, security):
+        token = "some_random_refresh_token_to_hash_123"
+        hashed = security.hash_refresh_token(token)
+        assert len(hashed) == 64
+        import hashlib
+        expected = hashlib.sha256(token.encode()).hexdigest()
+        assert hashed == expected
+

@@ -14,7 +14,7 @@ class Settings(BaseSettings):
     # JWT
     JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
-    JWT_EXPIRE_MINUTES: int = 10080  # 7 days
+    JWT_EXPIRE_MINUTES: int = 15  # 15 minutes
 
     # Encryption (for API keys stored in DB)
     ENCRYPTION_KEY: str = ""

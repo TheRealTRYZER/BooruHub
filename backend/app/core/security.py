@@ -147,3 +147,9 @@ def decode_refresh_token(token: str) -> Optional[dict]:
         return payload
     except jwt.PyJWTError:
         return None
+
+
+def hash_refresh_token(token: str) -> str:
+    """Hash a refresh token using SHA-256."""
+    return hashlib.sha256(token.encode()).hexdigest()
+
