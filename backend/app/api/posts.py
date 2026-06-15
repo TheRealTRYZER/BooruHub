@@ -27,8 +27,6 @@ router = APIRouter(prefix="/api/posts", tags=["posts"])
 
 # Write Throttling: Track recently processed items to avoid redundant UPSERTs
 # Thread-safe bounded set with automatic eviction
-import threading
-
 class _BoundedSet:
     """Thread-safe bounded set with automatic eviction."""
     __slots__ = ("_data", "_max", "_lock")
@@ -36,11 +34,13 @@ class _BoundedSet:
     def __init__(self, maxsize: int = 10000) -> None:
         self._data: set = set()
         self._max = maxsize
-        self._lock = threading.Lock()
+        self._lock: _asyncio.Lock | None = None
 
     async def add_many(self, items) -> list:
         """Add items, returning only those that were new."""
-        with self._lock:
+        if self._lock is None:
+            self._lock = _asyncio.Lock()
+        async with self._lock:
             new = [i for i in items if i not in self._data]
             self._data.update(new)
             if len(self._data) > self._max:
@@ -49,8 +49,8 @@ class _BoundedSet:
             return new
 
     def __contains__(self, item) -> bool:
-        with self._lock:
-            return item in self._data
+        return item in self._data
+
 
 
 _recently_cached_tags = _BoundedSet(maxsize=10000)

@@ -62,11 +62,6 @@ class Danbooru(BaseBooru):
         # Priority 5: second content tag if room
         if len(content) > 1 and len(api_list) < 2:
             api_list.append(content[1])
-            
-        # Score floor injection for order:score to prevent Danbooru 500s
-        # Only inject if we have 'order:score' and room in api_list
-        if any(t == "order:score" for t in api_list) and len(api_list) < 2:
-            api_list.append("score:>=250")
 
         api_tags = " ".join(api_list)
         
