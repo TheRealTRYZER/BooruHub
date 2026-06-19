@@ -18,11 +18,11 @@
           <div class="settings-title">👤 {{ lang.t('profile') }}</div>
           <div style="display:flex,align-items:center;gap:16px;margin-bottom:16px;">
             <div class="nav-avatar" style="width:48px;height:48px;font-size:1.2rem;">
-              {{ auth.user!.username[0].toUpperCase() }}
+              {{ auth.user?.username?.[0]?.toUpperCase() || '?' }}
             </div>
             <div>
-              <div style="font-weight:600;font-size:var(--font-md);">{{ auth.user!.username }}</div>
-              <div style="color:var(--text-muted);font-size:var(--font-sm);">{{ auth.user!.email }}</div>
+              <div style="font-weight:600;font-size:var(--font-md);">{{ auth.user?.username || '' }}</div>
+              <div style="color:var(--text-muted);font-size:var(--font-sm);">{{ auth.user?.email || '' }}</div>
             </div>
           </div>
           <div style="margin-top:16px; border-top:1px solid rgba(128,128,128,0.1); padding-top:16px;">
@@ -46,30 +46,30 @@
           <div class="settings-title">🔑 {{ lang.t('api_keys_section') }}</div>
           <div style="display:flex;flex-direction:column;gap:12px;">
             <div>
-              <label class="input-label" style="color:var(--danbooru);font-size:10px;">
+              <label for="danbooru-login-input" class="input-label" style="color:var(--danbooru);font-size:10px;">
                 Danbooru (Login / API Key) <span v-if="statusFlags.danbooru" style="color:var(--success)">✅</span>
               </label>
               <div style="display:flex;gap:4px;">
-                <input type="text" class="input btn-sm" v-model="keys.danbooru_login" placeholder="Login" style="width:80px;" autocomplete="off">
-                <input type="password" class="input btn-sm" v-model="keys.danbooru_api_key" placeholder="Key" style="flex:1;" autocomplete="new-password">
+                <input id="danbooru-login-input" type="text" class="input btn-sm" v-model="keys.danbooru_login" placeholder="Login" style="width:80px;" autocomplete="off">
+                <input id="danbooru-key-input" aria-label="Danbooru API Key" type="password" class="input btn-sm" v-model="keys.danbooru_api_key" placeholder="Key" style="flex:1;" autocomplete="new-password">
               </div>
             </div>
             <div>
-              <label class="input-label" style="color:var(--e621);font-size:10px;">
+              <label for="e621-login-input" class="input-label" style="color:var(--e621);font-size:10px;">
                 e621 (Login / API Key) <span v-if="statusFlags.e621" style="color:var(--success)">✅</span>
               </label>
               <div style="display:flex;gap:4px;">
-                <input type="text" class="input btn-sm" v-model="keys.e621_login" placeholder="Login" style="width:80px;" autocomplete="off">
-                <input type="password" class="input btn-sm" v-model="keys.e621_api_key" placeholder="Key" style="flex:1;" autocomplete="new-password">
+                <input id="e621-login-input" type="text" class="input btn-sm" v-model="keys.e621_login" placeholder="Login" style="width:80px;" autocomplete="off">
+                <input id="e621-key-input" aria-label="e621 API key" type="password" class="input btn-sm" v-model="keys.e621_api_key" placeholder="Key" style="flex:1;" autocomplete="new-password">
               </div>
             </div>
             <div>
-              <label class="input-label" style="color:var(--rule34);font-size:10px;">
+              <label for="rule34-userid-input" class="input-label" style="color:var(--rule34);font-size:10px;">
                 Rule34 (User ID / API Key) <span v-if="statusFlags.rule34" style="color:var(--success)">✅</span>
               </label>
               <div style="display:flex;gap:4px;">
-                <input type="text" class="input btn-sm" v-model="keys.rule34_user_id" placeholder="ID" style="width:80px;" autocomplete="off">
-                <input type="password" class="input btn-sm" v-model="keys.rule34_api_key" placeholder="Key" style="flex:1;" autocomplete="new-password">
+                <input id="rule34-userid-input" type="text" class="input btn-sm" v-model="keys.rule34_user_id" placeholder="ID" style="width:80px;" autocomplete="off">
+                <input id="rule34-key-input" aria-label="Rule34 API key" type="password" class="input btn-sm" v-model="keys.rule34_api_key" placeholder="Key" style="flex:1;" autocomplete="new-password">
               </div>
             </div>
 
@@ -89,24 +89,24 @@
           <div style="display:flex;flex-direction:column;gap:12px;">
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
               <div>
-                <label class="input-label" style="font-size:10px;">{{ lang.t('posts_limit') }}</label>
-                <input type="number" class="input btn-sm" v-model.number="keys.search_limit" min="10" max="200">
+                <label for="posts-limit-input" class="input-label" style="font-size:10px;">{{ lang.t('posts_limit') }}</label>
+                <input id="posts-limit-input" type="number" class="input btn-sm" v-model.number="keys.search_limit" min="10" max="200">
               </div>
               <div>
-                <label class="input-label" style="font-size:10px;">{{ lang.t('search_timeout') }}</label>
-                <input type="number" class="input btn-sm" v-model.number="keys.search_timeout" min="1" max="120">
+                <label for="search-timeout-input" class="input-label" style="font-size:10px;">{{ lang.t('search_timeout') }}</label>
+                <input id="search-timeout-input" type="number" class="input btn-sm" v-model.number="keys.search_timeout" min="1" max="120">
                 <div style="font-size:9px;color:var(--text-muted);margin-top:4px;line-height:1.2;">{{ lang.t('search_timeout_desc') }}</div>
               </div>
             </div>
             <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;">
               <div>
-                <label class="input-label" style="font-size:10px;">{{ lang.t('search_interval') }}</label>
-                <input type="number" class="input btn-sm" v-model.number="keys.search_interval" min="0" max="10" step="0.1">
+                <label for="search-interval-input" class="input-label" style="font-size:10px;">{{ lang.t('search_interval') }}</label>
+                <input id="search-interval-input" type="number" class="input btn-sm" v-model.number="keys.search_interval" min="0" max="10" step="0.1">
                 <div style="font-size:9px;color:var(--text-muted);margin-top:4px;line-height:1.2;">{{ lang.t('search_interval_desc') }}</div>
               </div>
               <div>
-                <label class="input-label" style="font-size:10px;">{{ lang.t('root_margin') }}</label>
-                <input type="number" class="input btn-sm" v-model.number="rootMargin" min="100" max="5000" step="100">
+                <label for="root-margin-input" class="input-label" style="font-size:10px;">{{ lang.t('root_margin') }}</label>
+                <input id="root-margin-input" type="number" class="input btn-sm" v-model.number="rootMargin" min="100" max="5000" step="100">
               </div>
             </div>
             <button class="btn btn-primary btn-sm" @click="saveAdvancedSettings" :disabled="savingAdvanced">{{ lang.t('save') }}</button>
@@ -154,8 +154,8 @@
           <div class="mapping-add-card">
             <div class="mapping-grid">
               <div style="position:relative;">
-                <label class="input-label" style="font-size:10px;">Unitag</label>
-                <input type="text" class="input btn-sm" v-model="mapForm.unitag" @input="onSuggest('unitag', mapForm.unitag)" @blur="onBlur">
+                <label for="map-unitag-input" class="input-label" style="font-size:10px;">Unitag</label>
+                <input id="map-unitag-input" type="text" class="input btn-sm" v-model="mapForm.unitag" @input="onSuggest('unitag', mapForm.unitag)" @blur="onBlur">
                 <div v-if="activeField === 'unitag' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
                   <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
                     <span style="flex:1">{{ s.tag }}</span>
@@ -163,8 +163,8 @@
                 </div>
               </div>
               <div style="position:relative;">
-                <label class="input-label" style="font-size:10px;color:var(--danbooru);">Danbooru</label>
-                <input type="text" class="input btn-sm" v-model="mapForm.danbooru" @input="onSuggest('danbooru', mapForm.danbooru)" @blur="onBlur">
+                <label for="map-danbooru-input" class="input-label" style="font-size:10px;color:var(--danbooru);">Danbooru</label>
+                <input id="map-danbooru-input" type="text" class="input btn-sm" v-model="mapForm.danbooru" @input="onSuggest('danbooru', mapForm.danbooru)" @blur="onBlur">
                 <div v-if="activeField === 'danbooru' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
                   <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
                     <span style="flex:1">{{ s.tag }}</span>
@@ -173,8 +173,8 @@
                 </div>
               </div>
               <div style="position:relative;">
-                <label class="input-label" style="font-size:10px;color:var(--e621);">e621</label>
-                <input type="text" class="input btn-sm" v-model="mapForm.e621" @input="onSuggest('e621', mapForm.e621)" @blur="onBlur">
+                <label for="map-e621-input" class="input-label" style="font-size:10px;color:var(--e621);">e621</label>
+                <input id="map-e621-input" type="text" class="input btn-sm" v-model="mapForm.e621" @input="onSuggest('e621', mapForm.e621)" @blur="onBlur">
                 <div v-if="activeField === 'e621' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
                   <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
                     <span style="flex:1">{{ s.tag }}</span>
@@ -183,8 +183,8 @@
                 </div>
               </div>
               <div style="position:relative;">
-                <label class="input-label" style="font-size:10px;color:var(--rule34);">Rule34</label>
-                <input type="text" class="input btn-sm" v-model="mapForm.rule34" @input="onSuggest('rule34', mapForm.rule34)" @blur="onBlur">
+                <label for="map-rule34-input" class="input-label" style="font-size:10px;color:var(--rule34);">Rule34</label>
+                <input id="map-rule34-input" type="text" class="input btn-sm" v-model="mapForm.rule34" @input="onSuggest('rule34', mapForm.rule34)" @blur="onBlur">
                 <div v-if="activeField === 'rule34' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
                   <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
                     <span style="flex:1">{{ s.tag }}</span>
@@ -252,7 +252,7 @@ import {
   apiDeleteHistory as apiDeleteHistoryFn, apiGetEventCount, apiUpdateConsent,
   apiSuggestTags
 } from '../api'
-import type { TagMapping, BlacklistRule, ApiKeysStatus, ApiKeysUpdate } from '../types'
+import type { TagMapping, BlacklistRule, ApiKeysStatus, ApiKeysUpdate, TagSuggestion } from '../types'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -284,23 +284,33 @@ const newRule = ref('')
 const eventCount = ref(0)
 const deletingHistory = ref(false)
 const dataConsent = ref(false)
-const suggestions = ref<any[]>([])
+const suggestions = ref<TagSuggestion[]>([])
 const activeField = ref<string | null>(null)
 let suggestTimeout: any = null
+let suggestController: AbortController | null = null
 
 function onSuggest(field: string, val: string) {
   activeField.value = field
   clearTimeout(suggestTimeout)
+  if (suggestController) {
+    suggestController.abort()
+    suggestController = null
+  }
   if (val.length < 2) {
     suggestions.value = []
     return
   }
   suggestTimeout = setTimeout(async () => {
+    suggestController = new AbortController()
     try {
-      const data = await apiSuggestTags(val)
+      const data = await apiSuggestTags(val, 15, suggestController.signal)
       suggestions.value = data.suggestions || []
-    } catch {
-      suggestions.value = []
+    } catch (e: any) {
+      if (e.name !== 'AbortError') {
+        suggestions.value = []
+      }
+    } finally {
+      suggestController = null
     }
   }, 300)
 }
@@ -347,7 +357,10 @@ async function loadKeysStatus() {
     
     keysConfiguredSites.value = s
     
-    if (status.search_limit) keys.value.search_limit = status.search_limit
+    if (status.search_limit) {
+      keys.value.search_limit = status.search_limit
+      feed.postsLimit = status.search_limit
+    }
     if ((status as any).search_timeout) keys.value.search_timeout = (status as any).search_timeout
     if (status.search_interval !== undefined && status.search_interval !== null) keys.value.search_interval = status.search_interval
     
@@ -398,6 +411,7 @@ async function saveAdvancedSettings() {
   // 1. Save rootMargin locally in Pinia store and localStorage
   feed.rootMargin = rootMargin.value
   localStorage.setItem('booruhub_root_margin', String(rootMargin.value))
+  feed.postsLimit = keys.value.search_limit
 
   // 2. Save search preferences to the backend database
   const data: ApiKeysUpdate = {

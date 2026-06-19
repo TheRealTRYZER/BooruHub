@@ -6,7 +6,7 @@
       
       <form class="auth-form" @submit.prevent="submit">
         <div class="input-group">
-          <label class="input-label">{{ lang.t('nav_feed') }}</label>
+          <label class="input-label">{{ lang.t('username') }}</label>
           <input type="text" class="input" v-model="username" placeholder="username" required minlength="3" autocomplete="username">
         </div>
         <div class="input-group">

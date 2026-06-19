@@ -87,7 +87,8 @@ onMounted(() => {
   }
 
   observer = new IntersectionObserver((entries) => {
-    if (entries[0].isIntersecting && !loading.value && feed.hasMore) {
+    const entry = entries[0]
+    if (entry && entry.isIntersecting && !loading.value && feed.hasMore) {
       loadMore(sentinel.value)
     }
   }, { rootMargin: `${feed.rootMargin}px` })

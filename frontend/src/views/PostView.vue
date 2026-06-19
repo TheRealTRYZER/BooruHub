@@ -7,7 +7,7 @@
   <div v-else class="post-detail">
     <!-- Dynamic Ambilight Theatre Backdrop -->
     <div class="ambient-glow-container">
-      <div class="ambient-glow-backdrop" :style="{ backgroundImage: `url(${backdropUrl})` }"></div>
+      <div class="ambient-glow-backdrop" :style="{ backgroundImage: backdropUrl ? 'url(' + escapeCssString(backdropUrl) + ')' : 'none' }"></div>
     </div>
     <!-- Parent/Child Relationships Panel -->
     <div v-if="relationshipPosts.length > 1" class="post-relationship-panel">
@@ -15,7 +15,12 @@
         <span>
           {{ displayedPost.parent_id ? lang.t('post_has_parent') : lang.t('post_has_children') }}
         </span>
-        <span class="post-relationship-toggle" @click="showRelationshipPanel = !showRelationshipPanel">
+        <span class="post-relationship-toggle" 
+              role="button" 
+              tabindex="0"
+              @click="showRelationshipPanel = !showRelationshipPanel"
+              @keydown.enter.prevent="showRelationshipPanel = !showRelationshipPanel"
+              @keydown.space.prevent="showRelationshipPanel = !showRelationshipPanel">
           « {{ showRelationshipPanel ? lang.t('hide') : lang.t('show') }}
         </span>
       </div>
@@ -34,7 +39,7 @@
 
     <div class="post-detail-image">
       <video v-if="isVideo" :src="mediaUrl" controls loop autoplay muted style="width:100%;max-height:85vh;"></video>
-      <img v-else :src="mediaUrl" :alt="'Post ' + displayedPost.id" @click="openOriginal" style="cursor:zoom-in;">
+      <img v-else :src="mediaUrl" :alt="altText" @click="openOriginal" style="cursor:zoom-in;">
     </div>
     
     <div class="post-detail-sidebar">
@@ -55,8 +60,12 @@
                   :key="site" 
                   class="post-card-badge" 
                   :class="[site, { 'interactive-badge': allSites.length > 1, 'active-site': allSites.length > 1 && activeSite === site }]"
-                  :title="allSites.length > 1 ? 'Switch to ' + site + ' version' : ''"
-                  @click="allSites.length > 1 ? switchActiveSite(site) : null">
+                  :title="allSites.length > 1 ? lang.t('switch_version', { site }) : ''"
+                  :role="allSites.length > 1 ? 'button' : undefined"
+                  :tabindex="allSites.length > 1 ? 0 : undefined"
+                  @click="allSites.length > 1 ? switchActiveSite(site) : null"
+                  @keydown.enter.stop.prevent="allSites.length > 1 ? switchActiveSite(site) : null"
+                  @keydown.space.stop.prevent="allSites.length > 1 ? switchActiveSite(site) : null">
               {{ site }}
             </span>
           </span>
@@ -68,7 +77,7 @@
         <div class="post-detail-info-row">
           <span class="post-detail-info-label">{{ lang.t('rating') }}</span>
           <span class="post-detail-info-value">
-            <span class="post-card-rating" :class="ratingClass">{{ ratingLabel }}</span>
+            <span class="post-card-rating" :class="ratingClass" :aria-label="'Rating: ' + ratingLabel">{{ ratingLabel }}</span>
           </span>
         </div>
         <div class="post-detail-info-row">
@@ -111,7 +120,9 @@ import { useFeedStore } from '../stores/feed'
 import { apiCheckFavorite, apiAddFavorite, apiRemoveFavorite, apiSearch } from '../api'
 import { useEventLogger } from '../composables/useEventLogger'
 import TagChip from '../components/TagChip.vue'
-import { Post, SiteName, RATING_MAP, RATING_LABELS } from '../types'
+import { sanitizeUrl, escapeCssString } from '../utils/security'
+import { RATING_MAP, RATING_LABELS } from '../types'
+import type { Post, SiteName } from '../types'
 
 const route = useRoute()
 const router = useRouter()
@@ -161,8 +172,8 @@ const isVideo = computed(() => {
 const mediaUrl = computed(() => {
   if (!displayedPost.value) return ''
   // For videos, always use the direct file URL, samples might be just images
-  if (isVideo.value) return displayedPost.value.file_url || ''
-  return displayedPost.value.sample_url || displayedPost.value.file_url || ''
+  if (isVideo.value) return sanitizeUrl(displayedPost.value.file_url || '')
+  return sanitizeUrl(displayedPost.value.sample_url || displayedPost.value.file_url || '')
 })
 
 const backdropUrl = computed(() => {
@@ -172,36 +183,48 @@ const backdropUrl = computed(() => {
   const videoExtensions = ['mp4', 'webm', 'm4v', 'mov', 'mkv', 'swf', 'ogv']
   const isVideoExt = (url: string) => {
     if (!url) return false
-    const cleanUrl = url.split('?')[0].toLowerCase()
+    const cleanUrl = (url.split('?')[0] ?? '').toLowerCase()
     return videoExtensions.some(ext => cleanUrl.endsWith('.' + ext))
   }
   
+  let url = ''
   if (p.sample_url && !isVideoExt(p.sample_url)) {
-    return p.sample_url
+    url = p.sample_url
+  } else if (p.preview_url && !isVideoExt(p.preview_url)) {
+    url = p.preview_url
+  } else if (p.file_url && !isVideoExt(p.file_url)) {
+    url = p.file_url
+  } else {
+    const fallback = p.preview_url || p.sample_url || ''
+    url = isVideoExt(fallback) ? '' : fallback
   }
-  if (p.preview_url && !isVideoExt(p.preview_url)) {
-    return p.preview_url
-  }
-  if (p.file_url && !isVideoExt(p.file_url)) {
-    return p.file_url
-  }
-  const fallback = p.preview_url || p.sample_url || ''
-  return isVideoExt(fallback) ? '' : fallback
+  return sanitizeUrl(url)
+})
+
+const altText = computed(() => {
+  if (!displayedPost.value) return ''
+  const firstTag = displayedPost.value.tags?.[0]
+  const rating = displayedPost.value.rating ? `[Rating: ${displayedPost.value.rating.toUpperCase()}]` : ''
+  return `Post ${displayedPost.value.id} ${firstTag ? '- ' + firstTag.replace(/_/g, ' ') : ''} ${rating}`.trim()
 })
 
 function getPostThumbnail(p: Post) {
   const videoExtensions = ['mp4', 'webm', 'm4v', 'mov', 'mkv', 'swf', 'ogv']
   const isVideoExt = (url: string) => {
     if (!url) return false
-    const cleanUrl = url.split('?')[0].toLowerCase()
+    const cleanUrl = (url.split('?')[0] ?? '').toLowerCase()
     return videoExtensions.some(ext => cleanUrl.endsWith('.' + ext))
   }
   
-  if (p.preview_url && !isVideoExt(p.preview_url)) return p.preview_url
-  if (p.sample_url && !isVideoExt(p.sample_url)) return p.sample_url
-  if (p.file_url && !isVideoExt(p.file_url)) return p.file_url
-  const fallback = p.preview_url || p.sample_url || p.file_url || ''
-  return isVideoExt(fallback) ? '' : fallback
+  let url = ''
+  if (p.preview_url && !isVideoExt(p.preview_url)) url = p.preview_url
+  else if (p.sample_url && !isVideoExt(p.sample_url)) url = p.sample_url
+  else if (p.file_url && !isVideoExt(p.file_url)) url = p.file_url
+  else {
+    const fallback = p.preview_url || p.sample_url || p.file_url || ''
+    url = isVideoExt(fallback) ? '' : fallback
+  }
+  return sanitizeUrl(url)
 }
 
 const ratingClass = computed(() => {
@@ -253,7 +276,10 @@ const groupedTags = computed(() => {
 
 function openOriginal() {
   if (displayedPost.value && displayedPost.value.file_url) {
-    window.open(displayedPost.value.file_url, '_blank')
+    const url = sanitizeUrl(displayedPost.value.file_url)
+    if (url) {
+      window.open(url, '_blank', 'noopener,noreferrer')
+    }
   }
 }
 
@@ -342,7 +368,10 @@ async function loadRelationships() {
       try {
         const parentRes = await apiSearch(`id:${pId}`, post.source_site, 1, 1, true)
         if (parentRes.posts && parentRes.posts.length > 0) {
-          addPost(parentRes.posts[0])
+          const firstParent = parentRes.posts[0]
+          if (firstParent) {
+            addPost(firstParent)
+          }
         }
       } catch (e) {
         console.error("Error fetching parent post:", e)
@@ -429,7 +458,10 @@ async function fetchAndSetPost() {
   try {
     const data = await apiSearch(`id:${id}`, site, 1, 1)
     if (data.posts && data.posts.length > 0) {
-      mainPost.value = data.posts[0]
+      const firstPost = data.posts[0]
+      if (firstPost) {
+        mainPost.value = firstPost
+      }
       if (displayedPost.value) {
         logView(displayedPost.value)
       }

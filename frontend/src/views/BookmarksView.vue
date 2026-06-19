@@ -21,7 +21,15 @@
       </div>
 
       <div v-if="!loading && bookmarks.length > 0" id="bookmarks-list">
-        <div v-for="(b, i) in bookmarks" :key="b.id" class="bookmark-card" :style="{ animationDelay: `${i * 0.05}s` }">
+        <div v-for="(b, i) in bookmarks" 
+             :key="b.id" 
+             class="bookmark-card" 
+             :style="{ animationDelay: `${i * 0.05}s` }"
+             role="button"
+             tabindex="0"
+             @click="apply(b.query)"
+             @keydown.enter.prevent="apply(b.query)"
+             @keydown.space.prevent="apply(b.query)">
           <div style="flex:1;">
             <div class="bookmark-name">{{ b.name }}</div>
             <div class="bookmark-query">{{ b.query }}</div>
