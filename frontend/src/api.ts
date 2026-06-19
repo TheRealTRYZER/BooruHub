@@ -14,6 +14,7 @@ import type {
   Post,
   SiteName,
 } from './types'
+import { sanitizeUrl } from './utils/security'
 
 const BASE = '/api'
 
@@ -25,10 +26,21 @@ interface CacheEntry {
 const cache = new Map<string, CacheEntry>()
 const CACHE_TTL = 60000
 
-function getHeaders(): Record<string, string> {
-  const h: Record<string, string> = { 'Content-Type': 'application/json' }
-  const token = localStorage.getItem('booruhub_token')
-  if (token) h['Authorization'] = `Bearer ${token}`
+function getCookie(name: string): string | null {
+  if (typeof document === 'undefined') return null
+  const match = document.cookie.match(new RegExp('(^| )' + name + '=([^;]*)'))
+  return match && match[2] !== undefined ? decodeURIComponent(match[2]) : null
+}
+
+function getHeaders(method = 'GET'): Record<string, string> {
+  const h: Record<string, string> = {}
+  if (method !== 'GET') {
+    h['Content-Type'] = 'application/json'
+  }
+  const csrf = getCookie('csrftoken')
+  if (csrf) {
+    h['X-CSRF-Token'] = csrf
+  }
   return h
 }
 
@@ -36,39 +48,42 @@ interface FetchOptions {
   method?: string
   headers?: Record<string, string>
   body?: string
+  signal?: AbortSignal
 }
 
 let _refreshPromise: Promise<void> | null = null
+let _onAuthFailure: (() => void) | null = null
+
+export function registerAuthFailureCallback(cb: () => void) {
+  _onAuthFailure = cb
+}
 
 async function _tryRefreshToken(): Promise<boolean> {
-  const refreshToken = localStorage.getItem('booruhub_refresh_token')
-  if (!refreshToken) return false
-
   try {
     const resp = await fetch(BASE + '/auth/refresh', {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ refresh_token: refreshToken }),
+      headers: getHeaders('POST'),
     })
     if (!resp.ok) return false
-    const data = await resp.json()
-    if (data.access_token) {
-      localStorage.setItem('booruhub_token', data.access_token)
-      if (data.refresh_token) {
-        localStorage.setItem('booruhub_refresh_token', data.refresh_token)
-      }
-      return true
-    }
-    return false
+    cache.clear() // Clear cache upon token refresh to prevent mixed data
+    return true
   } catch {
     return false
   }
 }
 
+function invalidateCache(prefix: string) {
+  for (const key of cache.keys()) {
+    if (key.startsWith(prefix)) {
+      cache.delete(key)
+    }
+  }
+}
+
 async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
-  const isCacheable = !opts.method || opts.method === 'GET'
-  const token = localStorage.getItem('booruhub_token')
-  const cacheKey = token ? `${url}|${token.slice(-8)}` : url
+  const method = opts.method || 'GET'
+  const isCacheable = method === 'GET'
+  const cacheKey = url
 
   if (isCacheable && cache.has(cacheKey)) {
     const entry = cache.get(cacheKey)!
@@ -76,11 +91,42 @@ async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
     cache.delete(cacheKey)
   }
 
-  opts.headers = { ...getHeaders(), ...(opts.headers || {}) }
-  let resp = await fetch(BASE + url, opts)
+  const timeoutSec = Number(localStorage.getItem('booruhub_search_timeout') || '30')
+  const controller = new AbortController()
+  const timeoutId = setTimeout(() => controller.abort(), timeoutSec * 1000)
 
-  if (!isCacheable) {
-    cache.clear()
+  opts.headers = { ...getHeaders(method), ...(opts.headers || {}) }
+  const fetchOpts: RequestInit = {
+    method,
+    headers: opts.headers,
+    body: opts.body,
+    signal: opts.signal || controller.signal,
+  }
+
+  let resp: Response
+  try {
+    resp = await fetch(BASE + url, fetchOpts)
+  } catch (err: any) {
+    if (err.name === 'AbortError') {
+      throw new Error(`Request timed out after ${timeoutSec} seconds`)
+    }
+    throw err
+  } finally {
+    clearTimeout(timeoutId)
+  }
+
+  if (!isCacheable && !url.includes('/events/batch')) {
+    if (url.startsWith('/favorites')) {
+      invalidateCache('/favorites')
+    } else if (url.startsWith('/bookmarks')) {
+      invalidateCache('/bookmarks')
+    } else if (url.startsWith('/blacklist')) {
+      invalidateCache('/blacklist')
+    } else if (url.startsWith('/mappings')) {
+      invalidateCache('/mappings')
+    } else if (url.startsWith('/auth') || url.startsWith('/user')) {
+      cache.clear()
+    }
   }
 
   // On 401, try refreshing the token once, EXCEPT for login/register which should return their own error
@@ -89,25 +135,38 @@ async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
       _refreshPromise = _tryRefreshToken().then(ok => {
         _refreshPromise = null
         if (!ok) {
-          localStorage.removeItem('booruhub_token')
           localStorage.removeItem('booruhub_user')
-          localStorage.removeItem('booruhub_refresh_token')
+          if (_onAuthFailure) _onAuthFailure()
         }
       })
     }
     await _refreshPromise
 
-    // Retry with new token if we have one
-    const newToken = localStorage.getItem('booruhub_token')
-    if (newToken) {
-      opts.headers = { ...getHeaders(), ...(opts.headers || {}) }
-      resp = await fetch(BASE + url, opts)
+    // Retry with new token / cookies
+    const retryController = new AbortController()
+    const retryTimeoutId = setTimeout(() => retryController.abort(), timeoutSec * 1000)
+    opts.headers = { ...getHeaders(method), ...(opts.headers || {}) }
+    const retryFetchOpts: RequestInit = {
+      method,
+      headers: opts.headers,
+      body: opts.body,
+      signal: opts.signal || retryController.signal,
+    }
+
+    try {
+      resp = await fetch(BASE + url, retryFetchOpts)
+    } catch (err: any) {
+      if (err.name === 'AbortError') {
+        throw new Error(`Request timed out after ${timeoutSec} seconds`)
+      }
+      throw err
+    } finally {
+      clearTimeout(retryTimeoutId)
     }
 
     if (resp.status === 401) {
-      localStorage.removeItem('booruhub_token')
       localStorage.removeItem('booruhub_user')
-      localStorage.removeItem('booruhub_refresh_token')
+      if (_onAuthFailure) _onAuthFailure()
       throw new Error('Authentication required')
     }
   }
@@ -134,6 +193,7 @@ export function apiClearCache() {
 
 // Auth
 export async function apiLogin(loginStr: string, password: string): Promise<AuthResponse> {
+  cache.clear()
   return _fetch<AuthResponse>('/auth/login', {
     method: 'POST',
     body: JSON.stringify({ login: loginStr, password }),
@@ -141,16 +201,17 @@ export async function apiLogin(loginStr: string, password: string): Promise<Auth
 }
 
 export async function apiRegister(username: string, email: string, password: string, dataConsent = false): Promise<AuthResponse> {
+  cache.clear()
   return _fetch<AuthResponse>('/auth/register', {
     method: 'POST',
     body: JSON.stringify({ username, email, password, data_consent: dataConsent }),
   })
 }
 
-export async function apiLogout(refreshToken: string): Promise<{ ok: boolean }> {
+export async function apiLogout(): Promise<{ ok: boolean }> {
+  cache.clear()
   return _fetch<{ ok: boolean }>('/auth/logout', {
     method: 'POST',
-    body: JSON.stringify({ refresh_token: refreshToken }),
   })
 }
 
@@ -195,14 +256,19 @@ export async function apiSearch(tags: string, site: SiteName = 'danbooru', page 
   return _fetch<SearchResponse>(`/posts/search?${params}`)
 }
 
-export async function apiSuggestTags(q: string, limit = 15): Promise<TagSuggestResponse> {
+export async function apiSuggestTags(q: string, limit = 15, signal?: AbortSignal): Promise<TagSuggestResponse> {
   const params = new URLSearchParams({ q, limit: String(limit) })
-  return _fetch<TagSuggestResponse>(`/posts/tags/suggest?${params}`)
+  return _fetch<TagSuggestResponse>(`/posts/tags/suggest?${params}`, { signal })
 }
 
 // Favorites
 export async function apiGetFavorites(page = 1, limit = 40, isDislike = false): Promise<FavoritesResponse> {
-  return _fetch<FavoritesResponse>(`/favorites?page=${page}&limit=${limit}&is_dislike=${isDislike}`)
+  const params = new URLSearchParams({
+    page: String(page),
+    limit: String(limit),
+    is_dislike: isDislike ? 'true' : 'false',
+  })
+  return _fetch<FavoritesResponse>(`/favorites?${params}`)
 }
 
 export async function apiAddFavorite(post: Post, isDislike = false): Promise<unknown> {
@@ -211,9 +277,9 @@ export async function apiAddFavorite(post: Post, isDislike = false): Promise<unk
     body: JSON.stringify({
       source_site: post.source_site,
       post_id: String(post.id),
-      preview_url: post.preview_url,
-      file_url: post.file_url,
-      sample_url: post.sample_url,
+      preview_url: sanitizeUrl(post.preview_url),
+      file_url: sanitizeUrl(post.file_url),
+      sample_url: sanitizeUrl(post.sample_url),
       tags: post.tags || [],
       rating: post.rating,
       score: post.score || 0,
@@ -271,11 +337,8 @@ export async function apiDeleteBlacklistRule(id: number): Promise<unknown> {
 
 // Mappings
 export async function apiGetMappings(): Promise<TagMapping[]> {
-  interface MappingsData {
-    mappings: TagMapping[]
-  }
-  const data = await _fetch<MappingsData | TagMapping[]>('/mappings')
-  return (Array.isArray(data) ? data : data.mappings || []) as TagMapping[]
+  const data = await _fetch<{ mappings: TagMapping[] }>('/mappings')
+  return data.mappings || []
 }
 
 export async function apiCreateMapping(data: Omit<TagMapping, 'id' | 'user_id'>): Promise<unknown> {

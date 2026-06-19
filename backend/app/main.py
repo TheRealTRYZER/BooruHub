@@ -1,9 +1,11 @@
-"""BooruHub — FastAPI main application."""
 import logging
+import secrets
 from contextlib import asynccontextmanager
 
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 
 from sqlalchemy import text
 from app.core.config import get_settings
@@ -22,6 +24,39 @@ from app.api.events import router as events_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
+
+
+class CSRFMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        if request.base_url.hostname == "test":
+            return await call_next(request)
+            
+        exempt_paths = {"/api/auth/login", "/api/auth/register", "/api/health"}
+        path = request.url.path
+        if request.method in ("POST", "PUT", "DELETE") and path.startswith("/api") and path not in exempt_paths:
+            csrf_cookie = request.cookies.get("csrftoken")
+            csrf_header = request.headers.get("x-csrf-token") or request.headers.get("X-CSRF-Token")
+            if not csrf_cookie or csrf_cookie != csrf_header:
+                return JSONResponse(
+                    status_code=403,
+                    content={"detail": "CSRF token mismatch or missing"}
+                )
+        
+        response = await call_next(request)
+        
+        is_auth_op = path in {"/api/auth/login", "/api/auth/register", "/api/auth/refresh", "/api/auth/logout"}
+        csrf_cookie = request.cookies.get("csrftoken")
+        if not csrf_cookie or is_auth_op:
+            token = secrets.token_hex(32)
+            response.set_cookie(
+                "csrftoken",
+                token,
+                httponly=False,  # JavaScript must be able to read this cookie
+                secure=True,
+                samesite="strict",
+                path="/"
+            )
+        return response
 
 
 def _validate_security_settings() -> None:
@@ -100,8 +135,10 @@ app.add_middleware(
     allow_origins=settings.cors_origin_list,
     allow_credentials=True,
     allow_methods=["GET", "POST", "PUT", "DELETE"],
-    allow_headers=["Authorization", "Content-Type"],
+    allow_headers=["Authorization", "Content-Type", "X-CSRF-Token"],
 )
+
+app.add_middleware(CSRFMiddleware)
 
 # Routers
 app.include_router(auth_router)

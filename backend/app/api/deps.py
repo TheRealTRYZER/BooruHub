@@ -1,6 +1,6 @@
 """API dependencies — auth, database session."""
 from typing import Optional
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, status, Request
 from fastapi.security import HTTPBearer, HTTPAuthorizationCredentials
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
@@ -13,13 +13,18 @@ security = HTTPBearer(auto_error=False)
 
 
 async def get_current_user(
+    request: Request,
     credentials: Optional[HTTPAuthorizationCredentials] = Depends(security),
     db: AsyncSession = Depends(get_db),
 ) -> Optional[User]:
     """Get current user from JWT token. Returns None if not authenticated."""
-    if credentials is None:
+    token = request.cookies.get("access_token")
+    if not token:
+        if credentials is not None:
+            token = credentials.credentials
+    if not token:
         return None
-    payload = decode_access_token(credentials.credentials)
+    payload = decode_access_token(token)
     if payload is None:
         return None
     user_id = payload.get("sub")
