@@ -2,7 +2,6 @@ import { mount } from '@vue/test-utils'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { createTestingPinia } from '@pinia/testing'
 import PostView from '../../views/PostView.vue'
-import { useFeedStore } from '../../stores/feed'
 import { useLangStore } from '../../stores/lang'
 
 const mockRoute = {
@@ -22,7 +21,8 @@ vi.mock('../../api', () => ({
   apiCheckFavorite: vi.fn(() => Promise.resolve({ is_favorite: false, favorite_id: null })),
   apiAddFavorite: vi.fn(() => Promise.resolve()),
   apiRemoveFavorite: vi.fn(() => Promise.resolve()),
-  apiSearch: vi.fn(() => Promise.resolve({ posts: [] }))
+  apiSearch: vi.fn(() => Promise.resolve({ posts: [] })),
+  registerAuthFailureCallback: vi.fn()
 }))
 
 describe('PostView.vue', () => {
@@ -111,11 +111,17 @@ describe('PostView.vue', () => {
     // Assert both badges are rendered in source row
     const badges = wrapper.findAll('.post-detail-info-value .post-card-badge')
     expect(badges.length).toBe(2)
-    expect(badges[0].text()).toBe('danbooru')
-    expect(badges[1].text()).toBe('rule34')
+    const b0 = badges[0]
+    const b1 = badges[1]
+    expect(b0).toBeDefined()
+    expect(b1).toBeDefined()
+    if (b0 && b1) {
+      expect(b0.text()).toBe('danbooru')
+      expect(b1.text()).toBe('rule34')
 
-    // Click on the rule34 badge
-    await badges[1].trigger('click')
+      // Click on the rule34 badge
+      await b1.trigger('click')
+    }
 
     expect((wrapper.vm as any).activeSite).toBe('rule34')
     expect((wrapper.vm as any).mediaUrl).toBe('https://test.com/rule34.jpg')
@@ -281,9 +287,15 @@ describe('PostView.vue', () => {
     
     const thumbs = wrapper.findAll('.post-relationship-thumb')
     expect(thumbs.length).toBe(2)
-    expect(thumbs[0].attributes('src')).toBe('https://test.com/sibling.jpg')
-    expect(thumbs[1].attributes('src')).toBe('https://test.com/danbooru.jpg')
-    expect(thumbs[1].classes()).toContain('active')
+    const t0 = thumbs[0]
+    const t1 = thumbs[1]
+    expect(t0).toBeDefined()
+    expect(t1).toBeDefined()
+    if (t0 && t1) {
+      expect(t0.attributes('src')).toBe('https://test.com/sibling.jpg')
+      expect(t1.attributes('src')).toBe('https://test.com/danbooru.jpg')
+      expect(t1.classes()).toContain('active')
+    }
   })
 
   it('should use a static image for backdropUrl and getPostThumbnail even if media is a video', async () => {

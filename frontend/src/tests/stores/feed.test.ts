@@ -83,7 +83,7 @@ describe('Feed Store', () => {
       
       store.addPosts([post])
       expect(store.posts).toHaveLength(1)
-      expect(store.posts[0].hash).toBe('md5-abc123md5')
+      expect(store.posts[0]?.hash).toBe('md5-abc123md5')
     })
 
     it('should instantly filter duplicates, merge tags, and aggregate site badges upon adding', () => {
@@ -95,13 +95,18 @@ describe('Feed Store', () => {
 
       // Only the first post should survive in the store
       expect(store.posts).toHaveLength(1)
-      expect(store.posts[0].id).toBe(1)
       
-      // Tags must be merged correctly
-      expect(store.posts[0].tags.sort()).toEqual(['digital_media', 'funny', 'safe', 'solo'].sort())
-      
-      // The duplicate site name must be added to duplicate_sites badge list
-      expect(store.posts[0].duplicate_sites).toEqual(['e621'])
+      const p = store.posts[0]
+      expect(p).toBeDefined()
+      if (p) {
+        expect(p.id).toBe(1)
+        
+        // Tags must be merged correctly
+        expect(p.tags.sort()).toEqual(['digital_media', 'funny', 'safe', 'solo'].sort())
+        
+        // The duplicate site name must be added to duplicate_sites badge list
+        expect(p.duplicate_sites).toEqual(['e621'])
+      }
     })
   })
 

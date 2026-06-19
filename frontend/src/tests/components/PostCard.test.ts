@@ -31,7 +31,7 @@ describe('PostCard.vue', () => {
     hash: 'existing-hash' // Set hash to render card instantly
   }
 
-  it('should render post metadata correctly', () => {
+  it('should render post metadata correctly', async () => {
     const wrapper = mount(PostCard, {
       props: {
         post: mockPost as any
@@ -47,6 +47,8 @@ describe('PostCard.vue', () => {
         })],
       }
     })
+
+    await wrapper.vm.$nextTick()
 
     expect(wrapper.find('.post-card-badge.danbooru').text()).toBe('danbooru')
     expect(wrapper.find('.post-card-rating').text()).toBe('S')
@@ -70,6 +72,8 @@ describe('PostCard.vue', () => {
         }
       }
     })
+
+    await wrapper.vm.$nextTick()
 
     const favBtn = wrapper.find('.post-card-fav')
     expect(favBtn.text()).toBe('🤍')
@@ -147,19 +151,29 @@ describe('PostCard.vue', () => {
       }
     })
 
+    await wrapper.vm.$nextTick()
+
     // Both danbooru and + rule34 badges should be present
     const badges = wrapper.findAll('.post-card-badge.interactive-badge')
     expect(badges.length).toBe(2)
-    expect(badges[0].text()).toBe('danbooru')
-    expect(badges[1].text()).toBe('+ rule34')
+    
+    const badge0 = badges[0]
+    const badge1 = badges[1]
+    expect(badge0).toBeDefined()
+    expect(badge1).toBeDefined()
 
-    // Danbooru badge should initially be the active site version
-    expect(badges[0].classes()).toContain('active-site')
-    expect((wrapper.vm as any).activeSite).toBe('danbooru')
-    expect((wrapper.vm as any).currentUrl).toBe('https://test.com/danbooru-prev.jpg')
+    if (badge0 && badge1) {
+      expect(badge0.text()).toBe('danbooru')
+      expect(badge1.text()).toBe('+ rule34')
 
-    // Switch to Rule34 version by clicking its badge
-    await badges[1].trigger('click')
+      // Danbooru badge should initially be the active site version
+      expect(badge0.classes()).toContain('active-site')
+      expect((wrapper.vm as any).activeSite).toBe('danbooru')
+      expect((wrapper.vm as any).currentUrl).toBe('https://test.com/danbooru-prev.jpg')
+
+      // Switch to Rule34 version by clicking its badge
+      await badge1.trigger('click')
+    }
 
     expect((wrapper.vm as any).activeSite).toBe('rule34')
     expect((wrapper.vm as any).currentUrl).toBe('https://test.com/rule34-prev.jpg')

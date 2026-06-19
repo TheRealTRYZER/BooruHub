@@ -19,6 +19,7 @@ vi.mock('../../api', () => {
     })),
     apiLogout: vi.fn(() => Promise.resolve({ ok: true })),
     apiClearCache: vi.fn(),
+    registerAuthFailureCallback: vi.fn(),
   }
 })
 
@@ -33,47 +34,37 @@ describe('Auth Store', () => {
 
   it('should initialize with null state when localStorage is empty', () => {
     const store = useAuthStore()
-    expect(store.token).toBeNull()
     expect(store.user).toBeNull()
     expect(store.isAuthenticated).toBe(false)
   })
 
   it('should initialize with state from localStorage if present', () => {
-    localStorage.setItem('booruhub_token', 'stored-token')
     localStorage.setItem('booruhub_user', JSON.stringify({ id: 99, username: 'storeduser' }))
-    localStorage.setItem('booruhub_refresh_token', 'stored-refresh')
 
     const store = useAuthStore()
-    expect(store.token).toBe('stored-token')
     expect(store.user).toEqual({ id: 99, username: 'storeduser' })
     expect(store.isAuthenticated).toBe(true)
   })
 
-  it('should handle login and persist tokens', async () => {
+  it('should handle login and persist user', async () => {
     const store = useAuthStore()
     await store.login('testuser', 'password123')
 
     expect(apiLogin).toHaveBeenCalledWith('testuser', 'password123')
-    expect(store.token).toBe('new-access-token')
     expect(store.user?.username).toBe('testuser')
-    expect(localStorage.getItem('booruhub_token')).toBe('new-access-token')
-    expect(localStorage.getItem('booruhub_refresh_token')).toBe('new-refresh-token')
+    expect(JSON.parse(localStorage.getItem('booruhub_user') || 'null')).toEqual({ id: 1, username: 'testuser', email: 'test@example.com', default_tags: '' })
   })
 
-  it('should handle register and persist tokens', async () => {
+  it('should handle register and persist user', async () => {
     const store = useAuthStore()
     await store.register('reguser', 'reg@example.com', 'password123', true)
 
     expect(apiRegister).toHaveBeenCalledWith('reguser', 'reg@example.com', 'password123', true)
-    expect(store.token).toBe('reg-access-token')
     expect(store.user?.username).toBe('reguser')
-    expect(localStorage.getItem('booruhub_token')).toBe('reg-access-token')
-    expect(localStorage.getItem('booruhub_refresh_token')).toBe('reg-refresh-token')
+    expect(JSON.parse(localStorage.getItem('booruhub_user') || 'null')).toEqual({ id: 2, username: 'reguser', email: 'reg@example.com', default_tags: '' })
   })
 
   it('should handle logout, call backend logout API, and clear local state', async () => {
-    localStorage.setItem('booruhub_token', 'stored-token')
-    localStorage.setItem('booruhub_refresh_token', 'stored-refresh')
     localStorage.setItem('booruhub_user', JSON.stringify({ id: 99, username: 'storeduser' }))
 
     const store = useAuthStore()
@@ -81,12 +72,9 @@ describe('Auth Store', () => {
 
     await store.logout()
 
-    expect(apiLogout).toHaveBeenCalledWith('stored-refresh')
+    expect(apiLogout).toHaveBeenCalled()
     expect(apiClearCache).toHaveBeenCalled()
-    expect(store.token).toBeNull()
     expect(store.user).toBeNull()
-    expect(localStorage.getItem('booruhub_token')).toBeNull()
-    expect(localStorage.getItem('booruhub_refresh_token')).toBeNull()
     expect(localStorage.getItem('booruhub_user')).toBeNull()
   })
 })
