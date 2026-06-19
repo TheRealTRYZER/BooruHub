@@ -213,6 +213,7 @@ export type TranslationKey =
   | 'card_size' | 'preview_quality' | 'quality_thumbnail' | 'quality_sample' | 'quality_full'
   | 'save_to_bookmarks'
   | 'close' | 'download' | 'downloading' | 'download_success' | 'disliked'
+  | 'undo' | 'prev_title' | 'next_title' | 'switch_version' | 'username'
 
 export type Locale = 'en' | 'ru'
 

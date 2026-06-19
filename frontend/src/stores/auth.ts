@@ -1,10 +1,10 @@
 import { defineStore } from 'pinia'
 import { ref, computed } from 'vue'
-import { apiLogin, apiRegister, apiClearCache, apiLogout } from '../api'
+import { apiLogin, apiRegister, apiClearCache, apiLogout, registerAuthFailureCallback } from '../api'
+import { apiClearEventLoggerState } from '../composables/useEventLogger'
 import type { User } from '../types'
 
 export const useAuthStore = defineStore('auth', () => {
-  const token = ref<string | null>(localStorage.getItem('booruhub_token') || null)
   const user = ref<User | null>((() => {
     try {
       return JSON.parse(localStorage.getItem('booruhub_user') || 'null')
@@ -13,45 +13,35 @@ export const useAuthStore = defineStore('auth', () => {
     }
   })())
 
-  const isAuthenticated = computed(() => !!token.value)
+  const isAuthenticated = computed(() => !!user.value)
 
-  function setAuth(newToken: string, newUser: User, refreshToken?: string) {
-    token.value = newToken
+  function setAuth(newUser: User) {
     user.value = newUser
-    localStorage.setItem('booruhub_token', newToken)
     localStorage.setItem('booruhub_user', JSON.stringify(newUser))
-    if (refreshToken) {
-      localStorage.setItem('booruhub_refresh_token', refreshToken)
-    }
   }
 
   async function login(loginStr: string, password: string) {
     const data = await apiLogin(loginStr, password)
-    setAuth(data.access_token, data.user, data.refresh_token)
+    setAuth(data.user)
     return data
   }
 
   async function register(username: string, email: string, password: string, dataConsent = false) {
     const data = await apiRegister(username, email, password, dataConsent)
-    setAuth(data.access_token, data.user, data.refresh_token)
+    setAuth(data.user)
     return data
   }
 
   async function logout() {
-    const refreshToken = localStorage.getItem('booruhub_refresh_token')
-    if (refreshToken) {
-      try {
-        await apiLogout(refreshToken)
-      } catch (e) {
-        console.error('Logout request failed:', e)
-      }
+    try {
+      await apiLogout()
+    } catch (e) {
+      console.error('Logout request failed:', e)
     }
-    token.value = null
     user.value = null
-    localStorage.removeItem('booruhub_token')
     localStorage.removeItem('booruhub_user')
-    localStorage.removeItem('booruhub_refresh_token')
     apiClearCache()
+    apiClearEventLoggerState()
   }
 
   function updateUser(updates: Partial<User>) {
@@ -61,5 +51,12 @@ export const useAuthStore = defineStore('auth', () => {
     }
   }
 
-  return { token, user, isAuthenticated, login, register, logout, setAuth, updateUser }
+  // Register token refresh failure callback to reset store state cleanly
+  registerAuthFailureCallback(() => {
+    user.value = null
+    localStorage.removeItem('booruhub_user')
+    apiClearEventLoggerState()
+  })
+
+  return { user, isAuthenticated, login, register, logout, setAuth, updateUser }
 })

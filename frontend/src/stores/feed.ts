@@ -4,15 +4,41 @@ import type { SiteName, Post } from '../types'
 
 export const useFeedStore = defineStore('feed', () => {
   const tags = ref(sessionStorage.getItem('booruhub_tags') || '')
-  const siteTags = ref<Record<SiteName, string>>({ danbooru: '', e621: '', rule34: '' })
-  const ratios = ref<Record<SiteName, number>>({ danbooru: 1, e621: 1, rule34: 1 })
-  const isSplit = ref(false)
+  
+  const savedSiteTags = localStorage.getItem('booruhub_site_tags')
+  const siteTags = ref<Record<SiteName, string>>(savedSiteTags ? JSON.parse(savedSiteTags) : { danbooru: '', e621: '', rule34: '' })
+  
+  const savedRatios = localStorage.getItem('booruhub_ratios')
+  const ratios = ref<Record<SiteName, number>>(savedRatios ? JSON.parse(savedRatios) : { danbooru: 1, e621: 1, rule34: 1 })
+  
+  const isSplit = ref(localStorage.getItem('booruhub_is_split') === 'true')
+  
   const savedSites = localStorage.getItem('booruhub_sites')
   const sites = ref<SiteName[]>(savedSites ? JSON.parse(savedSites) : ['danbooru', 'e621', 'rule34'])
 
-  const cardSize = ref(parseInt(localStorage.getItem('booruhub_card_size') || '250'))
-  const previewQuality = ref(localStorage.getItem('booruhub_preview_quality') || 'sample')
-  const rootMargin = ref(parseInt(localStorage.getItem('booruhub_root_margin') || '2500'))
+  const parseCardSize = (val: string | null): number => {
+    const parsed = parseInt(val || '250', 10)
+    return Number.isFinite(parsed) && parsed >= 100 && parsed <= 500 ? parsed : 250
+  }
+  const cardSize = ref(parseCardSize(localStorage.getItem('booruhub_card_size')))
+
+  const parseQuality = (val: string | null): 'thumbnail' | 'sample' | 'full' => {
+    const allowed = ['thumbnail', 'sample', 'full']
+    return allowed.includes(val || '') ? (val as 'thumbnail' | 'sample' | 'full') : 'sample'
+  }
+  const previewQuality = ref(parseQuality(localStorage.getItem('booruhub_preview_quality')))
+
+  const parseRootMargin = (val: string | null): number => {
+    const parsed = parseInt(val || '2500', 10)
+    return Number.isFinite(parsed) && parsed >= 100 && parsed <= 5000 ? parsed : 2500
+  }
+  const rootMargin = ref(parseRootMargin(localStorage.getItem('booruhub_root_margin')))
+
+  const parsePostsLimit = (val: string | null): number => {
+    const parsed = parseInt(val || '40', 10)
+    return Number.isFinite(parsed) && parsed >= 10 && parsed <= 200 ? parsed : 40
+  }
+  const postsLimit = ref(parsePostsLimit(localStorage.getItem('booruhub_posts_limit')))
 
   const posts = ref<Post[]>([])
   const page = ref(1)
@@ -21,6 +47,18 @@ export const useFeedStore = defineStore('feed', () => {
 
   watch(tags, (newVal) => {
     sessionStorage.setItem('booruhub_tags', newVal)
+  })
+
+  watch(siteTags, (newVal) => {
+    localStorage.setItem('booruhub_site_tags', JSON.stringify(newVal))
+  }, { deep: true })
+
+  watch(ratios, (newVal) => {
+    localStorage.setItem('booruhub_ratios', JSON.stringify(newVal))
+  }, { deep: true })
+
+  watch(isSplit, (newVal) => {
+    localStorage.setItem('booruhub_is_split', String(newVal))
   })
 
   watch(sites, (newVal) => {
@@ -37,6 +75,10 @@ export const useFeedStore = defineStore('feed', () => {
 
   watch(rootMargin, (newVal) => {
     localStorage.setItem('booruhub_root_margin', String(newVal))
+  })
+
+  watch(postsLimit, (newVal) => {
+    localStorage.setItem('booruhub_posts_limit', String(newVal))
   })
 
   function toggleSite(site: SiteName) {
@@ -80,13 +122,19 @@ export const useFeedStore = defineStore('feed', () => {
   }
 
   function addPosts(newPosts: Post[]) {
-    for (const post of newPosts) {
+    for (const rawPost of newPosts) {
       // Avoid adding exact duplicate by site ID
-      const exists = posts.value.find(p => String(p.id) === String(post.id) && p.source_site === post.source_site)
+      const exists = posts.value.find(p => String(p.id) === String(rawPost.id) && p.source_site === rawPost.source_site)
       if (exists) continue
 
-      post.duplicates = post.duplicates || []
-      post.duplicate_sites = post.duplicate_sites || []
+      // Clone post to prevent cache pollution
+      const post = {
+        ...rawPost,
+        tags: [...(rawPost.tags || [])],
+        duplicates: rawPost.duplicates ? rawPost.duplicates.map(d => ({ ...d, tags: [...(d.tags || [] )] })) : [],
+        duplicate_sites: rawPost.duplicate_sites ? [...rawPost.duplicate_sites] : [],
+        tags_metadata: rawPost.tags_metadata ? { ...rawPost.tags_metadata } : null
+      }
 
       // 1. Instant check: Exact MD5 match
       if (post.md5) {
@@ -113,7 +161,7 @@ export const useFeedStore = defineStore('feed', () => {
         }
       }
 
-      // Initialize with instant fallback hash so store tests pass, and component triggers verification based on prefix
+      // Initialize with instant fallback hash so store tests pass
       post.hash = getInstantPostHash(post)
       posts.value.push(post)
     }
@@ -121,10 +169,9 @@ export const useFeedStore = defineStore('feed', () => {
 
   return {
     tags, siteTags, ratios, isSplit, sites,
-    cardSize, previewQuality, rootMargin,
+    cardSize, previewQuality, rootMargin, postsLimit,
     posts, page, hasMore, lastSearchSignature,
     toggleSite, toggleSplit, resetFeed, addPosts,
     getInstantPostHash
   }
 })
-

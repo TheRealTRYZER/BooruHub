@@ -156,6 +156,11 @@ const translations: Record<Locale, TranslationDict> = {
     downloading: "Downloading...",
     download_success: "Download completed!",
     disliked: "Post disliked",
+    undo: "Undo",
+    prev_title: "Previous (← / A)",
+    next_title: "Next (→ / D)",
+    switch_version: "Switch to {site} version",
+    username: "Username",
   },
   ru: {
     search_placeholder: "Поиск по тегам... (напр. cat_ears 1girl)",
@@ -308,20 +313,47 @@ const translations: Record<Locale, TranslationDict> = {
     downloading: "Скачивание...",
     download_success: "Скачивание завершено!",
     disliked: "Пост скрыт",
+    undo: "Отменить",
+    prev_title: "Предыдущий (← / A)",
+    next_title: "Следующий (→ / D)",
+    switch_version: "Переключить на версию {site}",
+    username: "Имя пользователя",
   },
 }
 
 export const useLangStore = defineStore('lang', () => {
-  const locale = ref<Locale>((localStorage.getItem('booruhub_lang') as Locale) || 'en')
+  const parseLocale = (val: string | null): Locale => {
+    return val === 'en' || val === 'ru' ? val : 'en'
+  }
+  
+  const locale = ref<Locale>(parseLocale(localStorage.getItem('booruhub_lang')))
 
-  function setLocale(l: Locale) {
-    locale.value = l
-    localStorage.setItem('booruhub_lang', l)
+  function updateDocumentLang(l: Locale) {
+    if (typeof document !== 'undefined') {
+      document.documentElement.lang = l
+    }
   }
 
-  function t(key: TranslationKey): string {
-    const translation = translations[locale.value][key]
-    if (!translation) return translations['en'][key] || key
+  // Set initial document language
+  updateDocumentLang(locale.value)
+
+  function setLocale(l: Locale) {
+    const validated = l === 'en' || l === 'ru' ? l : 'en'
+    locale.value = validated
+    localStorage.setItem('booruhub_lang', validated)
+    updateDocumentLang(validated)
+  }
+
+  function t(key: TranslationKey, params?: Record<string, string | number>): string {
+    let translation = translations[locale.value]?.[key]
+    if (!translation) {
+      translation = translations['en'][key] || key
+    }
+    if (params) {
+      Object.entries(params).forEach(([k, v]) => {
+        translation = translation.replace(new RegExp(`{${k}}`, 'g'), String(v))
+      })
+    }
     return translation
   }
 
