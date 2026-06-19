@@ -63,6 +63,7 @@ async function _tryRefreshToken(): Promise<boolean> {
     const resp = await fetch(BASE + '/auth/refresh', {
       method: 'POST',
       headers: getHeaders('POST'),
+      credentials: 'include',
     })
     if (!resp.ok) return false
     cache.clear() // Clear cache upon token refresh to prevent mixed data
@@ -101,6 +102,7 @@ async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
     headers: opts.headers,
     body: opts.body,
     signal: opts.signal || controller.signal,
+    credentials: 'include',
   }
 
   let resp: Response
@@ -151,6 +153,7 @@ async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
       headers: opts.headers,
       body: opts.body,
       signal: opts.signal || retryController.signal,
+      credentials: 'include',
     }
 
     try {
