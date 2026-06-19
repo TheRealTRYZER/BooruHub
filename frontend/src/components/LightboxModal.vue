@@ -1,17 +1,17 @@
 <template>
   <Transition name="fade">
-    <div class="lightbox-overlay" @click.self="closeLightbox">
+    <div class="lightbox-overlay" role="dialog" aria-modal="true" aria-label="Image Details" @click.self="closeLightbox">
       
       <!-- Dynamic Ambilight Theatre Backdrop -->
       <div class="ambient-glow-container">
-        <div class="ambient-glow-backdrop" :style="{ backgroundImage: `url(${backdropUrl})` }"></div>
+        <div class="ambient-glow-backdrop" :style="{ backgroundImage: backdropUrl ? 'url(' + escapeCssString(backdropUrl) + ')' : 'none' }"></div>
       </div>
 
       <!-- Close Button -->
-      <button class="lightbox-close-btn" @click="closeLightbox" :title="lang.t('close')">×</button>
+      <button ref="closeBtnRef" class="lightbox-close-btn" @click="closeLightbox" :title="lang.t('close')">×</button>
 
       <!-- Left Navigation Arrow -->
-      <button v-if="hasPrev" class="lightbox-nav-btn left" @click="prevPost" title="Previous (← / A)">‹</button>
+      <button v-if="hasPrev" class="lightbox-nav-btn left" @click="prevPost" :title="lang.t('prev_title')">‹</button>
 
       <!-- Center Media Container (Perfect Center) -->
       <div class="lightbox-media-container" 
@@ -35,7 +35,7 @@
         <img v-else 
              :key="mediaUrl" 
              :src="mediaUrl" 
-             :alt="'Post ' + displayedPost.id" 
+             :alt="altText" 
              class="lightbox-media image" 
              @click="toggleZoom"
              :class="{ zoomed: isZoomed }" />
@@ -43,19 +43,33 @@
 
       <!-- Right Column: Glassmorphic Tags Sidebar (Absolutely Positioned Far Right Edge) -->
       <div class="lightbox-sidebar">
-        <h3 class="sidebar-title">{{ lang.t('tags_count') || 'Tags' }} ({{ displayedPost.tags?.length || 0 }})</h3>
+        <h3 class="sidebar-title">{{ lang.t('tags_count') }} ({{ displayedPost.tags?.length || 0 }})</h3>
         <div class="lightbox-tags-list">
           <div v-for="group in groupedTags" :key="group.key" class="lightbox-tag-group">
             <div class="lightbox-tag-group-title" :class="group.key">
-              {{ group.title }} ({{ group.tags.length }})
+              {{ group.title }} ({{ group.allTags.length }})
             </div>
             <div class="lightbox-tag-group-chips">
               <span v-for="tag in group.tags" 
                     :key="tag" 
                     class="tag-chip" 
                     :class="group.key"
-                    @click="searchTag(tag)">
+                    role="button"
+                    tabindex="0"
+                    @click="searchTag(tag)"
+                    @keydown.enter.prevent="searchTag(tag)"
+                    @keydown.space.prevent="searchTag(tag)">
                 {{ tag.replace(/_/g, ' ') }}
+              </span>
+              <span v-if="group.hasMore" 
+                    class="tag-chip lightbox-tag-more" 
+                    role="button"
+                    tabindex="0"
+                    style="cursor: pointer; opacity: 0.8;"
+                    @click="toggleGroupExpand(group.key)"
+                    @keydown.enter.prevent="toggleGroupExpand(group.key)"
+                    @keydown.space.prevent="toggleGroupExpand(group.key)">
+                {{ group.isExpanded ? '« Less' : '» More (' + (group.allTags.length - group.tags.length) + ')' }}
               </span>
             </div>
           </div>
@@ -71,7 +85,7 @@
           👎
         </button>
         <button class="btn btn-glass" @click="downloadFile">
-          ⬇️ {{ lang.t('download') || 'Download' }}
+          ⬇️ {{ lang.t('download') }}
         </button>
         <button class="btn btn-glass" @click="openOriginal">
           🔗 {{ lang.t('original') }}
@@ -79,7 +93,7 @@
       </div>
 
       <!-- Right Navigation Arrow -->
-      <button v-if="hasNext" class="lightbox-nav-btn right" @click="nextPost" title="Next (→ / D)">›</button>
+      <button v-if="hasNext" class="lightbox-nav-btn right" @click="nextPost" :title="lang.t('next_title')">›</button>
 
       <!-- Dynamic Header Info (Glassmorphic) -->
       <div class="lightbox-header">
@@ -88,12 +102,16 @@
                 :key="site" 
                 class="lightbox-site-badge" 
                 :class="[site, { 'interactive-badge': allSites.length > 1, 'active-site': allSites.length > 1 && activeSite === site }]"
-                :title="allSites.length > 1 ? 'Switch to ' + site + ' version' : ''"
-                @click="allSites.length > 1 ? switchActiveSite(site) : null">
+                :title="allSites.length > 1 ? lang.t('switch_version', { site }) : ''"
+                :role="allSites.length > 1 ? 'button' : undefined"
+                :tabindex="allSites.length > 1 ? 0 : undefined"
+                @click="allSites.length > 1 ? switchActiveSite(site) : null"
+                @keydown.enter.stop.prevent="allSites.length > 1 ? switchActiveSite(site) : null"
+                @keydown.space.stop.prevent="allSites.length > 1 ? switchActiveSite(site) : null">
             {{ site === activePost.source_site ? site : '+ ' + site }}
           </span>
           <span class="lightbox-id">#{{ displayedPost.id }}</span>
-          <span class="lightbox-rating" :class="ratingClass">{{ ratingLabel }}</span>
+          <span class="lightbox-rating" :class="ratingClass" :aria-label="'Rating: ' + ratingLabel">{{ ratingLabel }}</span>
         </div>
         <div class="lightbox-header-right">
           <span v-if="displayedPost.score !== undefined" class="lightbox-score">★ {{ displayedPost.score }}</span>
@@ -113,6 +131,7 @@ import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
 import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite } from '../api'
 import { RATING_MAP, RATING_LABELS } from '../types'
+import { sanitizeUrl, escapeCssString } from '../utils/security'
 import type { Post, RatingClass, SiteName } from '../types'
 
 const props = defineProps<{
@@ -177,8 +196,10 @@ const isVideo = computed(() => {
 
 const mediaUrl = computed(() => {
   const p = displayedPost.value
-  if (isVideo.value) return p.file_url || ''
-  return p.sample_url || p.file_url || p.preview_url || ''
+  let url = ''
+  if (isVideo.value) url = p.file_url || ''
+  else url = p.sample_url || p.file_url || p.preview_url || ''
+  return sanitizeUrl(url)
 })
 
 const backdropUrl = computed(() => {
@@ -186,22 +207,31 @@ const backdropUrl = computed(() => {
   const videoExtensions = ['mp4', 'webm', 'm4v', 'mov', 'mkv', 'swf', 'ogv']
   const isVideoExt = (url: string) => {
     if (!url) return false
-    const cleanUrl = url.split('?')[0].toLowerCase()
+    const cleanUrl = (url.split('?')[0] ?? '').toLowerCase()
     return videoExtensions.some(ext => cleanUrl.endsWith('.' + ext))
   }
   
+  let url = ''
   if (p.sample_url && !isVideoExt(p.sample_url)) {
-    return p.sample_url
+    url = p.sample_url
+  } else if (p.preview_url && !isVideoExt(p.preview_url)) {
+    url = p.preview_url
+  } else if (p.file_url && !isVideoExt(p.file_url)) {
+    url = p.file_url
+  } else {
+    const fallback = p.preview_url || p.sample_url || ''
+    url = isVideoExt(fallback) ? '' : fallback
   }
-  if (p.preview_url && !isVideoExt(p.preview_url)) {
-    return p.preview_url
-  }
-  if (p.file_url && !isVideoExt(p.file_url)) {
-    return p.file_url
-  }
-  const fallback = p.preview_url || p.sample_url || ''
-  return isVideoExt(fallback) ? '' : fallback
+  return sanitizeUrl(url)
 })
+
+const altText = computed(() => {
+  const firstTag = displayedPost.value.tags?.[0]
+  const rating = displayedPost.value.rating ? `[Rating: ${displayedPost.value.rating.toUpperCase()}]` : ''
+  return `Post ${displayedPost.value.id} ${firstTag ? '- ' + firstTag.replace(/_/g, ' ') : ''} ${rating}`.trim()
+})
+
+const expandedGroups = ref<Record<string, boolean>>({})
 
 // Group post tags dynamically by category
 const groupedTags = computed(() => {
@@ -236,13 +266,26 @@ const groupedTags = computed(() => {
   }
   
   return categoriesOrder
-    .map(cat => ({
-      key: cat,
-      title: categoryTitles[cat] || cat,
-      tags: groups[cat] || []
-    }))
-    .filter(g => g.tags.length > 0)
+    .map(cat => {
+      const allTags = groups[cat] || []
+      const limit = 15
+      const hasMore = allTags.length > limit
+      const tags = expandedGroups.value[cat] ? allTags : allTags.slice(0, limit)
+      return {
+        key: cat,
+        title: categoryTitles[cat] || cat,
+        tags,
+        allTags,
+        hasMore,
+        isExpanded: !!expandedGroups.value[cat]
+      }
+    })
+    .filter(g => g.allTags.length > 0)
 })
+
+function toggleGroupExpand(key: string) {
+  expandedGroups.value[key] = !expandedGroups.value[key]
+}
 
 const ratingClass = computed<RatingClass>(() => RATING_MAP[(displayedPost.value.rating || '').toLowerCase()] || 'unknown')
 const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
@@ -325,12 +368,12 @@ async function toggleDislike() {
       const check = await apiCheckFavorite(displayedPost.value.source_site, String(displayedPost.value.id))
       if (check.favorite_id) await apiRemoveFavorite(check.favorite_id)
       isDisliked.value = false
-      toast.show(lang.t('removed_fav') || 'Removed', 'info')
+      toast.show(lang.t('removed_fav'), 'info')
     } else {
       await apiAddFavorite(displayedPost.value, true)
       isDisliked.value = true
       isFav.value = false
-      toast.show(lang.t('disliked') || 'Post Disliked', 'info')
+      toast.show(lang.t('disliked'), 'info')
     }
   } catch (e) {
     toast.show((e as Error).message, 'error')
@@ -339,10 +382,11 @@ async function toggleDislike() {
 
 // File downloader
 async function downloadFile() {
-  const url = displayedPost.value.file_url || displayedPost.value.sample_url || displayedPost.value.preview_url
+  const rawUrl = displayedPost.value.file_url || displayedPost.value.sample_url || displayedPost.value.preview_url
+  const url = sanitizeUrl(rawUrl)
   if (!url) return
   
-  toast.show(lang.t('downloading') || 'Downloading...', 'info')
+  toast.show(lang.t('downloading'), 'info')
   try {
     const response = await fetch(url)
     const blob = await response.blob()
@@ -358,14 +402,17 @@ async function downloadFile() {
     a.click()
     document.body.removeChild(a)
     URL.revokeObjectURL(blobUrl)
-    toast.show(lang.t('download_success') || 'Download completed!', 'success')
+    toast.show(lang.t('download_success'), 'success')
   } catch (e) {
-    window.open(url, '_blank')
+    window.open(url, '_blank', 'noopener,noreferrer')
   }
 }
 
 function openOriginal() {
-  window.open(mediaUrl.value, '_blank')
+  const url = sanitizeUrl(mediaUrl.value)
+  if (url) {
+    window.open(url, '_blank', 'noopener,noreferrer')
+  }
 }
 
 function searchTag(tag: string) {
@@ -373,10 +420,45 @@ function searchTag(tag: string) {
   router.push({ name: 'feed', query: { tags: tag } })
 }
 
+// Accessibility dialog elements
+const closeBtnRef = ref<HTMLElement | null>(null)
+let previousActiveElement: HTMLElement | null = null
+
+function handleTabKey(e: KeyboardEvent) {
+  const overlay = document.querySelector('.lightbox-overlay')
+  if (!overlay) return
+  const focusable = Array.from(
+    overlay.querySelectorAll(
+      'button, [href], input, select, textarea, [tabindex="0"]'
+    )
+  ).filter(el => {
+    return (el as HTMLElement).tabIndex >= 0 && (el as HTMLElement).offsetWidth > 0
+  }) as HTMLElement[]
+
+  if (focusable.length === 0) return
+  const first = focusable[0]
+  const last = focusable[focusable.length - 1]
+  if (!first || !last) return
+
+  if (e.shiftKey) {
+    if (document.activeElement === first) {
+      last.focus()
+      e.preventDefault()
+    }
+  } else {
+    if (document.activeElement === last) {
+      first.focus()
+      e.preventDefault()
+    }
+  }
+}
+
 // Keyboard shortcuts support
 function handleKeyDown(e: KeyboardEvent) {
   const key = e.key.toLowerCase()
-  if (e.key === 'ArrowLeft' || key === 'a') {
+  if (e.key === 'Tab') {
+    handleTabKey(e)
+  } else if (e.key === 'ArrowLeft' || key === 'a') {
     prevPost()
   } else if (e.key === 'ArrowRight' || key === 'd') {
     nextPost()
@@ -396,21 +478,27 @@ let touchStartX = 0
 let touchStartY = 0
 
 function onTouchStart(e: TouchEvent) {
-  touchStartX = e.changedTouches[0].screenX
-  touchStartY = e.changedTouches[0].screenY
-  swiping.value = true
+  const touch = e.changedTouches[0]
+  if (touch) {
+    touchStartX = touch.screenX
+    touchStartY = touch.screenY
+    swiping.value = true
+  }
 }
 
 function onTouchMove(e: TouchEvent) {
   if (!swiping.value) return
-  const diffX = e.changedTouches[0].screenX - touchStartX
-  const diffY = e.changedTouches[0].screenY - touchStartY
+  const touch = e.changedTouches[0]
+  if (touch) {
+    const diffX = touch.screenX - touchStartX
+    const diffY = touch.screenY - touchStartY
 
-  if (Math.abs(diffX) > Math.abs(diffY)) {
-    swipeDiff.value = diffX
-  } else {
-    swiping.value = false
-    swipeDiff.value = 0
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      swipeDiff.value = diffX
+    } else {
+      swiping.value = false
+      swipeDiff.value = 0
+    }
   }
 }
 
@@ -441,11 +529,16 @@ watch(displayedPost, () => {
 onMounted(() => {
   window.addEventListener('keydown', handleKeyDown)
   document.body.style.overflow = 'hidden' // Lock background scroll
+  previousActiveElement = document.activeElement as HTMLElement
+  setTimeout(() => {
+    closeBtnRef.value?.focus()
+  }, 50)
 })
 
 onUnmounted(() => {
   window.removeEventListener('keydown', handleKeyDown)
   document.body.style.overflow = '' // Unlock scroll
+  previousActiveElement?.focus()
 })
 </script>
 

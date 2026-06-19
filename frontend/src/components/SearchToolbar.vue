@@ -183,14 +183,14 @@ import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
 import { apiSuggestTags, apiAddBookmark } from '../api'
 import { useSearchHistory } from '../composables/useSearchHistory'
-import type { SiteName } from '../types'
+import type { SiteName, TagSuggestion } from '../types'
 
 const auth = useAuthStore()
 const feed = useFeedStore()
 const toast = useToastStore()
 const lang = useLangStore()
 
-const props = defineProps<{
+defineProps<{
   correctedTags?: string | null
 }>()
 
@@ -200,7 +200,10 @@ const emit = defineEmits<{
 }>()
 
 const availableSites: SiteName[] = ['danbooru', 'e621', 'rule34']
-const suggestions = ref<any[]>([])
+const suggestions = ref<TagSuggestion[]>([])
+
+let suggestController: AbortController | null = null
+let splitSuggestController: AbortController | null = null
 
 // Visual Tag Query Builder State & Logic
 const pills = ref<string[]>([])
@@ -218,14 +221,16 @@ function dragStart(e: DragEvent, idx: number) {
   }
 }
 
-function onDrop(e: DragEvent, targetIdx: number) {
+function onDrop(_e: DragEvent, targetIdx: number) {
   if (dragIndex.value === null) return
   const sourceIdx = dragIndex.value
   if (sourceIdx !== targetIdx) {
     const pill = pills.value[sourceIdx]
-    pills.value.splice(sourceIdx, 1)
-    pills.value.splice(targetIdx, 0, pill)
-    syncToFeedStore()
+    if (pill !== undefined) {
+      pills.value.splice(sourceIdx, 1)
+      pills.value.splice(targetIdx, 0, pill)
+      syncToFeedStore()
+    }
   }
 }
 
@@ -250,12 +255,14 @@ function getPillCategory(pill: string): string {
 
 function toggleNegation(idx: number) {
   const pill = pills.value[idx]
-  if (pill.startsWith('-')) {
-    pills.value[idx] = pill.substring(1)
-  } else {
-    pills.value[idx] = '-' + pill
+  if (pill !== undefined) {
+    if (pill.startsWith('-')) {
+      pills.value[idx] = pill.substring(1)
+    } else {
+      pills.value[idx] = '-' + pill
+    }
+    syncToFeedStore()
   }
-  syncToFeedStore()
 }
 
 function removeTagPill(idx: number) {
@@ -369,7 +376,7 @@ function selectColCount(cols: number) {
   feed.cardSize = targetSize
 }
 
-function closeDropdowns(e: MouseEvent) {
+function closeDropdowns(_e: MouseEvent) {
   if (showColDropdown.value) {
     showColDropdown.value = false
   }
@@ -438,14 +445,24 @@ async function saveBookmark() {
 
 function onSearchInput() {
   clearTimeout(suggestTimeout)
+  if (suggestController) {
+    suggestController.abort()
+    suggestController = null
+  }
+
   const val = inputVal.value.trim()
   if (val && val.length >= 2) {
     suggestTimeout = setTimeout(async () => {
+      suggestController = new AbortController()
       try {
-        const data = await apiSuggestTags(val)
+        const data = await apiSuggestTags(val, 15, suggestController.signal)
         suggestions.value = data.suggestions || []
-      } catch (e) {
-        suggestions.value = []
+      } catch (e: any) {
+        if (e.name !== 'AbortError') {
+          suggestions.value = []
+        }
+      } finally {
+        suggestController = null
       }
     }, 300)
   } else {
@@ -479,17 +496,25 @@ function removeHistory(q: string) {
 
 function onTabPress() {
   if (suggestions.value.length > 0) {
-    selectSuggestion(suggestions.value[0].tag)
+    const first = suggestions.value[0]
+    if (first) {
+      selectSuggestion(first.tag)
+    }
   }
 }
 
 // Split Search Autocomplete Logic
-const splitSuggestions = ref<any[]>([])
+const splitSuggestions = ref<TagSuggestion[]>([])
 const activeSplitSite = ref<SiteName | null>(null)
 let splitSuggestTimeout: any = null
 
 function onSplitSearchInput(site: SiteName) {
   clearTimeout(splitSuggestTimeout)
+  if (splitSuggestController) {
+    splitSuggestController.abort()
+    splitSuggestController = null
+  }
+
   activeSplitSite.value = site
   const text = feed.siteTags[site] || ''
   const words = text.split(/\s+/)
@@ -497,11 +522,16 @@ function onSplitSearchInput(site: SiteName) {
   
   if (lastWord && lastWord.length >= 2) {
     splitSuggestTimeout = setTimeout(async () => {
+      splitSuggestController = new AbortController()
       try {
-        const data = await apiSuggestTags(lastWord)
+        const data = await apiSuggestTags(lastWord, 15, splitSuggestController.signal)
         splitSuggestions.value = data.suggestions || []
-      } catch (e) {
-        splitSuggestions.value = []
+      } catch (e: any) {
+        if (e.name !== 'AbortError') {
+          splitSuggestions.value = []
+        }
+      } finally {
+        splitSuggestController = null
       }
     }, 300)
   } else {

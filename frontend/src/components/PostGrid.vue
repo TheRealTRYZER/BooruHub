@@ -74,8 +74,9 @@ function getShortestColIndex() {
   let minIdx = 0
   let minLen = columns.value[0]?.length ?? 0
   for (let i = 1; i < columns.value.length; i++) {
-    if ((columns.value[i]?.length ?? 0) < minLen) {
-      minLen = columns.value[i].length
+    const col = columns.value[i]
+    if (col && col.length < minLen) {
+      minLen = col.length
       minIdx = i
     }
   }
@@ -86,11 +87,14 @@ function placeNewPosts() {
   const newPosts = props.posts.slice(placedCount)
   for (const post of newPosts) {
     const idx = getShortestColIndex()
-    columns.value[idx].push({
-      key: `${post.source_site}-${post.id}`,
-      component: markRaw(PostCard),
-      props: { post },
-    })
+    const col = columns.value[idx]
+    if (col) {
+      col.push({
+        key: `${post.source_site}-${post.id}`,
+        component: markRaw(PostCard),
+        props: { post },
+      })
+    }
     placedCount++
   }
 }
@@ -98,9 +102,11 @@ function placeNewPosts() {
 function removeSkeletons() {
   for (const col of columns.value) {
     // Filter out skeletons
-    const filtered = col.filter(item => !item.key.startsWith('sk-'))
-    col.length = 0
-    col.push(...filtered)
+    if (col) {
+      const filtered = col.filter(item => !item.key.startsWith('sk-'))
+      col.length = 0
+      col.push(...filtered)
+    }
   }
   skeletonKeys = []
 }
@@ -110,11 +116,14 @@ function addSkeletons(count: number) {
   for (let i = 0; i < count; i++) {
     const idx = i % colCount.value
     const key = `sk-${Date.now()}-${i}`
-    columns.value[idx].push({
-      key,
-      component: markRaw(SkeletonCard),
-      props: {},
-    })
+    const col = columns.value[idx]
+    if (col) {
+      col.push({
+        key,
+        component: markRaw(SkeletonCard),
+        props: {},
+      })
+    }
     skeletonKeys.push(key)
   }
 }
@@ -142,27 +151,32 @@ watch(() => props.posts, (newVal) => {
 
     // 2. Filter out deleted cards in O(N) time
     for (const col of columns.value) {
-      const filtered = col.filter(item => {
-        if (item.key.startsWith('sk-')) return true // keep manual loading skeletons
-        return activeKeys.has(item.key)
-      })
-      if (filtered.length !== col.length) {
-        col.length = 0
-        col.push(...filtered)
+      if (col) {
+        const filtered = col.filter(item => {
+          if (item.key.startsWith('sk-')) return true // keep manual loading skeletons
+          return activeKeys.has(item.key)
+        })
+        if (filtered.length !== col.length) {
+          col.length = 0
+          col.push(...filtered)
+        }
       }
     }
 
     // 3. Identify and place new posts that are not yet in columns in O(N + M) time
-    const placedKeys = new Set(columns.value.flatMap(col => col.map(item => item.key)))
+    const placedKeys = new Set(columns.value.flatMap(col => col ? col.map(item => item.key) : []))
     const newPosts = newVal.filter(p => !placedKeys.has(`${p.source_site}-${p.id}`))
     
     for (const post of newPosts) {
       const idx = getShortestColIndex()
-      columns.value[idx].push({
-        key: `${post.source_site}-${post.id}`,
-        component: markRaw(PostCard),
-        props: { post },
-      })
+      const col = columns.value[idx]
+      if (col) {
+        col.push({
+          key: `${post.source_site}-${post.id}`,
+          component: markRaw(PostCard),
+          props: { post },
+        })
+      }
     }
     
     placedCount = newVal.length

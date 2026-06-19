@@ -3,52 +3,58 @@
        @touchstart="onTouchStart" @touchmove="onTouchMove" @touchend="onTouchEnd"
        :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1)', opacity: Math.max(0, 1 - Math.abs(swipeDiff) / 200), willChange: swiping ? 'transform, opacity' : 'auto' }">
     
-    <!-- Main Content (Always Visible Instantly) -->
-    <div class="post-card-media" :style="mediaStyle">
-      <img class="post-card-img"
-           :src="currentUrl || placeholder"
-           :alt="'Post ' + displayedPost.id"
-           loading="lazy"
-           decoding="async"
-           :style="{ opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease-in-out', width: '100%', height: '100%', objectFit: 'cover' }"
-           @load="onImageLoad"
-           @error="onError" />
-    </div>
-
-    <div class="post-card-overlay">
-      <div class="post-card-meta">
-        <!-- Clickable Interactive Version Switcher Badges -->
-        <span v-for="site in allSites" 
-              :key="site" 
-              class="post-card-badge" 
-              :class="[site, { 'interactive-badge': allSites.length > 1, 'active-site': allSites.length > 1 && activeSite === site }]"
-              :title="allSites.length > 1 ? 'Switch to ' + site + ' version' : ''"
-              @click.stop="allSites.length > 1 ? switchActiveSite(site) : null">
-          {{ site === props.post.source_site ? site : '+ ' + site }}
-        </span>
-        <span class="post-card-rating" :class="ratingClass">{{ ratingLabel }}</span>
-        <span v-if="isAnimated && !isFlash" class="post-card-badge" style="background:#ff4757;color:white;">▶</span>
-        <span v-if="isFlash" class="post-card-badge" style="background:#f1c40f;color:black;font-weight:bold;">FLASH</span>
-        <span v-if="displayedPost.score !== undefined" class="post-card-score">★ {{ displayedPost.score }}</span>
+    <template v-if="!isOffScreen">
+      <!-- Main Content (Always Visible Instantly) -->
+      <div class="post-card-media" :style="mediaStyle">
+        <img class="post-card-img"
+             :src="currentUrl || placeholder"
+             :alt="altText"
+             loading="lazy"
+             decoding="async"
+             :style="{ opacity: loaded ? 1 : 0, transition: 'opacity 0.3s ease-in-out', width: '100%', height: '100%', objectFit: 'cover' }"
+             @load="onImageLoad"
+             @error="onError" />
       </div>
-    </div>
-    <button v-if="!isMobile" class="post-card-fav" :class="{ active: isFav }"
-            @click.stop="toggleFav"
-            :title="lang.t('nav_favorites')">
-      {{ isFav ? '❤️' : '🤍' }}
-    </button>
-    <button v-if="!isMobile" class="post-card-dislike" :class="{ active: isDisliked }"
-            @click.stop="doDislike"
-            :title="lang.t('dislikes_tab') || 'Dislike'">
-      👎
-    </button>
-    <div v-if="showLikeAnimation" class="like-animation">❤️</div>
+
+      <div class="post-card-overlay">
+        <div class="post-card-meta">
+          <!-- Clickable Interactive Version Switcher Badges -->
+          <span v-for="site in allSites" 
+                :key="site" 
+                class="post-card-badge" 
+                :class="[site, { 'interactive-badge': allSites.length > 1, 'active-site': allSites.length > 1 && activeSite === site }]"
+                :title="allSites.length > 1 ? lang.t('switch_version', { site }) : ''"
+                :role="allSites.length > 1 ? 'button' : undefined"
+                :tabindex="allSites.length > 1 ? 0 : undefined"
+                @click.stop="allSites.length > 1 ? switchActiveSite(site) : null"
+                @keydown.enter.stop.prevent="allSites.length > 1 ? switchActiveSite(site) : null"
+                @keydown.space.stop.prevent="allSites.length > 1 ? switchActiveSite(site) : null">
+            {{ site === props.post.source_site ? site : '+ ' + site }}
+          </span>
+          <span class="post-card-rating" :class="ratingClass" :aria-label="'Rating: ' + ratingLabel">{{ ratingLabel }}</span>
+          <span v-if="isAnimated && !isFlash" class="post-card-badge" style="background:#ff4757;color:white;">▶</span>
+          <span v-if="isFlash" class="post-card-badge" style="background:#f1c40f;color:black;font-weight:bold;">FLASH</span>
+          <span v-if="displayedPost.score !== undefined" class="post-card-score">★ {{ displayedPost.score }}</span>
+        </div>
+      </div>
+      <button v-if="!isMobile" class="post-card-fav" :class="{ active: isFav }"
+              @click.stop="toggleFav"
+              :title="lang.t('nav_favorites')">
+        {{ isFav ? '❤️' : '🤍' }}
+      </button>
+      <button v-if="!isMobile" class="post-card-dislike" :class="{ active: isDisliked }"
+              @click.stop="doDislike"
+              :title="lang.t('dislikes_tab')">
+        👎
+      </button>
+      <div v-if="showLikeAnimation" class="like-animation">❤️</div>
+    </template>
+    <div v-else class="post-card-offscreen-placeholder" :style="mediaStyle"></div>
   </div>
 </template>
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
-import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
@@ -56,13 +62,13 @@ import { useFeedStore } from '../stores/feed'
 import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite } from '../api'
 import { useEventLogger } from '../composables/useEventLogger'
 import { RATING_MAP, RATING_LABELS } from '../types'
+import { sanitizeUrl } from '../utils/security'
 import type { Post, RatingClass, SiteName } from '../types'
 
 const feed = useFeedStore()
 
 const props = defineProps<{
   post: Post & { favorite?: boolean }
-  favorite?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -70,7 +76,6 @@ const emit = defineEmits<{
   (e: 'favorite-changed', payload: { sourceSite: SiteName, postId: string | number, isFav: boolean, isDislike: boolean }): void
 }>()
 
-const router = useRouter()
 const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
@@ -102,7 +107,7 @@ const displayedPost = computed<Post>(() => {
 
 const loaded = ref(false)
 const cardRef = ref<HTMLElement | null>(null)
-const isFav = ref(props.favorite ?? props.post.favorite ?? false)
+const isFav = ref(props.post.favorite ?? false)
 const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg" width="10" height="10"%3E%3C/svg%3E'
 
 const currentUrl = ref('')
@@ -115,7 +120,7 @@ function updateUrl() {
   const videoExtensions = ['mp4', 'webm', 'm4v', 'mov', 'mkv', 'swf', 'ogv']
   const isVideoExt = (url: string) => {
     if (!url) return false
-    const cleanUrl = url.split('?')[0].toLowerCase()
+    const cleanUrl = (url.split('?')[0] ?? '').toLowerCase()
     return videoExtensions.some(ext => cleanUrl.endsWith('.' + ext))
   }
 
@@ -140,17 +145,27 @@ function updateUrl() {
     newUrl = ''
   }
   
-  if (currentUrl.value !== newUrl) {
+  const sanitized = sanitizeUrl(newUrl)
+  if (currentUrl.value !== sanitized) {
     loaded.value = false
-    currentUrl.value = newUrl
+    currentUrl.value = sanitized
   }
 }
 
-
-// Watch for quality setting changes or active post updates deeply
-watch([() => feed.previewQuality, displayedPost], () => {
-  updateUrl()
-}, { deep: true })
+// Watch for quality setting changes or active post updates shallowly (prevent traversing tags/duplicates)
+watch(
+  [
+    () => feed.previewQuality,
+    () => displayedPost.value.id,
+    () => displayedPost.value.source_site,
+    () => displayedPost.value.preview_url,
+    () => displayedPost.value.sample_url,
+    () => displayedPost.value.file_url
+  ],
+  () => {
+    updateUrl()
+  }
+)
 
 // Resolve URL immediately during component instantiation
 updateUrl()
@@ -172,7 +187,11 @@ const mediaStyle = computed(() => {
   return { minHeight: '200px', background: 'var(--bg-secondary)', overflow: 'hidden' }
 })
 
-
+const altText = computed(() => {
+  const firstTag = displayedPost.value.tags?.[0]
+  const rating = displayedPost.value.rating ? `[Rating: ${displayedPost.value.rating.toUpperCase()}]` : ''
+  return `Post ${displayedPost.value.id} ${firstTag ? '- ' + firstTag.replace(/_/g, ' ') : ''} ${rating}`.trim()
+})
 
 function switchActiveSite(site: SiteName) {
   activeSite.value = site
@@ -189,11 +208,11 @@ function onError() {
   if (currentUrl.value === p.file_url) {
     if (p.sample_url && p.sample_url !== p.file_url) {
       loaded.value = false
-      currentUrl.value = p.sample_url
+      currentUrl.value = sanitizeUrl(p.sample_url)
       return
     } else if (p.preview_url && p.preview_url !== p.file_url) {
       loaded.value = false
-      currentUrl.value = p.preview_url
+      currentUrl.value = sanitizeUrl(p.preview_url)
       return
     }
   }
@@ -201,7 +220,7 @@ function onError() {
   if (currentUrl.value === p.sample_url) {
     if (p.preview_url && p.preview_url !== p.sample_url) {
       loaded.value = false
-      currentUrl.value = p.preview_url
+      currentUrl.value = sanitizeUrl(p.preview_url)
       return
     }
   }
@@ -250,7 +269,7 @@ async function doDislike() {
     } catch { /* ignore */ }
     isDisliked.value = false
     hidden.value = false
-    toast.show(lang.t('removed_fav') || 'Removed', 'info')
+    toast.show(lang.t('removed_fav'), 'info')
     emit('favorite-changed', { sourceSite: displayedPost.value.source_site, postId: displayedPost.value.id, isFav: false, isDislike: false })
   } else {
     try {
@@ -262,10 +281,10 @@ async function doDislike() {
     emit('favorite-changed', { sourceSite: displayedPost.value.source_site, postId: displayedPost.value.id, isFav: false, isDislike: true })
 
     toast.show(
-      lang.t('removed_fav') || 'Post hidden',
+      lang.t('removed_fav'),
       'info',
       {
-        label: 'Undo',
+        label: lang.t('undo'),
         callback: async () => {
           try {
             const check = await apiCheckFavorite(displayedPost.value.source_site, String(displayedPost.value.id))
@@ -293,15 +312,60 @@ function updateMobileState() {
   isMobile.value = window.matchMedia('(max-width: 768px)').matches
 }
 
+// Offscreen Virtualization
+const isOffScreen = ref(true)
+let visibilityObserver: IntersectionObserver | null = null
+
+async function checkFavoriteState() {
+  if (!auth.isAuthenticated) {
+    isFav.value = false
+    isDisliked.value = props.post.is_dislike || false
+    return
+  }
+  try {
+    const res = await apiCheckFavorite(displayedPost.value.source_site, String(displayedPost.value.id))
+    isFav.value = res.is_favorite
+    isDisliked.value = res.is_dislike ?? false
+  } catch {
+    isFav.value = false
+    isDisliked.value = props.post.is_dislike || false
+  }
+}
+
+watch(
+  [() => displayedPost.value.id, () => displayedPost.value.source_site],
+  () => {
+    checkFavoriteState()
+  },
+  { immediate: true }
+)
+
 onMounted(() => {
   updateUrl()
   updateMobileState()
   window.addEventListener('resize', updateMobileState)
+  
+  // Set up virtualization observer
+  visibilityObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      isOffScreen.value = !entry.isIntersecting
+    }
+  }, {
+    rootMargin: `${feed.rootMargin}px 0px ${feed.rootMargin}px 0px`,
+    threshold: 0.01
+  })
+  
+  if (cardRef.value) {
+    visibilityObserver.observe(cardRef.value)
+  }
 })
 
 onUnmounted(() => {
   window.removeEventListener('resize', updateMobileState)
   if (tapTimeout) clearTimeout(tapTimeout)
+  if (visibilityObserver) {
+    visibilityObserver.disconnect()
+  }
 })
 
 function doLikeAnimation() {
@@ -331,21 +395,27 @@ function handleCardClick() {
 }
 
 function onTouchStart(e: TouchEvent) {
-  touchStartX = e.changedTouches[0].screenX
-  touchStartY = e.changedTouches[0].screenY
-  swiping.value = true
+  const touch = e.changedTouches[0]
+  if (touch) {
+    touchStartX = touch.screenX
+    touchStartY = touch.screenY
+    swiping.value = true
+  }
 }
 
 function onTouchMove(e: TouchEvent) {
   if (!swiping.value) return
-  const diffX = e.changedTouches[0].screenX - touchStartX
-  const diffY = e.changedTouches[0].screenY - touchStartY
+  const touch = e.changedTouches[0]
+  if (touch) {
+    const diffX = touch.screenX - touchStartX
+    const diffY = touch.screenY - touchStartY
 
-  if (Math.abs(diffX) > Math.abs(diffY)) {
-    swipeDiff.value = diffX
-  } else {
-    swiping.value = false
-    swipeDiff.value = 0
+    if (Math.abs(diffX) > Math.abs(diffY)) {
+      swipeDiff.value = diffX
+    } else {
+      swiping.value = false
+      swipeDiff.value = 0
+    }
   }
 }
 
@@ -367,10 +437,10 @@ function onTouchEnd() {
       emit('favorite-changed', { sourceSite: displayedPost.value.source_site, postId: displayedPost.value.id, isFav: false, isDislike: true })
 
       toast.show(
-        lang.t('removed_fav') || 'Post hidden',
+        lang.t('removed_fav'),
         'info',
         {
-          label: 'Undo',
+          label: lang.t('undo'),
           callback: async () => {
             try {
               const check = await apiCheckFavorite(displayedPost.value.source_site, String(displayedPost.value.id))
