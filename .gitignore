@@ -24,3 +24,5 @@ backend/*.sqlite
 
 # Vite
 frontend/.vite/
+frontend/vite.config.js
+frontend/vite.config.d.ts
