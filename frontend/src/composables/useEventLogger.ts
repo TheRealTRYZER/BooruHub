@@ -4,7 +4,6 @@
  * Batches events and flushes them periodically or when the batch is full.
  * Provides an IntersectionObserver wrapper for impression tracking.
  */
-import { ref, onUnmounted } from 'vue'
 import { apiLogEvents } from '../api'
 import { useAuthStore } from '../stores/auth'
 import type { UserEventPayload, Post } from '../types'
@@ -18,10 +17,18 @@ const FLUSH_INTERVAL_MS = 15_000 // 15 seconds
 // Shared global batch (singleton across components)
 const _batch: UserEventPayload[] = []
 let _flushTimer: ReturnType<typeof setInterval> | null = null
-let _observerInstance: IntersectionObserver | null = null
 
 // Track which post IDs have already logged an impression this session
 const _impressedIds = new Set<string>()
+
+export function apiClearEventLoggerState() {
+  _batch.length = 0
+  _impressedIds.clear()
+  if (_flushTimer) {
+    clearInterval(_flushTimer)
+    _flushTimer = null
+  }
+}
 
 function _flush() {
   if (_batch.length === 0) return

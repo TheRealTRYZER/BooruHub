@@ -1,4 +1,4 @@
-import { ref } from 'vue'
+import { ref, onUnmounted } from 'vue'
 import { apiFeed } from '../api'
 import { useEventLogger } from './useEventLogger'
 import type { SiteName, Post } from '../types'
@@ -9,6 +9,24 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
   const correctedTags = ref<string | null>(null)
   let loadGeneration = 0
   let autoFetchCount = 0
+  const activeTimeouts: any[] = []
+
+  function scheduleTimeout(cb: () => void, ms: number) {
+    const id = setTimeout(() => {
+      const idx = activeTimeouts.indexOf(id)
+      if (idx !== -1) activeTimeouts.splice(idx, 1)
+      cb()
+    }, ms)
+    activeTimeouts.push(id)
+    return id
+  }
+
+  onUnmounted(() => {
+    for (const id of activeTimeouts) {
+      clearTimeout(id)
+    }
+    activeTimeouts.length = 0
+  })
 
   async function loadMore(sentinel?: HTMLElement | null, isAuto = false) {
     if (loading.value || !feed.hasMore) return
@@ -36,15 +54,13 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
     const siteTagSig = feed.isSplit ? JSON.stringify(feed.siteTags) : ''
     feed.lastSearchSignature = `${feed.tags}|${feed.sites.join(',')}|${feed.isSplit}|${siteTagSig}`
 
-    const basePosts = [...feed.posts]
-
     try {
       // Build a single request — let the backend handle multi-site interleaving
       const options: Record<string, any> = {
         tags: feed.isSplit ? '' : feed.tags,
         sites: activeSites.join(','),
         page: feed.page,
-        limit: 45,
+        limit: feed.postsLimit || 40,
       }
 
       // Pass per-site tag overrides for split search
@@ -90,20 +106,20 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
           // Backend returned matches but all were filtered — try next page
           feed.page++
           if (feed.hasMore && gen === loadGeneration) {
-            setTimeout(() => { if (gen === loadGeneration) loadMore(sentinel, true) }, 50)
+            scheduleTimeout(() => { if (gen === loadGeneration) loadMore(sentinel, true) }, 50)
           }
         }
       } else if (addedCount === 0 && feed.hasMore) {
         // All fetched posts were duplicates and skipped — automatically fetch next page
         feed.page++
         if (gen === loadGeneration) {
-          setTimeout(() => { if (gen === loadGeneration) loadMore(sentinel, true) }, 50)
+          scheduleTimeout(() => { if (gen === loadGeneration) loadMore(sentinel, true) }, 50)
         }
       } else {
         feed.page++
         // Pre-fetch if sentinel is still within the observer's rootMargin threshold
         if (sentinel) {
-          setTimeout(() => {
+          scheduleTimeout(() => {
             if (gen === loadGeneration && sentinel && !loading.value && feed.hasMore) {
               const rect = sentinel.getBoundingClientRect()
               if (rect.top <= window.innerHeight + feed.rootMargin) loadMore(sentinel)
