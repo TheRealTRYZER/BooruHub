@@ -9,6 +9,7 @@ from sqlalchemy import text
 from app.core.config import get_settings
 from app.db.database import engine
 from app.db.models import Base
+from app.core.security import is_fernet_key
 
 from app.api.auth import router as auth_router
 from app.api.posts import router as posts_router
@@ -25,18 +26,43 @@ logger = logging.getLogger(__name__)
 
 def _validate_security_settings() -> None:
     issues: list[str] = []
+    jwt_issues: list[str] = []
 
     if not settings.DATABASE_URL:
         issues.append("DATABASE_URL must be set")
 
+    # B-M3: Single-worker documentation warning
+    logger.info("Application runs with in-memory singletons. Enforce a single-worker process model in production.")
+
+    # B-L11: Always enforce JWT secret validation
     if not settings.JWT_SECRET or len(settings.JWT_SECRET) < 32:
-        issues.append("JWT_SECRET must be set and at least 32 characters long")
+        jwt_issues.append("JWT_SECRET must be set and at least 32 characters long")
 
-    if settings.JWT_SECRET == "change-me-to-a-random-secret-string-at-least-32-chars":
-        issues.append("JWT_SECRET must not use the published placeholder value")
+    if settings.JWT_SECRET in (
+        "change-me-to-a-random-secret-string-at-least-32-chars",
+        "replace-with-a-random-64-char-secret"
+    ):
+        jwt_issues.append("JWT_SECRET must not use the published placeholder value")
 
+    if jwt_issues:
+        raise RuntimeError("Critical security configuration error: " + "; ".join(jwt_issues))
+
+    # B-H2: Validate encryption key format
     if not settings.ENCRYPTION_KEY:
         issues.append("ENCRYPTION_KEY must be set explicitly to decouple data encryption from JWT signing")
+    elif not is_fernet_key(settings.ENCRYPTION_KEY):
+        issues.append("ENCRYPTION_KEY must be a valid 32-byte urlsafe-base64 key")
+
+    # Validate fallback keys
+    for fb_key in settings.encryption_key_fallback_list:
+        if not is_fernet_key(fb_key):
+            issues.append(f"Fallback ENCRYPTION_KEY '{fb_key}' must be a valid 32-byte urlsafe-base64 key")
+
+    # CORS checks
+    if "*" in settings.cors_origin_list:
+        issues.append("CORS wildcard '*' is not allowed when credentials are enabled")
+    elif not settings.is_development and not settings.cors_origin_list:
+        issues.append("Explicit CORS origins must be specified in production")
 
     if settings.is_development:
         if issues:
@@ -51,12 +77,7 @@ def _validate_security_settings() -> None:
 async def lifespan(app: FastAPI):
     """Startup / shutdown events."""
     _validate_security_settings()
-    # 1. Basic schema creation & extensions
-    async with engine.begin() as conn:
-        await conn.execute(text("CREATE EXTENSION IF NOT EXISTS pg_trgm;"))
-        await conn.run_sync(Base.metadata.create_all)
-            
-    logger.info("Database initialized")
+    logger.info("Application starting")
     yield
     await engine.dispose()
     logger.info("Database connections closed")

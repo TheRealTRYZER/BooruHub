@@ -11,6 +11,14 @@ class Base(DeclarativeBase):
     pass
 
 
+from sqlalchemy.ext.compiler import compiles
+from sqlalchemy.types import ARRAY
+
+@compiles(ARRAY, "sqlite")
+def compile_array_sqlite(element, compiler, **kw):
+    return "TEXT"
+
+
 class User(Base):
     __tablename__ = "users"
 
@@ -33,7 +41,7 @@ class User(Base):
     search_timeout = Column(Float, default=30.0)
     search_interval = Column(Float, default=0.0)
 
-    data_consent = Column(Boolean, default=True, nullable=False, server_default='true')
+    data_consent = Column(Boolean, default=False, nullable=False, server_default='false')
 
     created_at = Column(
         DateTime(timezone=True),
@@ -45,6 +53,7 @@ class User(Base):
     bookmarks = relationship("Bookmark", back_populates="user", cascade="all, delete-orphan")
     blacklist_rules = relationship("BlacklistRule", back_populates="user", cascade="all, delete-orphan")
     tag_mappings = relationship("UserTagMapping", back_populates="user", cascade="all, delete-orphan")
+    refresh_tokens = relationship("RefreshToken", back_populates="user", cascade="all, delete-orphan")
 
 
 class UserTagMapping(Base):
@@ -201,5 +210,5 @@ class RefreshToken(Base):
     revoked = Column(Boolean, default=False, nullable=False, server_default="false")
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
-    user = relationship("User")
+    user = relationship("User", back_populates="refresh_tokens")
 
