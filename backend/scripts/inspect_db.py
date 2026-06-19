@@ -1,4 +1,10 @@
 import asyncio
+import sys
+import os
+
+# Add parent directory to sys.path to resolve 'app' imports
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
 from app.db.database import async_session
 from sqlalchemy import text
 
