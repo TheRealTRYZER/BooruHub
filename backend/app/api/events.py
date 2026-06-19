@@ -20,12 +20,12 @@ ALLOWED_TYPES = {"impression", "view", "like", "favourite", "search"}
 
 
 class EventPayload(BaseModel):
-    type: str = Field(..., description="Event type: impression, view, like, favourite, search")
-    source: Optional[str] = None
-    post_id: Optional[str] = None
-    tags: Optional[List[str]] = None
-    query: Optional[str] = None
-    duration_sec: Optional[int] = None
+    type: str = Field(..., max_length=50, description="Event type: impression, view, like, favourite, search")
+    source: Optional[str] = Field(None, max_length=100)
+    post_id: Optional[str] = Field(None, max_length=100)
+    tags: Optional[List[str]] = Field(None, max_length=100)
+    query: Optional[str] = Field(None, max_length=512)
+    duration_sec: Optional[int] = Field(None, ge=0)
 
 
 class BatchEventsRequest(BaseModel):
@@ -55,12 +55,16 @@ async def log_events_batch(
 
     accepted = 0
     for ev in req.events:
-        if ev.type not in ALLOWED_TYPES:
+        ev_type = ev.type.lower()
+        if ev_type == "favorite":
+            ev_type = "favourite"
+            
+        if ev_type not in ALLOWED_TYPES:
             continue
 
         event = UserEvent(
             user_id=user.id,
-            type=ev.type,
+            type=ev_type,
             source=ev.source,
             post_id=ev.post_id,
             tags=ev.tags,
@@ -100,10 +104,14 @@ async def delete_history(
     db: AsyncSession = Depends(get_db),
 ):
     """GDPR: Delete all event history for the current user."""
-    result = await db.execute(
+    # B-M12: Use SELECT count(*) before delete for reliable rowcount
+    count_stmt = select(func.count(UserEvent.id)).where(UserEvent.user_id == user.id)
+    result = await db.execute(count_stmt)
+    deleted = result.scalar_one()
+
+    await db.execute(
         delete(UserEvent).where(UserEvent.user_id == user.id)
     )
     await db.commit()
-    deleted = result.rowcount
     logger.info(f"[GDPR] User {user.id} deleted {deleted} events")
     return {"deleted": deleted}
