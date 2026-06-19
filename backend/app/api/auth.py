@@ -120,8 +120,8 @@ async def register(
     await db.refresh(user)
 
     settings = get_settings()
-    response.set_cookie("access_token", token, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
-    response.set_cookie("refresh_token", refresh, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
+    response.set_cookie("access_token", token, httponly=True, secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE, path="/")
+    response.set_cookie("refresh_token", refresh, httponly=True, secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE, path="/")
 
     return TokenResponse(
         access_token=token,
@@ -175,8 +175,8 @@ async def login(
     await db.commit()
 
     settings = get_settings()
-    response.set_cookie("access_token", token, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
-    response.set_cookie("refresh_token", refresh, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
+    response.set_cookie("access_token", token, httponly=True, secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE, path="/")
+    response.set_cookie("refresh_token", refresh, httponly=True, secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE, path="/")
 
     return TokenResponse(
         access_token=token,
@@ -281,8 +281,8 @@ async def refresh_token(
     await db.commit()
 
     settings = get_settings()
-    response.set_cookie("access_token", new_access, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
-    response.set_cookie("refresh_token", new_refresh, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
+    response.set_cookie("access_token", new_access, httponly=True, secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE, path="/")
+    response.set_cookie("refresh_token", new_refresh, httponly=True, secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE, path="/")
 
     return {
         "access_token": new_access,

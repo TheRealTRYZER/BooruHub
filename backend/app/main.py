@@ -53,7 +53,7 @@ class CSRFMiddleware(BaseHTTPMiddleware):
                 token,
                 httponly=False,  # JavaScript must be able to read this cookie
                 secure=settings.COOKIE_SECURE,
-                samesite="strict",
+                samesite=settings.COOKIE_SAMESITE,
                 path="/"
             )
         return response
