@@ -1,9 +1,10 @@
 """Favorites API — CRUD for user's favorite posts."""
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, Query
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
+from sqlalchemy.exc import IntegrityError
 
 from app.db.database import get_db
 from app.db.models import User, Favorite
@@ -39,8 +40,8 @@ class FavoriteResponse(BaseModel):
 
 @router.get("")
 async def list_favorites(
-    page: int = 1,
-    limit: int = 40,
+    page: int = Query(1, ge=1),
+    limit: int = Query(40, ge=1, le=100),
     is_dislike: bool = False,
     user: User = Depends(require_user),
     db: AsyncSession = Depends(get_db),
@@ -111,7 +112,14 @@ async def add_favorite(
             )
         else:
             fav.is_dislike = body.is_dislike
-            await db.commit()
+            try:
+                await db.commit()
+            except IntegrityError:
+                await db.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_409_CONFLICT,
+                    detail="Item already in this list or conflict occurred"
+                )
             return {"id": fav.id, "message": "Updated item type"}
 
     fav = Favorite(
@@ -127,8 +135,15 @@ async def add_favorite(
         is_dislike=body.is_dislike,
     )
     db.add(fav)
-    await db.commit()
-    await db.refresh(fav)
+    try:
+        await db.commit()
+        await db.refresh(fav)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Item already in this list or conflict occurred"
+        )
     return {"id": fav.id, "message": "Added item"}
 
 

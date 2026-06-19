@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
+from sqlalchemy.exc import IntegrityError
 
 from app.db.database import get_db
 from app.db.models import User, UserTagMapping
@@ -77,8 +78,15 @@ async def create_mapping(
         rule34_tags=body.rule34_tags.strip(),
     )
     db.add(mapping)
-    await db.commit()
-    await db.refresh(mapping)
+    try:
+        await db.commit()
+        await db.refresh(mapping)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Mapping for this unitag already exists"
+        )
     
     # Cache MUST be cleared for updates to be instant
     await invalidate_user_cache(user.id)
@@ -103,7 +111,22 @@ async def update_mapping(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Mapping not found")
 
     if body.unitag is not None:
-        mapping.unitag = body.unitag.strip().lower()
+        new_unitag = body.unitag.strip().lower()
+        # Pre-check unitag uniqueness excluding the current id (B-M16)
+        existing = await db.execute(
+            select(UserTagMapping).where(
+                UserTagMapping.user_id == user.id,
+                UserTagMapping.unitag == new_unitag,
+                UserTagMapping.id != mapping_id
+            )
+        )
+        if existing.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Mapping for this unitag already exists"
+            )
+        mapping.unitag = new_unitag
+
     if body.danbooru_tags is not None:
         mapping.danbooru_tags = body.danbooru_tags.strip()
     if body.e621_tags is not None:
@@ -111,8 +134,15 @@ async def update_mapping(
     if body.rule34_tags is not None:
         mapping.rule34_tags = body.rule34_tags.strip()
 
-    await db.commit()
-    await db.refresh(mapping)
+    try:
+        await db.commit()
+        await db.refresh(mapping)
+    except IntegrityError:
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail="Mapping for this unitag already exists"
+        )
     
     # Clear cache
     await invalidate_user_cache(user.id)
