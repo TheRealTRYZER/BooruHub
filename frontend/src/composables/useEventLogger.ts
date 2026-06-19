@@ -17,6 +17,7 @@ const FLUSH_INTERVAL_MS = 15_000 // 15 seconds
 // Shared global batch (singleton across components)
 const _batch: UserEventPayload[] = []
 let _flushTimer: ReturnType<typeof setInterval> | null = null
+let _listenersRegistered = false
 
 // Track which post IDs have already logged an impression this session
 const _impressedIds = new Set<string>()
@@ -28,6 +29,7 @@ export function apiClearEventLoggerState() {
     clearInterval(_flushTimer)
     _flushTimer = null
   }
+  _listenersRegistered = false
 }
 
 function _flush() {
@@ -43,8 +45,9 @@ function _ensureTimer() {
   if (_flushTimer) return
   _flushTimer = setInterval(_flush, FLUSH_INTERVAL_MS)
 
-  // Flush on page unload
-  if (typeof window !== 'undefined') {
+  // Flush on page unload — register only once across all component instances
+  if (!_listenersRegistered && typeof window !== 'undefined') {
+    _listenersRegistered = true
     window.addEventListener('visibilitychange', () => {
       if (document.visibilityState === 'hidden') _flush()
     })
