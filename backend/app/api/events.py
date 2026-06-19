@@ -45,7 +45,7 @@ async def log_events_batch(
     req: BatchEventsRequest,
     user: User = Depends(require_user),
     db: AsyncSession = Depends(get_db),
-    _rl=Depends(rate_limit("events", max_requests=10, window_seconds=60)),
+    _rl=Depends(rate_limit("events", max_requests=30, window_seconds=60)),
 ):
     """Log a batch of user events. Fire-and-forget from frontend.
     Only logs if user has given data_consent.
