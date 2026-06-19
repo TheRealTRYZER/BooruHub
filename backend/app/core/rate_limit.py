@@ -6,12 +6,21 @@ Usage as a dependency:
 """
 import time
 import asyncio
+import ipaddress
 from collections import defaultdict
 from typing import Optional
 
 from fastapi import Request, HTTPException, status
 
 from app.core.config import get_settings
+
+
+def _is_valid_ip(ip: str) -> bool:
+    try:
+        ipaddress.ip_address(ip)
+        return True
+    except ValueError:
+        return False
 
 
 class _SlidingWindow:
@@ -35,18 +44,35 @@ class _SlidingWindow:
         async with self._lock:
             timestamps = self._windows[key]
             # Prune old entries
-            self._windows[key] = [t for t in timestamps if t > cutoff]
-            timestamps = self._windows[key]
+            pruned_timestamps = [t for t in timestamps if t > cutoff]
 
-            if len(timestamps) >= max_requests:
+            if len(pruned_timestamps) >= max_requests:
+                if pruned_timestamps:
+                    self._windows[key] = pruned_timestamps
+                else:
+                    self._windows.pop(key, None)
                 return False
 
-            timestamps.append(now)
+            pruned_timestamps.append(now)
+            self._windows[key] = pruned_timestamps
 
-            # Evict oldest keys if we have too many
+            # Evict oldest keys if we have too many (B-M2)
             if len(self._windows) > self._max_keys:
-                oldest_key = min(self._windows, key=lambda k: self._windows[k][-1] if self._windows[k] else 0)
-                del self._windows[oldest_key]
+                # 1. Prune all empty/expired keys first
+                for k in list(self._windows.keys()):
+                    self._windows[k] = [t for t in self._windows[k] if t > cutoff]
+                    if not self._windows[k]:
+                        self._windows.pop(k, None)
+
+                # 2. If still over limit, evict keys that are out of their window
+                if len(self._windows) > self._max_keys:
+                    candidates = [
+                        k for k, v in self._windows.items()
+                        if not v or now - v[-1] > window_seconds
+                    ]
+                    if candidates:
+                        oldest_key = min(candidates, key=lambda k: self._windows[k][-1] if self._windows[k] else 0)
+                        del self._windows[oldest_key]
 
             return True
 
@@ -62,8 +88,13 @@ def _get_client_ip(request: Request) -> str:
 
     forwarded = request.headers.get("x-forwarded-for")
     if forwarded and remote_addr in trusted_proxies:
-        return forwarded.split(",")[0].strip()
-    return remote_addr
+        first_ip = forwarded.split(",")[0].strip()
+        if _is_valid_ip(first_ip):
+            return first_ip
+
+    if _is_valid_ip(remote_addr):
+        return remote_addr
+    return "127.0.0.1"
 
 
 def rate_limit(

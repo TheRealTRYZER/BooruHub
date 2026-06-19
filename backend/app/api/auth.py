@@ -1,9 +1,10 @@
-"""Auth API — register, login, current user."""
 from datetime import datetime, timezone, timedelta
+import re
 from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, EmailStr, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, update, delete
+from sqlalchemy.exc import IntegrityError
 
 from app.db.database import get_db
 from app.db.models import User, UserTagMapping, RefreshToken
@@ -28,13 +29,12 @@ class AuthUserResponse(BaseModel):
 class RegisterRequest(BaseModel):
     username: str = Field(min_length=3, max_length=50)
     email: EmailStr
-    password: str = Field(min_length=6, max_length=128)
-    data_consent: bool = True
+    password: str = Field(min_length=8, max_length=128)
+    data_consent: bool = False
 
     @field_validator("username")
     @classmethod
     def username_alphanumeric(cls, v: str) -> str:
-        import re
         if not re.match(r"^[a-zA-Z0-9_-]+$", v):
             raise ValueError("Username may only contain letters, digits, underscores and hyphens")
         return v
@@ -63,50 +63,57 @@ async def register(
     db: AsyncSession = Depends(get_db),
     _rl=Depends(rate_limit("register", max_requests=3, window_seconds=60)),
 ):
-    # Existing checks
-    existing_q = await db.execute(
-        select(User).where((User.username == req.username) | (User.email == req.email))
-    )
-    if existing_q.scalar_one_or_none():
+    try:
+        # Existing checks
+        existing_q = await db.execute(
+            select(User).where((User.username == req.username) | (User.email == req.email))
+        )
+        if existing_q.scalar_one_or_none():
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT, 
+                detail="Username or email already taken"
+            )
+
+        # 1. Create User
+        user = User(
+            username=req.username,
+            email=req.email,
+            password_hash=hash_password(req.password),
+            default_tags=DEFAULT_USER_TAGS,
+            data_consent=req.data_consent,
+        )
+        db.add(user)
+        await db.flush()  # Get ID without committing whole transaction
+
+        # 2. Add Starter Tag Mappings
+        mappings = [
+            UserTagMapping(
+                user_id=user.id,
+                unitag=m["unitag"],
+                danbooru_tags=m["danbooru_tags"],
+                e621_tags=m["e621_tags"],
+                rule34_tags=m["rule34_tags"] or ""
+            ) for m in STARTER_MAPPINGS
+        ]
+        db.add_all(mappings)
+        
+        token = create_access_token({"sub": str(user.id)})
+        refresh = create_refresh_token({"sub": str(user.id)})
+
+        db_refresh = RefreshToken(
+            user_id=user.id,
+            token_hash=hash_refresh_token(refresh),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+        )
+        db.add(db_refresh)
+
+        await db.commit()
+    except IntegrityError:
+        await db.rollback()
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, 
+            status_code=status.HTTP_409_CONFLICT,
             detail="Username or email already taken"
         )
-
-    # 1. Create User
-    user = User(
-        username=req.username,
-        email=req.email,
-        password_hash=hash_password(req.password),
-        default_tags=DEFAULT_USER_TAGS,
-        data_consent=req.data_consent,
-    )
-    db.add(user)
-    await db.flush()  # Get ID without committing whole transaction
-
-    # 2. Add Starter Tag Mappings
-    mappings = [
-        UserTagMapping(
-            user_id=user.id,
-            unitag=m["unitag"],
-            danbooru_tags=m["danbooru_tags"],
-            e621_tags=m["e621_tags"],
-            rule34_tags=m["rule34_tags"] or ""
-        ) for m in STARTER_MAPPINGS
-    ]
-    db.add_all(mappings)
-    
-    token = create_access_token({"sub": str(user.id)})
-    refresh = create_refresh_token({"sub": str(user.id)})
-
-    db_refresh = RefreshToken(
-        user_id=user.id,
-        token_hash=hash_refresh_token(refresh),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
-    )
-    db.add(db_refresh)
-
-    await db.commit()
     await db.refresh(user)
 
     return TokenResponse(
@@ -148,6 +155,15 @@ async def login(
         expires_at=datetime.now(timezone.utc) + timedelta(days=30),
     )
     db.add(db_refresh)
+    
+    # B-M1: Clean up expired and old revoked tokens
+    await db.execute(
+        delete(RefreshToken).where(
+            (RefreshToken.expires_at < datetime.now(timezone.utc)) |
+            ((RefreshToken.revoked == True) & (RefreshToken.created_at < datetime.now(timezone.utc) - timedelta(days=30)))
+        )
+    )
+    
     await db.commit()
 
     return TokenResponse(
@@ -184,12 +200,30 @@ async def refresh_token(
     token_hash = hash_refresh_token(req.refresh_token)
     stmt = select(RefreshToken).where(
         RefreshToken.token_hash == token_hash,
-        RefreshToken.revoked == False,  # noqa: E712
-        RefreshToken.expires_at > datetime.now(timezone.utc),
-    )
+    ).with_for_update()
     result = await db.execute(stmt)
     db_token = result.scalar_one_or_none()
+    
     if not db_token:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or revoked refresh token",
+        )
+
+    if db_token.revoked:
+        # Replay attack: revoke all refresh tokens for this user
+        await db.execute(
+            update(RefreshToken)
+            .where(RefreshToken.user_id == db_token.user_id)
+            .values(revoked=True)
+        )
+        await db.commit()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or revoked refresh token",
+        )
+
+    if db_token.expires_at < datetime.now(timezone.utc):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or revoked refresh token",
@@ -214,6 +248,15 @@ async def refresh_token(
         expires_at=datetime.now(timezone.utc) + timedelta(days=30),
     )
     db.add(new_db_refresh)
+    
+    # B-M1: Clean up expired and old revoked tokens
+    await db.execute(
+        delete(RefreshToken).where(
+            (RefreshToken.expires_at < datetime.now(timezone.utc)) |
+            ((RefreshToken.revoked == True) & (RefreshToken.created_at < datetime.now(timezone.utc) - timedelta(days=30)))
+        )
+    )
+    
     await db.commit()
 
     return {
