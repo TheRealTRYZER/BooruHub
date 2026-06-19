@@ -65,20 +65,46 @@ _cache = _LRUCache()
 #  Per-user/per-site pacing                                                   #
 # --------------------------------------------------------------------------- #
 
+class TrackedLock(asyncio.Lock):
+    def __init__(self) -> None:
+        super().__init__()
+        self.last_used = time.monotonic()
+        self.in_use_count = 0
+
+    async def __aenter__(self) -> None:
+        self.in_use_count += 1
+        self.last_used = time.monotonic()
+        await super().__aenter__()
+
+    async def __aexit__(self, exc_type, exc_val, exc_tb) -> None:
+        try:
+            await super().__aexit__(exc_type, exc_val, exc_tb)
+        finally:
+            self.in_use_count -= 1
+            self.last_used = time.monotonic()
+
+
 _MAX_LOCKS = 256
-_user_locks: Dict[tuple, asyncio.Lock] = {}
+_user_locks: Dict[tuple, TrackedLock] = {}
 _last_search: Dict[tuple, float] = {}
 
 
-def _get_lock(key: tuple) -> asyncio.Lock:
+def _get_lock(key: tuple) -> TrackedLock:
     """Get or create a lock for the given (user_id, site) key, with bounded size."""
     if key not in _user_locks:
         if len(_user_locks) >= _MAX_LOCKS:
-            # Evict oldest entry
-            oldest = next(iter(_user_locks))
-            del _user_locks[oldest]
-            _last_search.pop(oldest, None)
-        _user_locks[key] = asyncio.Lock()
+            # Find candidate locks that are not in use/held
+            candidates = [
+                (k, l) for k, l in _user_locks.items()
+                if l.in_use_count == 0 and not l.locked()
+            ]
+            if candidates:
+                oldest_key, _ = min(candidates, key=lambda item: item[1].last_used)
+                del _user_locks[oldest_key]
+                _last_search.pop(oldest_key, None)
+        _user_locks[key] = TrackedLock()
+    else:
+        _user_locks[key].last_used = time.monotonic()
     return _user_locks[key]
 
 
@@ -109,8 +135,8 @@ async def search_posts(
         else:
             timeout = 10.0
 
-    # Cache lookup
-    cache_key = (site, tags, limit, page, user.id if user else None)
+    # Cache lookup (B-L7: include timeout in cache key)
+    cache_key = (site, tags, limit, page, timeout, user.id if user else None)
     cached = await _cache.get(cache_key)
     if cached is not None:
         return cached

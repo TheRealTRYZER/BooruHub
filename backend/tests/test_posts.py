@@ -112,12 +112,14 @@ async def test_bounded_set():
     added = await bset.add_many([2, 3])
     assert added == [3]
     
-    # Eviction should clear and keep the new batch if maxsize is exceeded
+    # Eviction should keep the most recent elements up to maxsize (B-L5)
     added = await bset.add_many([4, 5, 6, 7])
     assert len(added) == 4
-    # The set cleared and contains 4, 5, 6, 7
     assert 1 not in bset
-    assert 4 in bset
+    assert 4 not in bset
+    assert 5 in bset
+    assert 6 in bset
+    assert 7 in bset
 
 
 
