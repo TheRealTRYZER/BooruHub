@@ -108,3 +108,41 @@ async def test_danbooru_handle_error_response_strip_auth():
     assert "api_key" not in called_params
     assert called_params["tags"] == "order:score"
 
+
+@pytest.mark.asyncio
+async def test_danbooru_circuit_breaker():
+    from unittest.mock import AsyncMock, MagicMock, patch
+    import httpx
+
+    db = Danbooru()
+
+    # Mock client and call
+    mock_client = AsyncMock(spec=httpx.AsyncClient)
+    mock_client.get.side_effect = httpx.RequestError("Network error")
+
+    with patch.object(db, "_get_client", return_value=mock_client):
+        # 1. Trigger 5 failures
+        for _ in range(5):
+            posts, total = await db.fetch_posts(tags="1girl", page=1, limit=40, user=None)
+            assert posts == []
+            assert total == -1
+
+        # 2. Next call should skip fetch because circuit is broken
+        posts, total = await db.fetch_posts(tags="1girl", page=1, limit=40, user=None)
+        assert posts == []
+        assert total == -1
+
+        # 3. Reset circuit broken state manually to test recovery
+        db._circuit_broken_until = None
+        
+        # Configure client to succeed
+        mock_resp = MagicMock(spec=httpx.Response)
+        mock_resp.status_code = 200
+        mock_resp.json.return_value = [{"id": 1, "file_url": "url", "tag_string": "tags"}]
+        mock_client.get.side_effect = None
+        mock_client.get.return_value = mock_resp
+
+        posts, total = await db.fetch_posts(tags="1girl", page=1, limit=40, user=None)
+        assert len(posts) == 1
+        assert db._consecutive_failures == 0
+

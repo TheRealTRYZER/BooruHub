@@ -16,6 +16,9 @@ from app.db.models import User
 logger = logging.getLogger(__name__)
 
 
+import datetime
+import asyncio
+
 class Danbooru(BaseBooru):
     def __init__(self) -> None:
         super().__init__()
@@ -25,6 +28,39 @@ class Danbooru(BaseBooru):
         self.auth_fields = [
             ("danbooru_login", "danbooru_api_key", "DANBOORU_LOGIN", "DANBOORU_API_KEY"),
         ]
+        # Circuit Breaker state
+        self._consecutive_failures = 0
+        self._circuit_broken_until = None
+
+    async def fetch_posts(
+        self,
+        tags: str,
+        page: int,
+        limit: int,
+        user: Optional[User],
+        timeout: float = 30.0,
+    ) -> Tuple[List[dict], int]:
+        """Wrap fetch_posts in a circuit breaker check."""
+        if self._circuit_broken_until and datetime.datetime.now(datetime.timezone.utc) < self._circuit_broken_until:
+            logger.warning("Danbooru circuit breaker is active. Skipping request.")
+            return [], -1
+
+        try:
+            posts, total = await super().fetch_posts(tags, page, limit, user, timeout)
+            if total == -1:
+                self._consecutive_failures += 1
+                if self._consecutive_failures >= 5:
+                    self._circuit_broken_until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=60)
+                    logger.error(f"Danbooru consecutive failures reached {self._consecutive_failures}. Circuit breaker tripped for 60 seconds.")
+            else:
+                self._consecutive_failures = 0
+            return posts, total
+        except Exception as e:
+            self._consecutive_failures += 1
+            if self._consecutive_failures >= 5:
+                self._circuit_broken_until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=60)
+                logger.error(f"Danbooru consecutive failures reached {self._consecutive_failures}. Circuit breaker tripped for 60 seconds.")
+            raise e
 
     def prepare_tags(self, tags: str) -> Tuple[str, List[str]]:
         """Split tags into API-compatible (max 2) and local-filtering tags.
@@ -78,7 +114,9 @@ class Danbooru(BaseBooru):
         params: dict,
         original_tags: str,
     ) -> httpx.Response:
-        """Handle Danbooru 500 by attempting progressive score floors and/or stripping auth."""
+        """Handle Danbooru 500 by attempting progressive score floors and/or stripping auth.
+        Caps retries to at most 2 attempts with exponential backoff.
+        """
         if resp.status_code == 500 and "order:score" in params.get("tags", ""):
             logger.info("Danbooru 500 -> trying score floors and/or stripping auth")
             
@@ -87,42 +125,42 @@ class Danbooru(BaseBooru):
             filtered_words = [w for w in orig_words if not w.lower().startswith("score:")]
             base_tags = " ".join(filtered_words)
 
-            # Step 1: Try stripping auth first with the same query (hitting cached read replica)
+            retries_attempted = 0
+            max_retries = 2
+            backoff = 1.0
+
+            # Retry Option 1: Strip credentials (if present)
             if "login" in params or "api_key" in params:
                 no_auth_params = {k: v for k, v in params.items() if k not in ("login", "api_key")}
+                retries_attempted += 1
                 try:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2.0
                     r = await client.get(url, params=no_auth_params)
                     if r.status_code == 200:
                         logger.info("Danbooru 500 -> resolved by stripping auth")
                         return r
                 except Exception as e:
                     logger.warning(f"Danbooru retry without auth failed: {e}")
-            
-            # Step 2: Progressive score floors starting at 250 and raising (both without and with auth)
-            for floor in (250, 500, 1000, 2000):
-                retry_tags = f"{base_tags} score:>={floor}"
-                # Try without auth first as it's much more likely to succeed
-                if "login" in params or "api_key" in params:
-                    retry_params_no_auth = {
-                        k: v for k, v in params.items() if k not in ("login", "api_key")
-                    }
-                    retry_params_no_auth["tags"] = retry_tags
-                    try:
-                        r = await client.get(url, params=retry_params_no_auth)
-                        if r.status_code == 200:
-                            logger.info(f"Danbooru 500 -> resolved with floor {floor} (no auth)")
-                            return r
-                    except Exception as e:
-                        logger.warning(f"Danbooru retry failed for floor {floor} without auth: {e}")
-                # Fallback to with auth
-                retry_params = {**params, "tags": retry_tags}
+
+            # Retry Option 2: Fall back to progressive score floors (without auth)
+            floors = [500, 1000] if ("login" in params or "api_key" in params) else [250, 500]
+            for floor in floors:
+                if retries_attempted >= max_retries:
+                    break
+                
+                retry_params = {k: v for k, v in params.items() if k not in ("login", "api_key")}
+                retry_params["tags"] = f"{base_tags} score:>={floor}"
+                retries_attempted += 1
                 try:
+                    await asyncio.sleep(backoff)
+                    backoff *= 2.0
                     r = await client.get(url, params=retry_params)
                     if r.status_code == 200:
-                        logger.info(f"Danbooru 500 -> resolved with floor {floor} (with auth)")
+                        logger.info(f"Danbooru 500 -> resolved with floor {floor} (no auth)")
                         return r
                 except Exception as e:
-                    logger.warning(f"Danbooru retry failed for floor {floor}: {e}")
+                    logger.warning(f"Danbooru retry failed for floor {floor} without auth: {e}")
         return resp
 
     def normalize_post(self, raw: dict) -> Optional[dict]:

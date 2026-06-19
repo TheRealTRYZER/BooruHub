@@ -29,7 +29,7 @@ class Rule34(BaseBooru):
         self.max_per_page = 1000
         self.page_param = "pid"
         self.start_page = 0
-        self.user_agent = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+        self.user_agent = "BooruHub/1.1.0"
         self.default_params = {
             "page": "dapi",
             "s": "post",
