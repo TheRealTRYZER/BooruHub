@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     E621_API_KEY: str = ""
     RULE34_API_KEY: str = ""
     RULE34_USER_ID: str = ""
+    enable_remote_autocomplete: bool = True
 
 
     @computed_field  # type: ignore[prop-decorator]

@@ -104,7 +104,12 @@ class TestJWT:
         token = "some_random_refresh_token_to_hash_123"
         hashed = security.hash_refresh_token(token)
         assert len(hashed) == 64
+        import hmac
         import hashlib
-        expected = hashlib.sha256(token.encode()).hexdigest()
+        expected = hmac.new(
+            ("x" * 64).encode(),
+            token.encode(),
+            hashlib.sha256
+        ).hexdigest()
         assert hashed == expected
 

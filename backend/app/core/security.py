@@ -1,6 +1,7 @@
 """JWT, password hashing, and API-key encryption utilities."""
 import base64
 import hashlib
+import hmac
 import logging
 from datetime import datetime, timedelta, timezone
 from typing import Optional
@@ -14,33 +15,12 @@ from app.core.config import get_settings
 logger = logging.getLogger(__name__)
 
 
-def _derive_fernet_key(secret: str) -> bytes:
-    """Legacy 32-byte padding for backward compatibility."""
-    key = secret.encode()
-    if len(key) < 32:
-        key = key.ljust(32, b"0")
-    return base64.urlsafe_b64encode(key[:32])
-
-
-def _derive_fernet_key_secure(secret: str) -> bytes:
-    """Secure derivation using PBKDF2."""
-    salt = b"booruhub_crypto_salt_2024"
-    key = hashlib.pbkdf2_hmac("sha256", secret.encode(), salt, 100000)
-    return base64.urlsafe_b64encode(key)
-
-
-def _is_fernet_key(value: str) -> bool:
+def is_fernet_key(value: str) -> bool:
+    """Check if the provided string is a valid 32-byte urlsafe-base64 key."""
     try:
         return len(base64.urlsafe_b64decode(value.encode())) == 32
     except Exception:
         return False
-
-
-def _build_fernet_variants(secret: str) -> list[Fernet]:
-    variants = [Fernet(_derive_fernet_key_secure(secret)), Fernet(_derive_fernet_key(secret))]
-    if _is_fernet_key(secret):
-        variants.insert(0, Fernet(secret.encode()))
-    return variants
 
 
 def _get_encryption_fernets() -> list[Fernet]:
@@ -50,9 +30,6 @@ def _get_encryption_fernets() -> list[Fernet]:
     if settings.ENCRYPTION_KEY:
         key_sources.append(settings.ENCRYPTION_KEY)
     key_sources.extend(settings.encryption_key_fallback_list)
-    # If no other keys are configured, fallback to JWT_SECRET to keep legacy credentials decryptable
-    if not key_sources and settings.JWT_SECRET:
-        key_sources.append(settings.JWT_SECRET)
 
     seen: set[str] = set()
     fernets: list[Fernet] = []
@@ -60,7 +37,8 @@ def _get_encryption_fernets() -> list[Fernet]:
         if source in seen:
             continue
         seen.add(source)
-        fernets.extend(_build_fernet_variants(source))
+        if is_fernet_key(source):
+            fernets.append(Fernet(source.encode()))
     return fernets
 
 
@@ -91,11 +69,25 @@ def decrypt_key(encrypted_text: str) -> str:
 
 
 def hash_password(password: str) -> str:
-    return bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode()
+    """Hash password pre-hashed with SHA-256 to avoid bcrypt 72-byte truncation."""
+    pre_hashed = hashlib.sha256(password.encode()).hexdigest()
+    return bcrypt.hashpw(pre_hashed.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    return bcrypt.checkpw(password.encode(), hashed.encode())
+    """Verify password with SHA-256 pre-hashing and legacy fallback support."""
+    pre_hashed = hashlib.sha256(password.encode()).hexdigest()
+    try:
+        if bcrypt.checkpw(pre_hashed.encode(), hashed.encode()):
+            return True
+    except Exception:
+        pass
+    
+    # Fallback to legacy verify without SHA-256 pre-hashing
+    try:
+        return bcrypt.checkpw(password.encode(), hashed.encode())
+    except Exception:
+        return False
 
 
 _REFRESH_EXPIRE_DAYS = 30
@@ -109,6 +101,8 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     )
     to_encode["exp"] = expire
     to_encode["type"] = "access"
+    to_encode["iss"] = "booruhub"
+    to_encode["aud"] = "booruhub_users"
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -116,7 +110,11 @@ def decode_access_token(token: str) -> Optional[dict]:
     settings = get_settings()
     try:
         payload = jwt.decode(
-            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
+            issuer="booruhub",
+            audience="booruhub_users",
         )
         if payload.get("type") == "refresh":
             return None
@@ -132,6 +130,8 @@ def create_refresh_token(data: dict) -> str:
     expire = datetime.now(timezone.utc) + timedelta(days=_REFRESH_EXPIRE_DAYS)
     to_encode["exp"] = expire
     to_encode["type"] = "refresh"
+    to_encode["iss"] = "booruhub"
+    to_encode["aud"] = "booruhub_users"
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -140,7 +140,11 @@ def decode_refresh_token(token: str) -> Optional[dict]:
     settings = get_settings()
     try:
         payload = jwt.decode(
-            token, settings.JWT_SECRET, algorithms=[settings.JWT_ALGORITHM]
+            token,
+            settings.JWT_SECRET,
+            algorithms=[settings.JWT_ALGORITHM],
+            issuer="booruhub",
+            audience="booruhub_users",
         )
         if payload.get("type") != "refresh":
             return None
@@ -150,6 +154,10 @@ def decode_refresh_token(token: str) -> Optional[dict]:
 
 
 def hash_refresh_token(token: str) -> str:
-    """Hash a refresh token using SHA-256."""
-    return hashlib.sha256(token.encode()).hexdigest()
-
+    """Hash a refresh token using HMAC keyed by JWT_SECRET."""
+    settings = get_settings()
+    return hmac.new(
+        settings.JWT_SECRET.encode(),
+        token.encode(),
+        hashlib.sha256
+    ).hexdigest()
