@@ -7,6 +7,7 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
+    COOKIE_SECURE: bool = True
 
     # Database
     DATABASE_URL: str = ""

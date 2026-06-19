@@ -8,6 +8,7 @@ from sqlalchemy import select, update, delete
 from sqlalchemy.exc import IntegrityError
 
 from app.db.database import get_db
+from app.core.config import get_settings
 from app.db.models import User, UserTagMapping, RefreshToken
 from app.core.security import (
     hash_password, verify_password, create_access_token, create_refresh_token,
@@ -118,8 +119,9 @@ async def register(
         )
     await db.refresh(user)
 
-    response.set_cookie("access_token", token, httponly=True, secure=True, samesite="strict", path="/")
-    response.set_cookie("refresh_token", refresh, httponly=True, secure=True, samesite="strict", path="/")
+    settings = get_settings()
+    response.set_cookie("access_token", token, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
+    response.set_cookie("refresh_token", refresh, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
 
     return TokenResponse(
         access_token=token,
@@ -172,8 +174,9 @@ async def login(
     
     await db.commit()
 
-    response.set_cookie("access_token", token, httponly=True, secure=True, samesite="strict", path="/")
-    response.set_cookie("refresh_token", refresh, httponly=True, secure=True, samesite="strict", path="/")
+    settings = get_settings()
+    response.set_cookie("access_token", token, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
+    response.set_cookie("refresh_token", refresh, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
 
     return TokenResponse(
         access_token=token,
@@ -277,8 +280,9 @@ async def refresh_token(
     
     await db.commit()
 
-    response.set_cookie("access_token", new_access, httponly=True, secure=True, samesite="strict", path="/")
-    response.set_cookie("refresh_token", new_refresh, httponly=True, secure=True, samesite="strict", path="/")
+    settings = get_settings()
+    response.set_cookie("access_token", new_access, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
+    response.set_cookie("refresh_token", new_refresh, httponly=True, secure=settings.COOKIE_SECURE, samesite="strict", path="/")
 
     return {
         "access_token": new_access,
