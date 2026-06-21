@@ -232,6 +232,11 @@ async def refresh_token(
         )
 
     if db_token.revoked:
+        # Replay attack: revoke all tokens for this user
+        await db.execute(
+            update(RefreshToken).where(RefreshToken.user_id == db_token.user_id).values(revoked=True)
+        )
+        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or revoked refresh token",
@@ -299,7 +304,7 @@ async def logout(
     refresh_token_val = (req and req.refresh_token) or request.cookies.get("refresh_token")
     if refresh_token_val:
         token_hash = hash_refresh_token(refresh_token_val)
-        stmt = select(RefreshToken).where(RefreshToken.token_hash == token_hash)
+        stmt = select(RefreshToken).where(RefreshToken.token_hash == token_hash).with_for_update()
         result = await db.execute(stmt)
         db_token = result.scalar_one_or_none()
         if db_token:

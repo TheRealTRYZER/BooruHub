@@ -86,12 +86,12 @@ async def test_events_batch_rate_limit(client):
 
     payload = {"events": [{"type": "view", "post_id": "123"}]}
 
-    # First 10 requests should succeed (202 Accepted)
-    for _ in range(10):
+    # First 30 requests should succeed (202 Accepted)
+    for _ in range(30):
         response = await client.post("/api/events/batch", json=payload)
         assert response.status_code == 202
 
-    # 11th request should be rate-limited (429 Too Many Requests)
+    # 31st request should be rate-limited (429 Too Many Requests)
     response = await client.post("/api/events/batch", json=payload)
     assert response.status_code == 429
 
