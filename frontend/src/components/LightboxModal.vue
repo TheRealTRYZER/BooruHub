@@ -11,113 +11,76 @@
       <button ref="closeBtnRef" class="lightbox-close-btn" @click="closeLightbox" :title="lang.t('close')">×</button>
 
       <!-- Left Navigation Arrow -->
-      <button v-if="hasPrev" class="lightbox-nav-btn left" @click="prevPost" :title="lang.t('prev_title')">‹</button>
+      <button v-if="hasPrev" 
+              class="lightbox-nav-btn left" 
+              :class="{ 'shifted-right': relationshipPosts.length > 1 }"
+              @click="prevPost" 
+              :title="lang.t('prev_title')">‹</button>
+
+      <!-- Parent/Child Relationships Panel -->
+      <LightboxRelationships 
+        :displayed-post="displayedPost"
+        :relationship-posts="relationshipPosts"
+        @navigate="navigateToPost"
+      />
 
       <!-- Center Media Container (Perfect Center) -->
-      <div class="lightbox-media-container" 
-           @click.self="closeLightbox"
-           @touchstart="onTouchStart" 
-           @touchmove="onTouchMove" 
-           @touchend="onTouchEnd"
-           :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s ease-out' }">
-        
-        <!-- Video Player -->
-        <video v-if="isVideo" 
+      <div class="lightbox-content-wrapper" @click.self="closeLightbox">
+        <div class="lightbox-media-container" 
+             @click.self="closeLightbox"
+             @touchstart="onTouchStart" 
+             @touchmove="onTouchMove" 
+             @touchend="onTouchEnd"
+             :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s ease-out' }">
+          
+          <!-- Video Player -->
+          <video v-if="isVideo" 
+                 :key="mediaUrl" 
+                 :src="mediaUrl" 
+                 controls 
+                 loop 
+                 autoplay 
+                 muted 
+                 class="lightbox-media video"></video>
+                 
+          <!-- Standard Image -->
+          <img v-else 
                :key="mediaUrl" 
                :src="mediaUrl" 
-               controls 
-               loop 
-               autoplay 
-               muted 
-               class="lightbox-media video"></video>
-               
-        <!-- Standard Image -->
-        <img v-else 
-             :key="mediaUrl" 
-             :src="mediaUrl" 
-             :alt="altText" 
-             class="lightbox-media image" 
-             @click="toggleZoom"
-             :class="{ zoomed: isZoomed }" />
-      </div>
-
-      <!-- Right Column: Glassmorphic Tags Sidebar (Absolutely Positioned Far Right Edge) -->
-      <div class="lightbox-sidebar">
-        <h3 class="sidebar-title">{{ lang.t('tags_count') }} ({{ displayedPost.tags?.length || 0 }})</h3>
-        <div class="lightbox-tags-list">
-          <div v-for="group in groupedTags" :key="group.key" class="lightbox-tag-group">
-            <div class="lightbox-tag-group-title" :class="group.key">
-              {{ group.title }} ({{ group.allTags.length }})
-            </div>
-            <div class="lightbox-tag-group-chips">
-              <span v-for="tag in group.tags" 
-                    :key="tag" 
-                    class="tag-chip" 
-                    :class="group.key"
-                    role="button"
-                    tabindex="0"
-                    @click="searchTag(tag)"
-                    @keydown.enter.prevent="searchTag(tag)"
-                    @keydown.space.prevent="searchTag(tag)">
-                {{ tag.replace(/_/g, ' ') }}
-              </span>
-              <span v-if="group.hasMore" 
-                    class="tag-chip lightbox-tag-more" 
-                    role="button"
-                    tabindex="0"
-                    style="cursor: pointer; opacity: 0.8;"
-                    @click="toggleGroupExpand(group.key)"
-                    @keydown.enter.prevent="toggleGroupExpand(group.key)"
-                    @keydown.space.prevent="toggleGroupExpand(group.key)">
-                {{ group.isExpanded ? '« Less' : '» More (' + (group.allTags.length - group.tags.length) + ')' }}
-              </span>
-            </div>
-          </div>
+               :alt="altText" 
+               class="lightbox-media image" 
+               @click="toggleZoom"
+               :class="{ zoomed: isZoomed }" />
         </div>
       </div>
 
-      <!-- Actions Panel: Under Media (Absolutely Positioned Bottom Center) -->
-      <div class="lightbox-actions-panel">
-        <button class="btn btn-glass" :class="{ 'btn-fav-active': isFav }" @click="toggleFav">
-          {{ isFav ? '❤️ ' + lang.t('nav_favorites') : '🤍 ' + lang.t('nav_favorites') }}
-        </button>
-        <button class="btn btn-glass" :class="{ 'btn-dislike-active': isDisliked }" @click="toggleDislike">
-          👎
-        </button>
-        <button class="btn btn-glass" @click="downloadFile">
-          ⬇️ {{ lang.t('download') }}
-        </button>
-        <button class="btn btn-glass" @click="openOriginal">
-          🔗 {{ lang.t('original') }}
-        </button>
-      </div>
+      <!-- Right Column: Glassmorphic Tags Sidebar -->
+      <LightboxSidebar 
+        :displayed-post="displayedPost"
+        @search-tag="searchTag"
+      />
+
+      <!-- Actions Panel: Under Media -->
+      <LightboxActions 
+        :is-fav="isFav"
+        :is-disliked="isDisliked"
+        @toggle-fav="toggleFav"
+        @toggle-dislike="toggleDislike"
+        @download="downloadFile"
+        @open-original="openOriginal"
+      />
 
       <!-- Right Navigation Arrow -->
       <button v-if="hasNext" class="lightbox-nav-btn right" @click="nextPost" :title="lang.t('next_title')">›</button>
 
       <!-- Dynamic Header Info (Glassmorphic) -->
-      <div class="lightbox-header">
-        <div class="lightbox-header-left">
-          <span v-for="site in allSites" 
-                :key="site" 
-                class="lightbox-site-badge" 
-                :class="[site, { 'interactive-badge': allSites.length > 1, 'active-site': allSites.length > 1 && activeSite === site }]"
-                :title="allSites.length > 1 ? lang.t('switch_version', { site }) : ''"
-                :role="allSites.length > 1 ? 'button' : undefined"
-                :tabindex="allSites.length > 1 ? 0 : undefined"
-                @click="allSites.length > 1 ? switchActiveSite(site) : null"
-                @keydown.enter.stop.prevent="allSites.length > 1 ? switchActiveSite(site) : null"
-                @keydown.space.stop.prevent="allSites.length > 1 ? switchActiveSite(site) : null">
-            {{ site === activePost.source_site ? site : '+ ' + site }}
-          </span>
-          <span class="lightbox-id">#{{ displayedPost.id }}</span>
-          <span class="lightbox-rating" :class="ratingClass" :aria-label="'Rating: ' + ratingLabel">{{ ratingLabel }}</span>
-        </div>
-        <div class="lightbox-header-right">
-          <span v-if="displayedPost.score !== undefined" class="lightbox-score">★ {{ displayedPost.score }}</span>
-          <span class="lightbox-resolution">{{ displayedPost.width }}x{{ displayedPost.height }}</span>
-        </div>
-      </div>
+      <LightboxHeader 
+        :displayed-post="displayedPost"
+        :active-post="activePost"
+        :all-sites="allSites"
+        :active-site="activeSite"
+        @switch-site="switchActiveSite"
+      />
 
     </div>
   </Transition>
@@ -129,10 +92,14 @@ import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
-import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite } from '../api'
-import { RATING_MAP, RATING_LABELS } from '../types'
+import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite, apiSearch } from '../api'
 import { sanitizeUrl, escapeCssString } from '../utils/security'
-import type { Post, RatingClass, SiteName } from '../types'
+import type { Post, SiteName } from '../types'
+
+import LightboxHeader from './LightboxHeader.vue'
+import LightboxSidebar from './LightboxSidebar.vue'
+import LightboxActions from './LightboxActions.vue'
+import LightboxRelationships from './LightboxRelationships.vue'
 
 const props = defineProps<{
   post: Post
@@ -148,14 +115,20 @@ const auth = useAuthStore()
 const toast = useToastStore()
 const lang = useLangStore()
 
+const localPosts = ref<Post[]>([...props.posts])
+
+watch(() => props.posts, (newVal) => {
+  localPosts.value = [...newVal]
+})
+
 // Keep internal state of the active index in the array of posts
-const activeIndex = ref(props.posts.findIndex(p => 
+const activeIndex = ref(localPosts.value.findIndex(p => 
   (String(p.id) === String(props.post.id) && p.source_site === props.post.source_site) ||
   p.duplicates?.some(d => String(d.id) === String(props.post.id) && d.source_site === props.post.source_site)
 ))
 if (activeIndex.value === -1) activeIndex.value = 0
 
-const activePost = computed<Post>(() => props.posts[activeIndex.value] || props.post)
+const activePost = computed<Post>(() => localPosts.value[activeIndex.value] || props.post)
 
 // Active duplicate/version state
 const activeSite = ref<SiteName>(props.post.source_site)
@@ -172,6 +145,113 @@ const allSites = computed<SiteName[]>(() => {
   }
   return list
 })
+
+// Sibling/Parent relationships state
+const relationshipPosts = ref<Post[]>([])
+const loadingRelationships = ref(false)
+
+async function loadRelationships() {
+  const post = displayedPost.value
+  if (!post) {
+    relationshipPosts.value = []
+    return
+  }
+
+  const pId = post.parent_id
+  const hasChildren = post.has_children
+
+  if (!pId && !hasChildren) {
+    relationshipPosts.value = []
+    return
+  }
+
+  loadingRelationships.value = true
+  try {
+    const postsMap = new Map<string, Post>()
+    const addPost = (p: Post) => {
+      const key = `${p.source_site}:${p.id}`
+      postsMap.set(key, p)
+    }
+
+    addPost(post)
+
+    if (pId) {
+      // 1. Fetch parent
+      try {
+        const parentRes = await apiSearch(`id:${pId}`, post.source_site, 1, 1, true)
+        if (parentRes.posts && parentRes.posts.length > 0) {
+          const firstParent = parentRes.posts[0]
+          if (firstParent) {
+            addPost(firstParent)
+          }
+        }
+      } catch (e) {
+        console.error("Error fetching parent post:", e)
+      }
+
+      // 2. Fetch siblings
+      try {
+        const childrenRes = await apiSearch(`parent:${pId}`, post.source_site, 1, 100, true)
+        if (childrenRes.posts) {
+          childrenRes.posts.forEach(addPost)
+        }
+      } catch (e) {
+        console.error("Error fetching sibling posts:", e)
+      }
+    } else if (hasChildren) {
+      // Fetch children
+      try {
+        const childrenRes = await apiSearch(`parent:${post.id}`, post.source_site, 1, 100, true)
+        if (childrenRes.posts) {
+          childrenRes.posts.forEach(addPost)
+        }
+      } catch (e) {
+        console.error("Error fetching children posts:", e)
+      }
+    }
+
+    const allPosts = Array.from(postsMap.values())
+    const targetParentId = pId || post.id
+    
+    // Sort: Parent always comes first, others sorted by numeric ID
+    allPosts.sort((a, b) => {
+      const aIsParent = String(a.id) === String(targetParentId)
+      const bIsParent = String(b.id) === String(targetParentId)
+      if (aIsParent) return -1
+      if (bIsParent) return 1
+      return Number(a.id) - Number(b.id)
+    })
+
+    relationshipPosts.value = allPosts
+  } catch (err) {
+    console.error("Error loading relationships:", err)
+  } finally {
+    loadingRelationships.value = false
+  }
+}
+
+function navigateToPost(p: Post) {
+  if (String(p.id) === String(displayedPost.value?.id)) return
+  
+  // Try to find in localPosts first
+  const idx = localPosts.value.findIndex(post => 
+    (String(post.id) === String(p.id) && post.source_site === p.source_site) ||
+    post.duplicates?.some(d => String(d.id) === String(p.id) && d.source_site === p.source_site)
+  )
+  
+  if (idx !== -1) {
+    activeIndex.value = idx
+    const foundPost = localPosts.value[idx]
+    if (foundPost) {
+      activeSite.value = p.source_site
+    }
+  } else {
+    // Insert the new post into localPosts right after the current activeIndex, and go there
+    localPosts.value.splice(activeIndex.value + 1, 0, p)
+    activeIndex.value++
+    activeSite.value = p.source_site
+  }
+}
 
 const displayedPost = computed<Post>(() => {
   const p = activePost.value
@@ -231,68 +311,9 @@ const altText = computed(() => {
   return `Post ${displayedPost.value.id} ${firstTag ? '- ' + firstTag.replace(/_/g, ' ') : ''} ${rating}`.trim()
 })
 
-const expandedGroups = ref<Record<string, boolean>>({})
-
-// Group post tags dynamically by category
-const groupedTags = computed(() => {
-  const post = displayedPost.value
-  if (!post || !post.tags) return []
-  
-  const categoriesOrder = ['artist', 'character', 'copyright', 'species', 'general', 'metadata', 'lore', 'invalid']
-  const groups: Record<string, string[]> = {}
-  for (const cat of categoriesOrder) {
-    groups[cat] = []
-  }
-  
-  const uncategorizedKey = 'general'
-  
-  for (const tag of post.tags) {
-    const cat = post.tags_metadata?.[tag] || uncategorizedKey
-    if (!groups[cat]) {
-      groups[cat] = []
-    }
-    groups[cat].push(tag)
-  }
-  
-  const categoryTitles: Record<string, string> = {
-    artist: '👤 Artists',
-    character: '🎭 Characters',
-    copyright: '📚 Copyrights',
-    species: '🐾 Species',
-    general: '🏷️ General Tags',
-    metadata: '⚙️ Metadata',
-    lore: '📜 Lore',
-    invalid: '❌ Invalid'
-  }
-  
-  return categoriesOrder
-    .map(cat => {
-      const allTags = groups[cat] || []
-      const limit = 15
-      const hasMore = allTags.length > limit
-      const tags = expandedGroups.value[cat] ? allTags : allTags.slice(0, limit)
-      return {
-        key: cat,
-        title: categoryTitles[cat] || cat,
-        tags,
-        allTags,
-        hasMore,
-        isExpanded: !!expandedGroups.value[cat]
-      }
-    })
-    .filter(g => g.allTags.length > 0)
-})
-
-function toggleGroupExpand(key: string) {
-  expandedGroups.value[key] = !expandedGroups.value[key]
-}
-
-const ratingClass = computed<RatingClass>(() => RATING_MAP[(displayedPost.value.rating || '').toLowerCase()] || 'unknown')
-const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
-
 // Sibling state
 const hasPrev = computed(() => activeIndex.value > 0)
-const hasNext = computed(() => activeIndex.value < props.posts.length - 1)
+const hasNext = computed(() => activeIndex.value < localPosts.value.length - 1)
 
 function prevPost() {
   if (hasPrev.value) {
@@ -524,6 +545,7 @@ watch(activePost, (newPost) => {
 
 watch(displayedPost, () => {
   checkFavoriteState()
+  loadRelationships()
 }, { immediate: true })
 
 onMounted(() => {
@@ -593,7 +615,7 @@ onUnmounted(() => {
   align-items: center;
   justify-content: center;
   transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
-  z-index: 9999;
+  z-index: 999;
   user-select: none;
 }
 .lightbox-nav-btn:hover {
@@ -603,12 +625,21 @@ onUnmounted(() => {
   transform: translateY(-50%) scale(1.06);
 }
 .lightbox-nav-btn.left { left: 32px; }
+.lightbox-nav-btn.left.shifted-right { left: 340px; }
 .lightbox-nav-btn.right { right: 340px; }
 
-/* Center Media Container (Perfect Center Alignment) */
+.lightbox-content-wrapper {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  height: 100%;
+}
+
 .lightbox-media-container {
-  max-width: 60vw;
-  max-height: 70vh;
+  max-width: calc(100vw - 690px);
+  max-height: calc(100vh - 200px);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -618,7 +649,7 @@ onUnmounted(() => {
 
 .lightbox-media {
   max-width: 100%;
-  max-height: 70vh;
+  max-height: calc(100vh - 200px);
   object-fit: contain;
   border-radius: 8px;
   box-shadow: 0 10px 40px rgba(0,0,0,0.6);
@@ -631,214 +662,6 @@ onUnmounted(() => {
   transform: scale(1.35);
   cursor: zoom-out;
   z-index: 1000;
-}
-
-/* Actions Panel: absolutely positioned at the bottom center */
-.lightbox-actions-panel {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  justify-content: center;
-  gap: 10px;
-  background: rgba(15, 15, 20, 0.55);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 12px 20px;
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  z-index: 999;
-}
-
-/* Glassmorphic Tags Sidebar: absolutely positioned far right */
-.lightbox-sidebar {
-  position: absolute;
-  right: 24px;
-  top: 80px;
-  bottom: 24px;
-  width: 300px;
-  background: rgba(15, 15, 20, 0.55);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 16px;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
-  z-index: 999;
-}
-
-.sidebar-title {
-  margin: 0;
-  font-size: 16px;
-  font-weight: 700;
-  color: #fff;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
-  padding-bottom: 8px;
-}
-
-.lightbox-tags-list {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  overflow-y: auto;
-  flex: 1;
-  padding-right: 4px;
-}
-.lightbox-tags-list::-webkit-scrollbar {
-  width: 4px;
-}
-.lightbox-tags-list::-webkit-scrollbar-track {
-  background: transparent;
-}
-.lightbox-tags-list::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.15);
-  border-radius: 2px;
-}
-.lightbox-tags-list::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.lightbox-tag-group {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  width: 100%;
-}
-
-.lightbox-tag-group-title {
-  font-size: 10px;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  margin-bottom: 2px;
-  opacity: 0.85;
-  user-select: none;
-}
-.lightbox-tag-group-title.artist { color: #f43f5e; }
-.lightbox-tag-group-title.character { color: #34d399; }
-.lightbox-tag-group-title.copyright { color: #a78bfa; }
-.lightbox-tag-group-title.species { color: #fb923c; }
-.lightbox-tag-group-title.general { color: #38bdf8; }
-.lightbox-tag-group-title.metadata { color: #fbbf24; }
-.lightbox-tag-group-title.lore, .lightbox-tag-group-title.invalid { color: #9ca3af; }
-
-.lightbox-tag-group-chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-}
-
-.lightbox-sidebar .tag-chip {
-  font-size: 11px;
-  padding: 3px 8px;
-  border-radius: 8px;
-  display: inline-block;
-  line-height: 1.2;
-}
-
-.lightbox-tag-more {
-  font-size: 11px;
-  color: var(--text-muted);
-  padding: 3px 4px;
-}
-
-/* Glassmorphic panels */
-.lightbox-header {
-  position: absolute;
-  top: 20px; left: 24px;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  padding: 10px 18px;
-  border-radius: 20px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 24px;
-  color: #fff;
-  z-index: 999;
-  font-size: 13px;
-  box-shadow: 0 4px 30px rgba(0, 0, 0, 0.2);
-}
-.lightbox-header-left, .lightbox-header-right {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-}
-
-.lightbox-site-badge {
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  padding: 2px 6px;
-  border-radius: 4px;
-}
-.lightbox-site-badge.danbooru { background: var(--danbooru); color: #fff; }
-.lightbox-site-badge.e621 { background: var(--e621); color: #fff; }
-.lightbox-site-badge.rule34 { background: var(--rule34); color: #222; }
-
-.lightbox-site-badge.interactive-badge {
-  cursor: pointer;
-  transition: all 0.15s ease;
-}
-.lightbox-site-badge.interactive-badge:hover {
-  transform: scale(1.08);
-  filter: brightness(1.2);
-}
-.lightbox-site-badge.interactive-badge.active-site {
-  box-shadow: 0 0 0 2px rgba(15, 15, 20, 0.6), 0 0 0 3px var(--accent);
-  transform: scale(1.1);
-  font-weight: 800;
-  z-index: 2;
-}
-
-.lightbox-rating {
-  font-size: 9px;
-  font-weight: 700;
-  padding: 2px 6px;
-  border-radius: 4px;
-  text-transform: uppercase;
-}
-.lightbox-rating.safe { background: rgba(52, 211, 153, 0.15); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, 0.3); }
-.lightbox-rating.questionable { background: rgba(251, 146, 60, 0.15); color: #fdba74; border: 1px solid rgba(251, 146, 60, 0.3); }
-.lightbox-rating.explicit { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
-.lightbox-rating.unknown { background: rgba(156, 163, 175, 0.15); color: #d1d5db; border: 1px solid rgba(156, 163, 175, 0.3); }
-
-.lightbox-score {
-  color: #fbbf24;
-  font-weight: 700;
-}
-.lightbox-resolution {
-  color: var(--text-muted);
-}
-
-.btn-glass {
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  color: #fff;
-  transition: all 0.2s ease;
-  font-size: 12px;
-  font-weight: 600;
-}
-.btn-glass:hover {
-  background: rgba(255, 255, 255, 0.15);
-  border-color: rgba(255, 255, 255, 0.2);
-}
-
-.btn-fav-active {
-  background: rgba(239, 68, 68, 0.2) !important;
-  border-color: rgba(239, 68, 68, 0.4) !important;
-  color: #ef4444 !important;
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
-}
-
-.btn-dislike-active {
-  background: rgba(249, 115, 22, 0.2) !important;
-  border-color: rgba(249, 115, 22, 0.4) !important;
-  color: #f97316 !important;
 }
 
 /* Animations */
@@ -860,6 +683,10 @@ onUnmounted(() => {
   .lightbox-nav-btn {
     display: none; /* Rely on swipes on mobile */
   }
+  .lightbox-content-wrapper {
+    flex-direction: column;
+    gap: 16px;
+  }
   .lightbox-media-container {
     max-width: 95vw;
     max-height: 50vh;
@@ -868,42 +695,10 @@ onUnmounted(() => {
   .lightbox-media {
     max-height: 50vh;
   }
-  .lightbox-header {
-    top: 12px; left: 12px;
-    padding: 6px 12px;
-    font-size: 11px;
-    gap: 12px;
-  }
   .lightbox-close-btn {
     top: 10px; right: 12px;
     width: 38px; height: 38px;
     font-size: 24px;
-  }
-  .lightbox-actions-panel {
-    position: static;
-    transform: none;
-    width: 95vw;
-    padding: 8px 12px;
-    margin-top: 16px;
-  }
-  .lightbox-actions-panel .btn {
-    padding: 6px 10px;
-    font-size: 11px;
-  }
-  .lightbox-sidebar {
-    position: static;
-    width: 95vw;
-    height: 140px;
-    padding: 12px;
-    margin-top: 16px;
-    margin-bottom: 24px;
-  }
-  .sidebar-title {
-    font-size: 13px;
-    padding-bottom: 4px;
-  }
-  .lightbox-tags-list {
-    max-height: 90px;
   }
 }
 </style>
