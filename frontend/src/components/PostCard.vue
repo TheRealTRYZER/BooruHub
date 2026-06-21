@@ -316,28 +316,13 @@ function updateMobileState() {
 const isOffScreen = ref(true)
 let visibilityObserver: IntersectionObserver | null = null
 
-async function checkFavoriteState() {
-  if (!auth.isAuthenticated) {
-    isFav.value = false
-    isDisliked.value = props.post.is_dislike || false
-    return
-  }
-  try {
-    const res = await apiCheckFavorite(displayedPost.value.source_site, String(displayedPost.value.id))
-    isFav.value = res.is_favorite
-    isDisliked.value = res.is_dislike ?? false
-  } catch {
-    isFav.value = false
-    isDisliked.value = props.post.is_dislike || false
-  }
-}
-
 watch(
-  [() => displayedPost.value.id, () => displayedPost.value.source_site],
-  () => {
-    checkFavoriteState()
+  () => displayedPost.value,
+  (newPost) => {
+    isFav.value = newPost.favorite ?? false
+    isDisliked.value = newPost.is_dislike ?? false
   },
-  { immediate: true }
+  { immediate: true, deep: false }
 )
 
 onMounted(() => {

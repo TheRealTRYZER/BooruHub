@@ -4,12 +4,13 @@
     <div class="empty-state-title">{{ lang.t('post_not_found') }}</div>
     <button class="btn btn-primary" @click="$router.push('/')">{{ lang.t('back_to_feed') }}</button>
   </div>
-  <div v-else class="post-detail">
+  <div v-else class="post-detail" :class="{ 'has-relationships': relationshipPosts.length > 1 }">
     <!-- Dynamic Ambilight Theatre Backdrop -->
     <div class="ambient-glow-container">
       <div class="ambient-glow-backdrop" :style="{ backgroundImage: backdropUrl ? 'url(' + escapeCssString(backdropUrl) + ')' : 'none' }"></div>
     </div>
-    <!-- Parent/Child Relationships Panel -->
+    
+    <!-- Parent/Child Relationships Panel (Left Sidebar) -->
     <div v-if="relationshipPosts.length > 1" class="post-relationship-panel">
       <div class="post-relationship-header">
         <span>

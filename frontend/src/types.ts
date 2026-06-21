@@ -25,6 +25,7 @@ export interface Post {
   parent_id?: number | null
   has_children?: boolean
   tags_metadata?: Record<string, string> | null
+  favorite?: boolean
 }
 
 export interface User {
