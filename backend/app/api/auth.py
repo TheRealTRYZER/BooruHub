@@ -232,13 +232,6 @@ async def refresh_token(
         )
 
     if db_token.revoked:
-        # Replay attack: revoke all refresh tokens for this user
-        await db.execute(
-            update(RefreshToken)
-            .where(RefreshToken.user_id == db_token.user_id)
-            .values(revoked=True)
-        )
-        await db.commit()
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or revoked refresh token",
