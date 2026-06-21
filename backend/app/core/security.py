@@ -69,24 +69,30 @@ def decrypt_key(encrypted_text: str) -> str:
 
 
 def hash_password(password: str) -> str:
-    """Hash password pre-hashed with SHA-256 to avoid bcrypt 72-byte truncation."""
+    """Hash password pre-hashed with SHA-256 to avoid bcrypt 72-byte truncation.
+    
+    DEPRECATED: Pre-hashing with SHA-256 before bcrypt is deprecated and kept for backward compatibility.
+    """
     pre_hashed = hashlib.sha256(password.encode()).hexdigest()
     return bcrypt.hashpw(pre_hashed.encode(), bcrypt.gensalt()).decode()
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    """Verify password with SHA-256 pre-hashing and legacy fallback support."""
+    """Verify password with SHA-256 pre-hashing and legacy fallback support.
+    
+    DEPRECATED: Legacy pre-hashed format verification, kept for backward compatibility.
+    """
     pre_hashed = hashlib.sha256(password.encode()).hexdigest()
     try:
         if bcrypt.checkpw(pre_hashed.encode(), hashed.encode()):
             return True
-    except Exception:
+    except ValueError:
         pass
     
     # Fallback to legacy verify without SHA-256 pre-hashing
     try:
         return bcrypt.checkpw(password.encode(), hashed.encode())
-    except Exception:
+    except ValueError:
         return False
 
 
