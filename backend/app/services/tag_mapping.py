@@ -25,14 +25,21 @@ logger = logging.getLogger(__name__)
 _CACHE_TTL = 300  # 5 minutes
 _CACHE_MAX = 512
 _cache: OrderedDict[int, tuple] = OrderedDict()
-_cache_lock = asyncio.Lock()
+_cache_lock: Optional[asyncio.Lock] = None
+
+
+def _get_cache_lock() -> asyncio.Lock:
+    global _cache_lock
+    if _cache_lock is None:
+        _cache_lock = asyncio.Lock()
+    return _cache_lock
 
 
 async def get_user_mappings(user_id: int, db: AsyncSession) -> List[UserTagMapping]:
     """Fetch user's tag mappings with thread-safe in-memory caching."""
     now = time.monotonic()
 
-    async with _cache_lock:
+    async with _get_cache_lock():
         cached = _cache.get(user_id)
         if cached is not None:
             mappings, expiry = cached
@@ -46,7 +53,7 @@ async def get_user_mappings(user_id: int, db: AsyncSession) -> List[UserTagMappi
     )
     mappings = result.scalars().all()
 
-    async with _cache_lock:
+    async with _get_cache_lock():
         _cache[user_id] = (mappings, now + _CACHE_TTL)
         _cache.move_to_end(user_id)
         while len(_cache) > _CACHE_MAX:
@@ -57,7 +64,7 @@ async def get_user_mappings(user_id: int, db: AsyncSession) -> List[UserTagMappi
 
 async def invalidate_user_cache(user_id: int) -> None:
     """Call after mapping CRUD operations to bust the cache."""
-    async with _cache_lock:
+    async with _get_cache_lock():
         _cache.pop(user_id, None)
 
 
