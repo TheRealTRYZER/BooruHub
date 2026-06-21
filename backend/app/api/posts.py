@@ -123,14 +123,21 @@ async def _get_user_blacklist(user_id: int, db: AsyncSession) -> List[BlacklistR
     return result.scalars().all()
 
 
-async def _get_user_dislikes(user_id: int, db: AsyncSession) -> set:
+async def _get_user_interactions(user_id: int, db: AsyncSession) -> tuple[set, set]:
     result = await db.execute(
-        select(Favorite.source_site, Favorite.post_id).where(
-            Favorite.user_id == user_id,
-            Favorite.is_dislike == True,  # noqa: E712
+        select(Favorite.source_site, Favorite.post_id, Favorite.is_dislike).where(
+            Favorite.user_id == user_id
         )
     )
-    return set((row[0], str(row[1])) for row in result.all())
+    favs = set()
+    dislikes = set()
+    for row in result.all():
+        key = (row[0], str(row[1]))
+        if row[2]:
+            dislikes.add(key)
+        else:
+            favs.add(key)
+    return favs, dislikes
 
 
 def _apply_blacklist(posts: List[dict], rules: List[BlacklistRule], dislikes: set = None) -> List[dict]:
@@ -141,6 +148,14 @@ def _apply_blacklist(posts: List[dict], rules: List[BlacklistRule], dislikes: se
     bl_text = "\n".join(r.rule_line for r in rules)
     groups = parse_blacklist(bl_text)
     return filter_posts(posts, groups)
+
+def _inject_favorites(posts: List[dict], favs: set) -> List[dict]:
+    if not favs:
+        return posts
+    for p in posts:
+        if (p.get("source_site"), str(p.get("id"))) in favs:
+            p["favorite"] = True
+    return posts
 
 
 def _enforce_guest_rating(tag_list: List[str], context_name: str = "general") -> List[str]:
@@ -686,11 +701,12 @@ async def get_feed(
     # Load user data in parallel
     mappings = []
     blacklist_rules: List[BlacklistRule] = []
+    favs_set = set()
     dislikes_set = set()
     if user:
         mappings = await get_user_mappings(user.id, db)
         blacklist_rules = await _get_user_blacklist(user.id, db)
-        dislikes_set = await _get_user_dislikes(user.id, db)
+        favs_set, dislikes_set = await _get_user_interactions(user.id, db)
 
     # Build site-specific queries
     overrides = {"danbooru": danbooru_tags, "e621": e621_tags, "rule34": rule34_tags}
@@ -742,6 +758,7 @@ async def get_feed(
     background_tasks.add_task(_index_posts_task, list(posts))
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
+    posts = _inject_favorites(posts, favs_set)
     posts = _merge_duplicate_posts(posts)
 
     # Cache ONLY tags from results to avoid saving typos
@@ -794,11 +811,12 @@ async def search(
 
     mappings = []
     blacklist_rules: List[BlacklistRule] = []
+    favs_set = set()
     dislikes_set = set()
     if user:
         mappings = await get_user_mappings(user.id, db)
         blacklist_rules = await _get_user_blacklist(user.id, db)
-        dislikes_set = await _get_user_dislikes(user.id, db)
+        favs_set, dislikes_set = await _get_user_interactions(user.id, db)
 
     lookup = build_lookup(mappings)
     query_str = translate_tags(tag_list, site, lookup)
@@ -825,6 +843,7 @@ async def search(
     background_tasks.add_task(_index_posts_task, list(posts))
 
     posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
+    posts = _inject_favorites(posts, favs_set)
     posts = _merge_duplicate_posts(posts)
 
     # Cache ONLY tags from results to avoid saving typos
