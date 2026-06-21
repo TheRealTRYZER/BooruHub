@@ -9,6 +9,7 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
   const correctedTags = ref<string | null>(null)
   let loadGeneration = 0
   let autoFetchCount = 0
+  let lastUnfilteredCount = 0
   const activeTimeouts: any[] = []
 
   function scheduleTimeout(cb: () => void, ms: number) {
@@ -35,8 +36,9 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
       autoFetchCount = 0
     } else {
       autoFetchCount++
-      if (autoFetchCount >= 5) {
-        console.warn("Max automatic load attempts reached (5). Stopping to prevent infinite loops.")
+      const maxAutoFetch = lastUnfilteredCount > 0 ? 10 : 5
+      if (autoFetchCount >= maxAutoFetch) {
+        console.warn(`Max automatic load attempts reached (${maxAutoFetch}). Stopping to prevent infinite loops.`)
         loading.value = false
         skeletonCount.value = 0
         return
@@ -80,6 +82,10 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
       const data = await apiFeed(options)
       if (gen !== loadGeneration) return
 
+      if (data.has_more !== undefined) {
+        feed.hasMore = data.has_more
+      }
+
       const newPosts: Post[] = data.posts || []
 
       if (data.corrected_tags) {
@@ -99,6 +105,8 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
       }
 
       const unfiltered = data.unfiltered_count || 0
+      lastUnfilteredCount = unfiltered
+
       if (unfiltered === 0 || newPosts.length === 0) {
         if (unfiltered === 0) {
           feed.hasMore = false
@@ -106,14 +114,16 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
           // Backend returned matches but all were filtered — try next page
           feed.page++
           if (feed.hasMore && gen === loadGeneration) {
-            scheduleTimeout(() => { if (gen === loadGeneration) loadMore(sentinel, true) }, 50)
+            const delay = Math.min(50 * Math.pow(2, autoFetchCount), 1000)
+            scheduleTimeout(() => { if (gen === loadGeneration) loadMore(sentinel, true) }, delay)
           }
         }
       } else if (addedCount === 0 && feed.hasMore) {
         // All fetched posts were duplicates and skipped — automatically fetch next page
         feed.page++
         if (gen === loadGeneration) {
-          scheduleTimeout(() => { if (gen === loadGeneration) loadMore(sentinel, true) }, 50)
+          const delay = Math.min(50 * Math.pow(2, autoFetchCount), 1000)
+          scheduleTimeout(() => { if (gen === loadGeneration) loadMore(sentinel, true) }, delay)
         }
       } else {
         feed.page++

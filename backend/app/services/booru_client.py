@@ -176,17 +176,18 @@ async def search_multi_site(
     user: Optional[User] = None,
     ratios: Optional[Dict[str, float]] = None,
     skip_interval: bool = False,
-) -> Tuple[List[dict], Dict[str, int]]:
+) -> Tuple[List[dict], Dict[str, int], bool]:
     """Search multiple sites in parallel and interleave results by ratio weights.
-    Returns (interleaved_posts, dict_of_unfiltered_counts_per_site).
+    Returns (interleaved_posts, dict_of_unfiltered_counts_per_site, has_more).
     """
     sites = [s for s in site_queries if s in PROVIDERS and site_queries[s] is not None]
     if not sites:
-        return [], {}
+        return [], {}, False
 
     # Determine per-site fetch limits
     num = len(sites)
     tasks = []
+    site_limits = {}
     for site in sites:
         if num == 1:
             per_site = limit
@@ -208,6 +209,7 @@ async def search_multi_site(
                 per_site *= 4 # Fetch 4x more (up to 200) to account for local filter drop-off
                 per_site = min(per_site, 240)
         
+        site_limits[site] = per_site
         tasks.append(
             search_posts(
                 site, site_queries[site], per_site, page,
@@ -233,19 +235,12 @@ async def search_multi_site(
             by_site[site] = []
             total_counts[site] = 0
 
-    # Single site — no interleaving needed
-    if len(sites) == 1:
-        s = sites[0]
-        return by_site[s], total_counts
-
     # Weighted interleaving algorithm with MD5 deduplication
     actual_ratios = ratios or {s: 1.0 for s in sites}
     credits = {s: 0.0 for s in sites}
     iterators = {s: iter(posts) for s, posts in by_site.items() if posts}
     interleaved: List[dict] = []
     # Interleaving loop
-    # We do not truncate strictly to limit because that causes pagination gaps.
-    # Instead, we interleave all fetched posts to ensure contiguous pagination.
     while iterators:
         added_this_round = False
         # Give credits to all active iterators
@@ -278,4 +273,17 @@ async def search_multi_site(
             break
 
     logger.debug(f"[MIX] Interleaved {len(interleaved)} posts total")
-    return interleaved, total_counts
+    
+    # Truthful has_more calculation
+    has_more = False
+    if len(interleaved) > limit:
+        has_more = True
+    else:
+        for site in sites:
+            # If a site returned at least site_limits[site] raw posts, it has remaining pages
+            if total_counts.get(site, 0) >= site_limits.get(site, 1):
+                has_more = True
+                break
+
+    truncated_posts = interleaved[:limit]
+    return truncated_posts, total_counts, has_more

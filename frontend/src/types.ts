@@ -61,6 +61,7 @@ export interface FeedResponse {
   unfiltered_count: number
   resolved_tags: string
   corrected_tags?: string | null
+  has_more?: boolean
 }
 
 export interface SearchResponse extends FeedResponse {}
