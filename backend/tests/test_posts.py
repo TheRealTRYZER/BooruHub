@@ -55,7 +55,7 @@ async def test_guest_mode_feed_strips_negated_rating(client):
     app.dependency_overrides[get_current_user] = lambda: None
     
     with patch("app.api.posts.search_multi_site", new_callable=AsyncMock) as mock_search_multi:
-        mock_search_multi.return_value = ([], {"danbooru": 0})
+        mock_search_multi.return_value = ([], {"danbooru": 0}, False)
         
         response = await client.get("/api/posts/feed?tags=-rating:general&sites=danbooru")
         assert response.status_code == 200
@@ -95,31 +95,7 @@ def test_enforce_guest_rating():
     assert "parent:456" in res
 
 
-@pytest.mark.asyncio
-async def test_bounded_set():
-    from app.api.posts import _BoundedSet
-    
-    bset = _BoundedSet(maxsize=3)
-    
-    # Add new items
-    added = await bset.add_many([1, 2])
-    assert added == [1, 2]
-    assert 1 in bset
-    assert 2 in bset
-    assert 3 not in bset
-    
-    # Try adding duplicates
-    added = await bset.add_many([2, 3])
-    assert added == [3]
-    
-    # Eviction should keep the most recent elements up to maxsize (B-L5)
-    added = await bset.add_many([4, 5, 6, 7])
-    assert len(added) == 4
-    assert 1 not in bset
-    assert 4 not in bset
-    assert 5 in bset
-    assert 6 in bset
-    assert 7 in bset
+
 
 
 

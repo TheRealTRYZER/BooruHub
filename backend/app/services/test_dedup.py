@@ -1,5 +1,5 @@
 import pytest
-from app.api.posts import (
+from app.services.dedup import (
     _extract_md5_from_url,
     _extract_source_id,
     _are_duplicates,

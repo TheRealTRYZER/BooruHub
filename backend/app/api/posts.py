@@ -3,7 +3,7 @@ import asyncio as _asyncio
 import logging
 import threading as _threading
 from collections import OrderedDict
-from typing import List, Optional, Union, Dict
+from typing import List, Optional, Union, Dict, Tuple
 from pydantic import BaseModel, Field
 
 from fastapi import APIRouter, Depends, Query, BackgroundTasks, HTTPException
@@ -24,48 +24,21 @@ from app.services.tag_mapping import (
 )
 from app.core.rate_limit import rate_limit
 
+# New service imports
+from app.services.dedup import _merge_duplicate_posts
+from app.services.tag_cache import (
+    _cache_tags_task,
+    _cache_remote_tags_task,
+    _index_posts_task,
+)
+from app.services.tag_suggestions import get_similar_tags
+
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/posts", tags=["posts"])
 
-# Write Throttling: Track recently processed items to avoid redundant UPSERTs
-# Thread-safe bounded set with automatic eviction
-
-class _BoundedSet:
-    """Thread-safe bounded set with automatic eviction using OrderedDict."""
-    __slots__ = ("_data", "_max", "_lock")
-
-    def __init__(self, maxsize: int = 10000) -> None:
-        self._data: OrderedDict = OrderedDict()
-        self._max = maxsize
-        self._lock = _threading.Lock()
-
-    async def add_many(self, items) -> list:
-        """Add items, returning only those that were new."""
-        with self._lock:
-            new = []
-            for item in items:
-                if item not in self._data:
-                    new.append(item)
-                    self._data[item] = True
-                    self._data.move_to_end(item)
-            
-            # Bounded eviction of oldest elements (B-L5)
-            while len(self._data) > self._max:
-                self._data.popitem(last=False)
-            return new
-
-    def __contains__(self, item) -> bool:
-        """Lock-protected contains check (B-L4)."""
-        with self._lock:
-            return item in self._data
-
-
-_recently_cached_tags = _BoundedSet(maxsize=10000)
-_recently_indexed_posts = _BoundedSet(maxsize=20000)
-
 
 class PostResponse(BaseModel):
-    id: Union[int, str]
+    id: str  # Simplified from Union[int, str]
     source_site: str
     preview_url: Optional[str] = None
     sample_url: Optional[str] = None
@@ -92,6 +65,7 @@ class FeedResponse(BaseModel):
     unfiltered_count: int
     resolved_tags: str
     corrected_tags: Optional[str] = None
+    has_more: bool = True  # Added truthful pagination flag
 
 
 class TagSuggestion(BaseModel):
@@ -106,7 +80,6 @@ class TagSuggestion(BaseModel):
 
 class TagSuggestionResponse(BaseModel):
     suggestions: List[TagSuggestion]
-
 
 
 # ------------------------------------------------------------------ #
@@ -173,494 +146,43 @@ def _enforce_guest_rating(tag_list: List[str], context_name: str = "general") ->
     return tag_list
 
 
-import re
+async def _process_posts(
+    posts: List[dict],
+    *,
+    mappings: list,
+    blacklist_rules: List[BlacklistRule],
+    favs: set,
+    dislikes: set,
+    background_tasks: BackgroundTasks,
+    tags_str: str,
+    db: AsyncSession,
+) -> tuple[List[dict], Optional[str]]:
+    """Helper to apply reverse mapping, blacklist filtering, deduplication, and cache/suggest tags."""
+    if mappings:
+        apply_reverse_mapping(posts, mappings)
 
-def _extract_md5_from_url(url: str) -> Optional[str]:
-    if not url:
-        return None
-    # Look for a 32-character hex string in the path/filename
-    match = re.search(r'\b([a-fA-F0-9]{32})\b', url)
-    if match:
-        return match.group(1).lower()
-    return None
+    # Index raw posts BEFORE filtering (captures everything the API returns)
+    background_tasks.add_task(_index_posts_task, list(posts))
 
-def _extract_source_id(source_url: str) -> Optional[str]:
-    if not source_url:
-        return None
-    # Pixiv artwork / illust ID
-    pixiv_match = re.search(r'pixiv\.net/(?:.*/)?artworks/(\d+)', source_url)
-    if pixiv_match:
-        return f"pixiv:{pixiv_match.group(1)}"
-    pixiv_query_match = re.search(r'illust_id=(\d+)', source_url)
-    if pixiv_query_match:
-        return f"pixiv:{pixiv_query_match.group(1)}"
-        
-    # Direct Pixiv image URL matching (e.g. i.pximg.net/.../12345678_p0.png)
-    pximg_match = re.search(r'pximg\.net/.*/(\d+)_p\d+', source_url)
-    if pximg_match:
-        return f"pixiv:{pximg_match.group(1)}"
-        
-    # Twitter status ID
-    twitter_match = re.search(r'(?:twitter|x)\.com/[^/]+/status/(\d+)', source_url)
-    if twitter_match:
-        return f"twitter:{twitter_match.group(1)}"
-        
-    # Cross-site Danbooru ID in source
-    danbooru_match = re.search(r'danbooru\.donmai\.us/posts/(\d+)', source_url)
-    if danbooru_match:
-        return f"danbooru:{danbooru_match.group(1)}"
+    posts = _apply_blacklist(posts, blacklist_rules, dislikes)
+    posts = _inject_favorites(posts, favs)
+    posts = _merge_duplicate_posts(posts)
 
-    # Cross-site e621 ID in source
-    e621_match = re.search(r'e621\.net/posts/(\d+)', source_url)
-    if e621_match:
-        return f"e621:{e621_match.group(1)}"
-
-    # Cross-site Rule34 ID in source
-    rule34_match = re.search(r'rule34\.xxx/index\.php\?page=post&s=view&id=(\d+)', source_url)
-    if rule34_match:
-        return f"rule34:{rule34_match.group(1)}"
-        
-    return None
-
-def _are_duplicates(a: dict, b: dict) -> bool:
-    if a.get("source_site") and b.get("source_site") and a.get("source_site") == b.get("source_site"):
-        return False
-
-    # 1. Compare MD5s (using cached precomputed values or fallback)
-    md5_a = a.get("_extracted_md5") or a.get("md5") or _extract_md5_from_url(a.get("file_url"))
-    md5_b = b.get("_extracted_md5") or b.get("md5") or _extract_md5_from_url(b.get("file_url"))
-    if md5_a and md5_b and md5_a.lower() == md5_b.lower():
-        return True
-
-    # 2. Compare Source IDs
-    src_a = a.get("source") or ""
-    src_b = b.get("source") or ""
-    if src_a and src_b:
-        id_a = _extract_source_id(src_a)
-        id_b = _extract_source_id(src_b)
-        if id_a and id_b and id_a == id_b:
-            tags_a = set(a.get("tags", []))
-            tags_b = set(b.get("tags", []))
-            if tags_a and tags_b:
-                intersection = tags_a & tags_b
-                if len(intersection) / len(tags_a | tags_b) >= 0.60:
-                    return True
-            else:
-                return True
-
-    # 3. Exact Dimension match + sharing a high amount of tags
-    w_a, h_a = a.get("width"), a.get("height")
-    w_b, h_b = b.get("width"), b.get("height")
-    if w_a and h_a and w_b and h_b and w_a > 100 and h_a > 100:
-        if w_a == w_b and h_a == h_b:
-            tags_a = set(a.get("tags", []))
-            tags_b = set(b.get("tags", []))
-            intersection = tags_a & tags_b
-            if tags_a and len(intersection) / len(tags_a | tags_b) >= 0.60:
-                return True
-                
-        # 4. Aspect Ratio match + sharing a high amount of tags
-        ratio_a = a.get("_aspect_ratio") or (w_a / h_a if h_a else None)
-        ratio_b = b.get("_aspect_ratio") or (w_b / h_b if h_b else None)
-        if ratio_a and ratio_b and abs(ratio_a - ratio_b) / max(ratio_a, ratio_b) < 0.005:
-            tags_a = set(a.get("tags", []))
-            tags_b = set(b.get("tags", []))
-            intersection = tags_a & tags_b
-            if tags_a and len(intersection) / len(tags_a | tags_b) >= 0.60:
-                return True
-
-    return False
-
-
-def _merge_duplicate_posts(posts: List[dict]) -> List[dict]:
-    """Group/merge duplicate posts together using O(1) dict lookups for MD5 and Source ID, and bucketed aspect ratio checks."""
-    if not posts:
-        return []
-
-    # Precompute aspect ratio and extracted MD5 for caching (B-M6)
-    for post in posts:
-        if "_aspect_ratio" not in post:
-            w, h = post.get("width"), post.get("height")
-            post["_aspect_ratio"] = w / h if w and h else None
-        if "_extracted_md5" not in post:
-            post["_extracted_md5"] = (post.get("md5") or "").strip().lower() or _extract_md5_from_url(post.get("file_url") or "") or _extract_md5_from_url(post.get("sample_url") or "")
-
-    groups: List[List[dict]] = []
-    md5_groups = {}
-    source_groups = {}
+    # Cache ONLY tags from results to avoid saving typos
+    tag_sources = []
+    for p in posts:
+        source = p.get("source_site")
+        for t in p.get("tags", []):
+            tag_sources.append({"tag": t, "source": source})
     
-    # Buckets for O(1) dimension and aspect ratio lookups (B-M6)
-    dimension_buckets: Dict[tuple, List[List[dict]]] = {}
-    aspect_ratio_buckets: List[Tuple[float, List[dict]]] = []
+    if tag_sources:
+        background_tasks.add_task(_cache_tags_task, tag_sources)
 
-    for post in posts:
-        matched_group = None
-        
-        # 1. Try matching by MD5
-        md5 = post["_extracted_md5"]
-        if md5:
-            matched_group = md5_groups.get(md5)
-            
-        # 2. Try matching by Source ID
-        if not matched_group:
-            src = post.get("source") or ""
-            source_id = _extract_source_id(src) if src else None
-            if source_id:
-                matched_group = source_groups.get(source_id)
-                if matched_group:
-                    tags_a = set(post.get("tags", []))
-                    tags_b = set(matched_group[0].get("tags", []))
-                    if tags_a and tags_b:
-                        intersection = tags_a & tags_b
-                        if len(intersection) / len(tags_a | tags_b) < 0.60:
-                            matched_group = None
+    corrected_tags = None
+    if not posts and tags_str:
+        corrected_tags = await get_similar_tags(tags_str, db)
 
-        # 3. Fallback to pre-bucketed dimension and aspect ratio matches
-        if not matched_group:
-            w, h = post.get("width"), post.get("height")
-            if w and h and w > 100 and h > 100:
-                dim_key = (w, h)
-                for g in dimension_buckets.get(dim_key, []):
-                    tags_a = set(post.get("tags", []))
-                    tags_b = set(g[0].get("tags", []))
-                    if tags_a and tags_b:
-                        intersection = tags_a & tags_b
-                        if len(intersection) / len(tags_a | tags_b) >= 0.60:
-                            matched_group = g
-                            break
-                            
-                if not matched_group:
-                    ratio = post["_aspect_ratio"]
-                    if ratio:
-                        for r, g in aspect_ratio_buckets:
-                            if abs(ratio - r) / max(ratio, r) < 0.005:
-                                tags_a = set(post.get("tags", []))
-                                tags_b = set(g[0].get("tags", []))
-                                if tags_a and tags_b:
-                                    intersection = tags_a & tags_b
-                                    if len(intersection) / len(tags_a | tags_b) >= 0.60:
-                                        matched_group = g
-                                        break
-
-        # 4. Group or insert
-        if matched_group is not None:
-            # Don't merge duplicates from the same site
-            if not any(p.get("source_site") == post.get("source_site") for p in matched_group):
-                matched_group.append(post)
-                if md5:
-                    md5_groups[md5] = matched_group
-                src = post.get("source") or ""
-                source_id = _extract_source_id(src) if src else None
-                if source_id:
-                    source_groups[source_id] = matched_group
-        else:
-            new_group = [post]
-            groups.append(new_group)
-            if md5:
-                md5_groups[md5] = new_group
-            src = post.get("source") or ""
-            source_id = _extract_source_id(src) if src else None
-            if source_id:
-                source_groups[source_id] = new_group
-                
-            # Add to dimension and aspect ratio buckets
-            w, h = post.get("width"), post.get("height")
-            if w and h and w > 100 and h > 100:
-                dim_key = (w, h)
-                if dim_key not in dimension_buckets:
-                    dimension_buckets[dim_key] = []
-                dimension_buckets[dim_key].append(new_group)
-                
-                ratio = post["_aspect_ratio"]
-                if ratio:
-                    aspect_ratio_buckets.append((ratio, new_group))
-
-    site_priority = {"danbooru": 3, "e621": 2, "rule34": 1}
-    merged_posts: List[dict] = []
-    
-    for g in groups:
-        if len(g) == 1:
-            merged_posts.append(g[0])
-            continue
-            
-        # Sort group to pick primary post
-        g.sort(key=lambda p: (site_priority.get(p.get("source_site"), 0), p.get("score", 0)), reverse=True)
-        primary = g[0]
-        duplicates = g[1:]
-        
-        duplicate_sites = []
-        unique_duplicates = []
-        seen_sites = set()
-        
-        for d in duplicates:
-            site = d.get("source_site")
-            if site and site != primary.get("source_site") and site not in seen_sites:
-                duplicate_sites.append(site)
-                unique_duplicates.append(d)
-                seen_sites.add(site)
-        
-        if unique_duplicates:
-            primary["duplicate_sites"] = duplicate_sites
-            primary["duplicates"] = unique_duplicates
-            
-        merged_posts.append(primary)
-        
-    return merged_posts
-
-def _deduplicate_by_md5(posts: List[dict]) -> List[dict]:
-    """Fallback stub to route existing callers to the new merge function."""
-    return _merge_duplicate_posts(posts)
-
-
-async def _cache_tags_task(tag_sources: List[dict]):
-    """
-    Expects tag_sources: [{"tag": "tagname", "source": "sitename"}, ...]
-    """
-    if not tag_sources:
-        return
-    
-    tag_map = {} # tag -> data dict
-    for item in tag_sources:
-        tag = item.get("tag", "").strip().lower()
-        source = item.get("source", "unknown")
-        
-        if not tag or ":" in tag:
-            continue
-        
-        # Remove operators
-        if tag.startswith(("~", "-")):
-            tag = tag[1:]
-        if not tag:
-            continue
-            
-        if tag not in tag_map:
-            tag_map[tag] = {
-                "tag": tag, 
-                "from_danbooru": False, 
-                "from_e621": False, 
-                "from_rule34": False
-            }
-        
-        if source == "danbooru": tag_map[tag]["from_danbooru"] = True
-        elif source == "e621": tag_map[tag]["from_e621"] = True
-        elif source == "rule34": tag_map[tag]["from_rule34"] = True
-
-    if not tag_map:
-        return
-
-    # Filter out recently cached tags (thread-safe)
-    all_tags = list(tag_map.keys())
-    new_tag_names = await _recently_cached_tags.add_many(all_tags)
-    
-    if not new_tag_names:
-        return
-    
-    values = [tag_map[t] for t in new_tag_names]
-
-    # Batch UPSERT
-    stmt = pg_insert(CachedTag).values(values)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=['tag'],
-        set_=dict(
-            usage_count=CachedTag.usage_count + 1,
-            from_danbooru=CachedTag.from_danbooru | stmt.excluded.from_danbooru,
-            from_e621=CachedTag.from_e621 | stmt.excluded.from_e621,
-            from_rule34=CachedTag.from_rule34 | stmt.excluded.from_rule34,
-            last_seen=func.now()
-        )
-    )
-
-    from app.db.database import async_session
-    async with async_session() as db:
-        try:
-            await db.execute(stmt)
-            await db.commit()
-        except Exception as e:
-            logger.error(f"Error caching tags: {e}")
-            await db.rollback()
-
-
-async def _cache_remote_tags_task(tag_sources: List[dict]):
-    """
-    Expects tag_sources: [{"tag": "tagname", "source": "sitename", "category": "catname", "post_count": N}, ...]
-    """
-    if not tag_sources:
-        return
-    
-    tag_map = {}
-    for item in tag_sources:
-        tag = item.get("tag", "").strip().lower()
-        source = item.get("source", "unknown")
-        category = item.get("category")
-        post_count = item.get("post_count", 0)
-        
-        if not tag or ":" in tag:
-            continue
-        if tag.startswith(("~", "-")):
-            tag = tag[1:]
-        if not tag:
-            continue
-            
-        if tag not in tag_map:
-            tag_map[tag] = {
-                "tag": tag, 
-                "from_danbooru": False, 
-                "from_e621": False, 
-                "from_rule34": False,
-                "category": category,
-                "post_count": post_count
-            }
-        
-        if source == "danbooru": tag_map[tag]["from_danbooru"] = True
-        elif source == "e621": tag_map[tag]["from_e621"] = True
-        elif source == "rule34": tag_map[tag]["from_rule34"] = True
-        
-        if post_count > tag_map[tag]["post_count"]:
-            tag_map[tag]["post_count"] = post_count
-            
-        if category:
-            tag_map[tag]["category"] = category
-
-    if not tag_map:
-        return
-
-    all_tags = list(tag_map.keys())
-    new_tag_names = await _recently_cached_tags.add_many(all_tags)
-    
-    if not new_tag_names:
-        return
-    
-    values = [tag_map[t] for t in new_tag_names]
-
-    stmt = pg_insert(CachedTag).values(values)
-    stmt = stmt.on_conflict_do_update(
-        index_elements=['tag'],
-        set_=dict(
-            usage_count=CachedTag.usage_count + 1,
-            from_danbooru=CachedTag.from_danbooru | stmt.excluded.from_danbooru,
-            from_e621=CachedTag.from_e621 | stmt.excluded.from_e621,
-            from_rule34=CachedTag.from_rule34 | stmt.excluded.from_rule34,
-            category=func.coalesce(stmt.excluded.category, CachedTag.category),
-            post_count=func.greatest(stmt.excluded.post_count, CachedTag.post_count),
-            last_seen=func.now()
-        )
-    )
-
-    from app.db.database import async_session
-    async with async_session() as db:
-        try:
-            await db.execute(stmt)
-            await db.commit()
-        except Exception as e:
-            logger.error(f"Error in background remote tag caching: {e}")
-            await db.rollback()
-
-
-async def _index_posts_task(posts: List[dict]):
-    """Save all seen posts (id, source_site, tags) to the global post index in batches.
-    
-    TODO: The PostIndex is currently write-only. It saves posts for future cross-site 
-    search optimization and recommendation algorithms but is not currently used by 
-    any read operations.
-    """
-    if not posts:
-        return
-
-    with_md5 = []
-    without_md5 = []
-
-    for post in posts:
-        post_id = str(post.get("id", "")).strip()
-        source_site = str(post.get("source_site", "")).strip()
-        md5 = str(post.get("md5", "")).strip().lower()
-        if not post_id or not source_site:
-            continue
-            
-        tags = post.get("tags", [])
-        tags_str = " ".join(tags) if isinstance(tags, list) else str(tags)
-        
-        data = {
-            "source_site": source_site,
-            "post_id": post_id,
-            "md5": md5 if md5 else None,
-            "tags_str": tags_str,
-        }
-        
-        if md5:
-            with_md5.append(data)
-        else:
-            without_md5.append(data)
-
-    # Thread-safe deduplication
-    md5_keys = [d['md5'] for d in with_md5]
-    nomd5_keys = [f"{d['source_site']}:{d['post_id']}" for d in without_md5]
-
-    new_md5 = await _recently_indexed_posts.add_many(md5_keys)
-    new_nomd5 = await _recently_indexed_posts.add_many(nomd5_keys)
-
-    new_md5_set = set(new_md5)
-    new_nomd5_set = set(new_nomd5)
-
-    final_with_md5 = [d for d in with_md5 if d['md5'] in new_md5_set]
-    final_without_md5 = [d for d in without_md5 if f"{d['source_site']}:{d['post_id']}" in new_nomd5_set]
-
-    from app.db.database import async_session
-    async with async_session() as db:
-        try:
-            if final_with_md5:
-                stmt = pg_insert(PostIndex).values(final_with_md5)
-                stmt = stmt.on_conflict_do_nothing(index_elements=['md5'])
-                await db.execute(stmt)
-
-            if final_without_md5:
-                stmt = pg_insert(PostIndex).values(final_without_md5)
-                stmt = stmt.on_conflict_do_nothing(index_elements=['source_site', 'post_id'])
-                await db.execute(stmt)
-
-            await db.commit()
-        except Exception as e:
-            logger.error(f"Error indexing posts: {e}")
-            await db.rollback()
-
-
-async def get_similar_tags(tags_str: str, db: AsyncSession) -> Optional[str]:
-    """Try to find similar tags for a search query if zero results found (optimized single query)."""
-    if not tags_str:
-        return None
-        
-    parts = tags_str.split()
-    valid_parts = [p for p in parts if ":" not in p and len(p) >= 3]
-    if not valid_parts:
-        return None
-
-    # O(1) single pg_trgm query for all parts
-    stmt = text("""
-        SELECT DISTINCT ON (part) part, tag
-        FROM cached_tags, unnest(:parts) as part
-        WHERE similarity(tag, part) > 0.5
-        ORDER BY part, similarity(tag, part) DESC, usage_count DESC
-    """)
-    try:
-        result = await db.execute(stmt, {"parts": valid_parts})
-        matches = {row[0]: row[1] for row in result.all()}
-    except Exception as e:
-        logger.error(f"Error querying similar tags: {e}")
-        matches = {}
-
-    corrected = []
-    changed = False
-    for part in parts:
-        if ":" in part or len(part) < 3:
-            corrected.append(part)
-            continue
-        match = matches.get(part)
-        if match and match != part:
-            corrected.append(match)
-            changed = True
-        else:
-            corrected.append(part)
-            
-    return " ".join(corrected) if changed else None
+    return posts, corrected_tags
 
 
 # ------------------------------------------------------------------ #
@@ -735,7 +257,7 @@ async def get_feed(
             site_queries[s] = " ".join(q_list)
 
     # Fetch
-    posts, site_counts = await search_multi_site(
+    posts, site_counts, has_more = await search_multi_site(
         site_queries, limit, page,
         user=user, ratios=ratio_dict, skip_interval=skip_interval,
     )
@@ -749,31 +271,19 @@ async def get_feed(
             detail=f"Booru providers ({', '.join(active_failed)}) are temporarily unavailable. Please try again."
         )
 
-    # Post-processing
-    if mappings:
-        apply_reverse_mapping(posts, mappings)
-
-    # Index raw posts BEFORE filtering (captures everything the API returns)
     unfiltered_total = sum(v for v in site_counts.values() if v >= 0)
-    background_tasks.add_task(_index_posts_task, list(posts))
 
-    posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
-    posts = _inject_favorites(posts, favs_set)
-    posts = _merge_duplicate_posts(posts)
-
-    # Cache ONLY tags from results to avoid saving typos
-    tag_sources = []
-    for p in posts:
-        source = p.get("source_site")
-        for t in p.get("tags", []):
-            tag_sources.append({"tag": t, "source": source})
-    
-    if tag_sources:
-        background_tasks.add_task(_cache_tags_task, tag_sources)
-
-    corrected_tags = None
-    if not posts and tags:
-        corrected_tags = await get_similar_tags(tags, db)
+    # Post-processing helper pipeline
+    posts, corrected_tags = await _process_posts(
+        posts,
+        mappings=mappings,
+        blacklist_rules=blacklist_rules,
+        favs=favs_set,
+        dislikes=dislikes_set,
+        background_tasks=background_tasks,
+        tags_str=tags,
+        db=db,
+    )
 
     return {
         "posts": posts, 
@@ -781,7 +291,8 @@ async def get_feed(
         "total": unfiltered_total, 
         "unfiltered_count": unfiltered_total, 
         "resolved_tags": tags,
-        "corrected_tags": corrected_tags
+        "corrected_tags": corrected_tags,
+        "has_more": has_more
     }
 
 
@@ -821,6 +332,7 @@ async def search(
     lookup = build_lookup(mappings)
     query_str = translate_tags(tag_list, site, lookup)
 
+    has_more = False
     if query_str is None:
         posts = []
         unfiltered_total = 0
@@ -835,30 +347,20 @@ async def search(
                 status_code=502,
                 detail=f"Booru provider ({site}) is temporarily unavailable. Please try again."
             )
+        has_more = len(posts) >= limit
+        posts = posts[:limit]
 
-    if mappings:
-        apply_reverse_mapping(posts, mappings)
-
-    # Index raw posts BEFORE filtering (captures everything the API returns)
-    background_tasks.add_task(_index_posts_task, list(posts))
-
-    posts = _apply_blacklist(posts, blacklist_rules, dislikes_set)
-    posts = _inject_favorites(posts, favs_set)
-    posts = _merge_duplicate_posts(posts)
-
-    # Cache ONLY tags from results to avoid saving typos
-    tag_sources = []
-    for p in posts:
-        source = p.get("source_site")
-        for t in p.get("tags", []):
-            tag_sources.append({"tag": t, "source": source})
-        
-    if tag_sources:
-        background_tasks.add_task(_cache_tags_task, tag_sources)
-    
-    corrected_tags = None
-    if not posts and tags:
-        corrected_tags = await get_similar_tags(tags, db)
+    # Post-processing helper pipeline
+    posts, corrected_tags = await _process_posts(
+        posts,
+        mappings=mappings,
+        blacklist_rules=blacklist_rules,
+        favs=favs_set,
+        dislikes=dislikes_set,
+        background_tasks=background_tasks,
+        tags_str=tags,
+        db=db,
+    )
 
     return {
         "posts": posts, 
@@ -866,7 +368,8 @@ async def search(
         "total": unfiltered_total, 
         "unfiltered_count": unfiltered_total, 
         "resolved_tags": tags,
-        "corrected_tags": corrected_tags
+        "corrected_tags": corrected_tags,
+        "has_more": has_more
     }
 
 
