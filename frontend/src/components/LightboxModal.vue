@@ -27,30 +27,31 @@
       <!-- Center Media Container (Perfect Center) -->
       <div class="lightbox-content-wrapper" @click.self="closeLightbox">
         <div class="lightbox-media-container" 
-             @click.self="closeLightbox"
-             @touchstart="onTouchStart" 
-             @touchmove="onTouchMove" 
-             @touchend="onTouchEnd"
-             :style="{ transform: swipeDiff ? `translateX(${swipeDiff}px)` : '', transition: swiping ? 'none' : 'transform 0.3s ease-out' }">
+             @click.self="closeLightbox">
           
           <!-- Video Player -->
           <video v-if="isVideo" 
+                 ref="zoomImageRef"
                  :key="mediaUrl" 
                  :src="mediaUrl" 
                  controls 
                  loop 
                  autoplay 
                  muted 
-                 class="lightbox-media video"></video>
+                 class="lightbox-media video"
+                 :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`, transition: (isPinching || isPanning) ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', touchAction: scale > 1 ? 'none' : 'auto' }"
+                 :class="{ zoomed: scale > 1 }"></video>
                  
           <!-- Standard Image -->
           <img v-else 
+               ref="zoomImageRef"
                :key="mediaUrl" 
                :src="mediaUrl" 
                :alt="altText" 
                class="lightbox-media image" 
                @click="toggleZoom"
-               :class="{ zoomed: isZoomed }" />
+               :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`, transition: (isPinching || isPanning) ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', cursor: scale > 1 ? 'zoom-out' : 'zoom-in', touchAction: scale > 1 ? 'none' : 'auto' }"
+               :class="{ zoomed: scale > 1 }" />
         </div>
       </div>
 
@@ -95,6 +96,7 @@ import { useLangStore } from '../stores/lang'
 import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite, apiSearch } from '../api'
 import { sanitizeUrl, escapeCssString } from '../utils/security'
 import type { Post, SiteName } from '../types'
+import { usePinchZoom } from '../composables/usePinchZoom'
 
 import LightboxHeader from './LightboxHeader.vue'
 import LightboxSidebar from './LightboxSidebar.vue'
@@ -332,9 +334,41 @@ function closeLightbox() {
 }
 
 // Zoom functionality for images
-const isZoomed = ref(false)
+const {
+  scale,
+  translateX,
+  translateY,
+  isPinching,
+  isPanning,
+  onTouchStart: onImageTouchStart,
+  onTouchMove: onImageTouchMove,
+  onTouchEnd: onImageTouchEnd,
+  reset: resetZoom
+} = usePinchZoom()
+
+const zoomImageRef = ref<HTMLElement | null>(null)
+
+watch(zoomImageRef, (newEl, oldEl) => {
+  if (oldEl) {
+    oldEl.removeEventListener('touchstart', onImageTouchStart)
+    oldEl.removeEventListener('touchmove', onImageTouchMove)
+    oldEl.removeEventListener('touchend', onImageTouchEnd)
+  }
+  if (newEl) {
+    newEl.addEventListener('touchstart', onImageTouchStart, { passive: false })
+    newEl.addEventListener('touchmove', onImageTouchMove, { passive: false })
+    newEl.addEventListener('touchend', onImageTouchEnd, { passive: false })
+  }
+})
+
 function toggleZoom() {
-  isZoomed.value = !isZoomed.value
+  if (scale.value > 1) {
+    resetZoom()
+  } else {
+    scale.value = 2.5
+    translateX.value = 0
+    translateY.value = 0
+  }
 }
 
 // Favorite state handling
@@ -492,55 +526,11 @@ function handleKeyDown(e: KeyboardEvent) {
   }
 }
 
-// Swipe gestures for touch devices
-const swipeDiff = ref(0)
-const swiping = ref(false)
-let touchStartX = 0
-let touchStartY = 0
 
-function onTouchStart(e: TouchEvent) {
-  const touch = e.changedTouches[0]
-  if (touch) {
-    touchStartX = touch.screenX
-    touchStartY = touch.screenY
-    swiping.value = true
-  }
-}
-
-function onTouchMove(e: TouchEvent) {
-  if (!swiping.value) return
-  const touch = e.changedTouches[0]
-  if (touch) {
-    const diffX = touch.screenX - touchStartX
-    const diffY = touch.screenY - touchStartY
-
-    if (Math.abs(diffX) > Math.abs(diffY)) {
-      swipeDiff.value = diffX
-    } else {
-      swiping.value = false
-      swipeDiff.value = 0
-    }
-  }
-}
-
-function onTouchEnd() {
-  if (!swiping.value) return
-  swiping.value = false
-  if (Math.abs(swipeDiff.value) > 80) {
-    if (swipeDiff.value > 0) {
-      if (hasPrev.value) prevPost()
-      else swipeDiff.value = 0
-    } else {
-      if (hasNext.value) nextPost()
-      else swipeDiff.value = 0
-    }
-  }
-  swipeDiff.value = 0
-}
 
 watch(activePost, (newPost) => {
   activeSite.value = newPost.source_site
-  isZoomed.value = false
+  resetZoom()
 })
 
 watch(displayedPost, () => {
@@ -658,9 +648,7 @@ onUnmounted(() => {
 .lightbox-media.image {
   cursor: zoom-in;
 }
-.lightbox-media.image.zoomed {
-  transform: scale(1.35);
-  cursor: zoom-out;
+.lightbox-media.zoomed {
   z-index: 1000;
 }
 

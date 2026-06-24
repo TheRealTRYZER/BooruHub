@@ -165,4 +165,49 @@ describe('LightboxModal.vue', () => {
     await wrapper.vm.$nextTick()
     expect((wrapper.vm as any).displayedPost.id).toBe(999)
   })
+
+  it('should toggle zoom scale on click', async () => {
+    const mockPost = {
+      id: 123,
+      source_site: 'danbooru' as const,
+      file_url: 'https://test.com/danbooru.jpg',
+      rating: 's',
+      tags: ['tag1'],
+      width: 100,
+      height: 100,
+      score: 10
+    } as unknown as Post
+
+    const wrapper = mount(LightboxModal, {
+      props: {
+        post: mockPost,
+        posts: [mockPost]
+      },
+      global: {
+        plugins: [createTestingPinia({
+          createSpy: vi.fn,
+          initialState: {
+            lang: { t: (key: string) => key }
+          }
+        })]
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+    
+    const img = wrapper.find('.lightbox-media.image')
+    expect(img.classes()).not.toContain('zoomed')
+    expect(img.attributes('style')).toContain('scale(1)')
+
+    await img.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(img.classes()).toContain('zoomed')
+    expect(img.attributes('style')).toContain('scale(2.5)')
+
+    await img.trigger('click')
+    await wrapper.vm.$nextTick()
+    expect(img.classes()).not.toContain('zoomed')
+    expect(img.attributes('style')).toContain('scale(1)')
+  })
 })
+

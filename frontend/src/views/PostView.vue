@@ -39,8 +39,24 @@
     </div>
 
     <div class="post-detail-image">
-      <video v-if="isVideo" :src="mediaUrl" controls loop autoplay muted style="width:100%;max-height:85vh;"></video>
-      <img v-else :src="mediaUrl" :alt="altText" @click="openOriginal" style="cursor:zoom-in;">
+      <video v-if="isVideo" 
+             ref="zoomImageRef"
+             :src="mediaUrl" 
+             controls 
+             loop 
+             autoplay 
+             muted 
+             :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`, transition: (isPinching || isPanning) ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', touchAction: scale > 1 ? 'none' : 'auto' }"
+             style="width:100%;max-height:85vh;will-change:transform;"
+             :class="{ zoomed: scale > 1 }"></video>
+      <img v-else 
+           ref="zoomImageRef"
+           :src="mediaUrl" 
+           :alt="altText" 
+           @click="onImageClick"
+           :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`, transition: (isPinching || isPanning) ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', cursor: scale > 1 ? 'zoom-out' : 'zoom-in', touchAction: scale > 1 ? 'none' : 'auto' }"
+           style="will-change: transform;"
+           :class="{ zoomed: scale > 1 }">
     </div>
     
     <div class="post-detail-sidebar">
@@ -124,6 +140,7 @@ import TagChip from '../components/TagChip.vue'
 import { sanitizeUrl, escapeCssString } from '../utils/security'
 import { RATING_MAP, RATING_LABELS } from '../types'
 import type { Post, SiteName } from '../types'
+import { usePinchZoom } from '../composables/usePinchZoom'
 
 const route = useRoute()
 const router = useRouter()
@@ -136,6 +153,41 @@ const mainPost = ref<Post | null>(null)
 const activeSite = ref<SiteName>('danbooru')
 const isFav = ref(false)
 const favId = ref<number | null>(null)
+
+const {
+  scale,
+  translateX,
+  translateY,
+  isPinching,
+  isPanning,
+  onTouchStart,
+  onTouchMove,
+  onTouchEnd,
+  reset: resetZoom
+} = usePinchZoom()
+
+const zoomImageRef = ref<HTMLElement | null>(null)
+
+watch(zoomImageRef, (newEl, oldEl) => {
+  if (oldEl) {
+    oldEl.removeEventListener('touchstart', onTouchStart)
+    oldEl.removeEventListener('touchmove', onTouchMove)
+    oldEl.removeEventListener('touchend', onTouchEnd)
+  }
+  if (newEl) {
+    newEl.addEventListener('touchstart', onTouchStart, { passive: false })
+    newEl.addEventListener('touchmove', onTouchMove, { passive: false })
+    newEl.addEventListener('touchend', onTouchEnd, { passive: false })
+  }
+})
+
+function onImageClick() {
+  if (scale.value > 1) {
+    resetZoom()
+  } else {
+    openOriginal()
+  }
+}
 
 // Compute all sites available for version switching
 const allSites = computed<SiteName[]>(() => {
@@ -483,6 +535,7 @@ watch(
   () => [route.query.id, route.query.site],
   async ([newId, newSite]) => {
     if (newId && newSite) {
+      resetZoom()
       await fetchAndSetPost()
     }
   }
