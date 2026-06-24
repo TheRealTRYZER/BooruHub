@@ -64,6 +64,7 @@ async function _tryRefreshToken(): Promise<boolean> {
       method: 'POST',
       headers: getHeaders('POST'),
       credentials: 'include',
+      body: JSON.stringify({}),
     })
     if (!resp.ok) return false
     cache.clear() // Clear cache upon token refresh to prevent mixed data
@@ -215,6 +216,7 @@ export async function apiLogout(): Promise<{ ok: boolean }> {
   cache.clear()
   return _fetch<{ ok: boolean }>('/auth/logout', {
     method: 'POST',
+    body: JSON.stringify({}),
   })
 }
 
