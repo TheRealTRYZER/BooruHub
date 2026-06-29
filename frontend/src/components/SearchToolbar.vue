@@ -3,28 +3,14 @@
     <div class="search-bar">
       <div class="search-bar-row">
         <div v-show="!feed.isSplit" class="search-input-wrapper" @click="focusActualInput">
-          <!-- Tag Pills List -->
-          <span v-for="(pill, idx) in pills" :key="pill" 
-                class="tag-pill" 
-                :class="[getPillCategory(pill), { negated: pill.startsWith('-'), dragging: idx === dragIndex }]"
-                draggable="true"
-                @dragstart="dragStart($event, idx)"
-                @dragover.prevent
-                @drop="onDrop($event, idx)"
-                @dragend="dragEnd"
-                @click.stop="toggleNegation(idx)">
-            <span class="tag-pill-text">{{ pill }}</span>
-            <span class="tag-pill-remove" @click.stop="removeTagPill(idx)">×</span>
-          </span>
-          
-          <!-- Invisible Actual Input Field for typing next tag -->
+          <!-- Plain Text Input Field -->
           <input ref="inputEl" type="text" class="search-input-element"
-                 :placeholder="pills.length === 0 ? lang.t('search_placeholder') : ''"
+                 :placeholder="lang.t('search_placeholder')"
                  v-model="inputVal"
                  @input="onSearchInput"
                  @focus="onSearchFocus"
                  @blur="onSearchBlur"
-                 @keydown="onKeydown"
+                 @keydown.enter="triggerSearch"
                  @keydown.tab.prevent="onTabPress" />
         </div>
                
@@ -205,122 +191,16 @@ const suggestions = ref<TagSuggestion[]>([])
 let suggestController: AbortController | null = null
 let splitSuggestController: AbortController | null = null
 
-// Visual Tag Query Builder State & Logic
-const pills = ref<string[]>([])
+// Plain Text Tag Query Builder State
 const inputVal = ref('')
 const inputEl = ref<HTMLInputElement | null>(null)
-
-// Drag and Drop reordering state & logic
-const dragIndex = ref<number | null>(null)
-
-function dragStart(e: DragEvent, idx: number) {
-  dragIndex.value = idx
-  if (e.dataTransfer) {
-    e.dataTransfer.effectAllowed = 'move'
-    e.dataTransfer.setData('text/plain', String(idx))
-  }
-}
-
-function onDrop(_e: DragEvent, targetIdx: number) {
-  if (dragIndex.value === null) return
-  const sourceIdx = dragIndex.value
-  if (sourceIdx !== targetIdx) {
-    const pill = pills.value[sourceIdx]
-    if (pill !== undefined) {
-      pills.value.splice(sourceIdx, 1)
-      pills.value.splice(targetIdx, 0, pill)
-      syncToFeedStore()
-    }
-  }
-}
-
-function dragEnd() {
-  dragIndex.value = null
-}
 
 function focusActualInput() {
   if (inputEl.value) inputEl.value.focus()
 }
 
-function getPillCategory(pill: string): string {
-  const clean = pill.startsWith('-') ? pill.substring(1) : pill
-  if (clean.includes(':')) return 'metadata'
-  
-  // Lookup inside cache or fetched suggestions matching this tag name
-  const match = suggestions.value.find(s => s.tag === clean)
-  if (match && match.category) return match.category
-  
-  return 'general'
-}
-
-function toggleNegation(idx: number) {
-  const pill = pills.value[idx]
-  if (pill !== undefined) {
-    if (pill.startsWith('-')) {
-      pills.value[idx] = pill.substring(1)
-    } else {
-      pills.value[idx] = '-' + pill
-    }
-    syncToFeedStore()
-  }
-}
-
-function removeTagPill(idx: number) {
-  pills.value.splice(idx, 1)
-  syncToFeedStore()
-}
-
-function addTagPill(val: string) {
-  const clean = val.trim().toLowerCase()
-  if (clean) {
-    // If it's already in pills, don't duplicate
-    if (!pills.value.includes(clean)) {
-      pills.value.push(clean)
-    }
-  }
-  inputVal.value = ''
-  suggestions.value = []
-  syncToFeedStore()
-}
-
-function removeLastPill() {
-  if (pills.value.length > 0) {
-    pills.value.pop()
-    syncToFeedStore()
-  }
-}
-
-function onKeydown(e: KeyboardEvent) {
-  if (e.key === ' ' || e.key === 'Enter') {
-    const val = inputVal.value.trim()
-    if (val) {
-      e.preventDefault()
-      addTagPill(val)
-      if (e.key === 'Enter') {
-        triggerSearch()
-      }
-    } else if (e.key === 'Enter') {
-      triggerSearch()
-    }
-  } else if (e.key === 'Backspace' && !inputVal.value) {
-    removeLastPill()
-  }
-}
-
 function syncToFeedStore() {
-  const combined = pills.value.join(' ')
-  feed.tags = combined + (inputVal.value ? ' ' + inputVal.value : '')
-}
-
-function parseExternalTags() {
-  const tagsStr = feed.tags.trim()
-  if (!tagsStr) {
-    pills.value = []
-    inputVal.value = ''
-    return
-  }
-  pills.value = tagsStr.split(/\s+/)
-  inputVal.value = ''
+  feed.tags = inputVal.value
 }
 
 watch(inputVal, () => {
@@ -328,9 +208,8 @@ watch(inputVal, () => {
 })
 
 watch(() => feed.tags, (newVal) => {
-  const combined = pills.value.join(' ') + (inputVal.value ? ' ' + inputVal.value : '')
-  if (newVal.trim() !== combined.trim()) {
-    parseExternalTags()
+  if (newVal !== inputVal.value) {
+    inputVal.value = newVal
   }
 })
 
@@ -383,7 +262,7 @@ function closeDropdowns(_e: MouseEvent) {
 }
 
 onMounted(() => {
-  parseExternalTags()
+  inputVal.value = feed.tags
   window.addEventListener('scroll', handleScroll, { passive: true })
   document.addEventListener('click', closeDropdowns)
 })
@@ -409,10 +288,6 @@ let suggestTimeout: any = null
 const { history: searchHistory, addQuery: addSearchQuery, removeQuery: removeSearchQuery } = useSearchHistory()
 
 function triggerSearch() {
-  const trimmed = inputVal.value.trim()
-  if (trimmed) {
-    addTagPill(trimmed)
-  }
   if (feed.tags.trim()) {
     addSearchQuery(feed.tags.trim())
   }
@@ -450,12 +325,16 @@ function onSearchInput() {
     suggestController = null
   }
 
-  const val = inputVal.value.trim()
-  if (val && val.length >= 2) {
+  const text = inputVal.value || ''
+  const words = text.split(/\s+/)
+  const lastWord = words[words.length - 1] || ''
+  const cleanWord = lastWord.startsWith('-') ? lastWord.substring(1) : lastWord
+
+  if (cleanWord && cleanWord.length >= 2) {
     suggestTimeout = setTimeout(async () => {
       suggestController = new AbortController()
       try {
-        const data = await apiSuggestTags(val, 15, suggestController.signal)
+        const data = await apiSuggestTags(cleanWord, 15, suggestController.signal)
         suggestions.value = data.suggestions || []
       } catch (e: any) {
         if (e.name !== 'AbortError') {
@@ -471,7 +350,7 @@ function onSearchInput() {
 }
 
 function onSearchFocus() {
-  if (pills.value.length === 0 && !inputVal.value.trim()) showHistory.value = true
+  if (!inputVal.value.trim()) showHistory.value = true
 }
 
 function onSearchBlur() {
@@ -482,7 +361,22 @@ function onSearchBlur() {
 }
 
 function selectSuggestion(tag: string) {
-  addTagPill(tag)
+  const text = inputVal.value || ''
+  const words = text.split(/\s+/)
+  if (words.length > 0) {
+    const lastWord = words[words.length - 1]
+    if (lastWord !== undefined && lastWord.startsWith('-')) {
+      words[words.length - 1] = '-' + tag
+    } else {
+      words[words.length - 1] = tag
+    }
+    inputVal.value = words.join(' ') + ' '
+  } else {
+    inputVal.value = tag + ' '
+  }
+  suggestions.value = []
+  syncToFeedStore()
+  if (inputEl.value) inputEl.value.focus()
 }
 
 function selectHistory(q: string) {
