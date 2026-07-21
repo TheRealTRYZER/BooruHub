@@ -532,8 +532,9 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   overflow: hidden; cursor: pointer;
   border: 1px solid var(--border-color);
   transition: transform 0.4s var(--ease-out), box-shadow 0.4s var(--ease-out), border-color 0.4s var(--ease-out);
-  transform: translate3d(0,0,0);
-  backface-visibility: hidden;
+  /* No translate3d/backface-visibility here: forcing a GPU layer on every card
+     overwhelms the compositor when hundreds of cards exist. Hover transform below
+     still gets its own layer only while animating. */
   --r-unit: min(1, calc(var(--card-size, 250px) / 150px));
 }
 .post-card:hover { 
