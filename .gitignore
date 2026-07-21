@@ -22,6 +22,11 @@ frontend/dist/
 backend/*.db
 backend/*.sqlite
 
+# Test coverage artifacts
+backend/.coverage
+.coverage
+htmlcov/
+
 # Vite
 frontend/.vite/
 frontend/vite.config.js

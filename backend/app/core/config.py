@@ -1,14 +1,21 @@
 """BooruHub backend configuration."""
 from functools import lru_cache
 
-from pydantic import computed_field
+from pydantic import computed_field, model_validator
 from pydantic_settings import BaseSettings
 
 
 class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
-    COOKIE_SECURE: bool = True
+    COOKIE_SECURE: bool | None = None
     COOKIE_SAMESITE: str = "lax"
+
+    @model_validator(mode="after")
+    def resolve_cookie_secure(self) -> "Settings":
+        if self.COOKIE_SECURE is None:
+            self.COOKIE_SECURE = self.ENVIRONMENT.lower() != "development"
+        return self
+
 
     # Database
     DATABASE_URL: str = ""
