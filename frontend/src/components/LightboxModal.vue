@@ -17,49 +17,52 @@
               @click="prevPost" 
               :title="lang.t('prev_title')">‹</button>
 
-      <!-- Parent/Child Relationships Panel -->
-      <LightboxRelationships 
-        :displayed-post="displayedPost"
-        :relationship-posts="relationshipPosts"
-        @navigate="navigateToPost"
-      />
+      <!-- Scrollable content (relationships + media + sidebar). On desktop this wrapper is transparent (display: contents). -->
+      <div class="lightbox-scroll-content">
+        <!-- Parent/Child Relationships Panel -->
+        <LightboxRelationships 
+          :displayed-post="displayedPost"
+          :relationship-posts="relationshipPosts"
+          @navigate="navigateToPost"
+        />
 
-      <!-- Center Media Container (Perfect Center) -->
-      <div class="lightbox-content-wrapper" @click.self="closeLightbox">
-        <div class="lightbox-media-container" 
-             @click.self="closeLightbox">
-          
-          <!-- Video Player -->
-          <video v-if="isVideo" 
+        <!-- Center Media Container (Perfect Center) -->
+        <div class="lightbox-content-wrapper" @click.self="closeLightbox">
+          <div class="lightbox-media-container" 
+               @click.self="closeLightbox">
+            
+            <!-- Video Player -->
+            <video v-if="isVideo" 
+                   ref="zoomImageRef"
+                   :key="mediaUrl" 
+                   :src="mediaUrl" 
+                   controls 
+                   loop 
+                   autoplay 
+                   muted 
+                   class="lightbox-media video"
+                   :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`, transition: (isPinching || isPanning) ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', touchAction: scale > 1 ? 'none' : 'auto' }"
+                   :class="{ zoomed: scale > 1 }"></video>
+                   
+            <!-- Standard Image -->
+            <img v-else 
                  ref="zoomImageRef"
                  :key="mediaUrl" 
                  :src="mediaUrl" 
-                 controls 
-                 loop 
-                 autoplay 
-                 muted 
-                 class="lightbox-media video"
-                 :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`, transition: (isPinching || isPanning) ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', touchAction: scale > 1 ? 'none' : 'auto' }"
-                 :class="{ zoomed: scale > 1 }"></video>
-                 
-          <!-- Standard Image -->
-          <img v-else 
-               ref="zoomImageRef"
-               :key="mediaUrl" 
-               :src="mediaUrl" 
-               :alt="altText" 
-               class="lightbox-media image" 
-               @click="toggleZoom"
-               :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`, transition: (isPinching || isPanning) ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', cursor: scale > 1 ? 'zoom-out' : 'zoom-in', touchAction: scale > 1 ? 'none' : 'auto' }"
-               :class="{ zoomed: scale > 1 }" />
+                 :alt="altText" 
+                 class="lightbox-media image" 
+                 @click="toggleZoom"
+                 :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`, transition: (isPinching || isPanning) ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', cursor: scale > 1 ? 'zoom-out' : 'zoom-in', touchAction: scale > 1 ? 'none' : 'auto' }"
+                 :class="{ zoomed: scale > 1 }" />
+          </div>
         </div>
-      </div>
 
-      <!-- Right Column: Glassmorphic Tags Sidebar -->
-      <LightboxSidebar 
-        :displayed-post="displayedPost"
-        @search-tag="searchTag"
-      />
+        <!-- Right Column: Glassmorphic Tags Sidebar -->
+        <LightboxSidebar 
+          :displayed-post="displayedPost"
+          @search-tag="searchTag"
+        />
+      </div>
 
       <!-- Actions Panel: Under Media -->
       <LightboxActions 
@@ -627,6 +630,12 @@ onUnmounted(() => {
   height: 100%;
 }
 
+/* Transparent wrapper on desktop — children participate in overlay's flex layout directly.
+   On mobile it becomes the scrollable region between the fixed header and actions bar. */
+.lightbox-scroll-content {
+  display: contents;
+}
+
 .lightbox-media-container {
   max-width: calc(100vw - 690px);
   max-height: calc(100vh - 200px);
@@ -665,20 +674,38 @@ onUnmounted(() => {
   .lightbox-overlay {
     flex-direction: column;
     justify-content: flex-start;
-    padding-top: 75px;
-    overflow-y: auto;
+    align-items: center;
+    overflow: hidden;
+    padding-top: 0;
   }
   .lightbox-nav-btn {
     display: none; /* Rely on swipes on mobile */
   }
+  .lightbox-scroll-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 16px;
+    overflow-y: auto;
+    overflow-x: hidden;
+    width: 100%;
+    flex: 1 1 auto;
+    min-height: 0;
+    padding-top: 64px;   /* leave room for the fixed header */
+    padding-bottom: 88px; /* leave room for the fixed actions bar */
+    -webkit-overflow-scrolling: touch;
+  }
   .lightbox-content-wrapper {
     flex-direction: column;
     gap: 16px;
+    width: 100%;
+    height: auto;
+    flex-shrink: 0;
   }
   .lightbox-media-container {
     max-width: 95vw;
     max-height: 50vh;
-    margin-bottom: 20px;
+    margin-bottom: 0;
   }
   .lightbox-media {
     max-height: 50vh;

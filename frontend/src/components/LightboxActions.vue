@@ -79,11 +79,14 @@ const lang = useLangStore()
 
 @media (max-width: 768px) {
   .lightbox-actions-panel {
-    position: static;
-    transform: none;
-    width: 95vw;
+    position: absolute;
+    bottom: 12px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: auto;
+    max-width: 95vw;
     padding: 8px 12px;
-    margin-top: 16px;
+    margin-top: 0;
   }
   .lightbox-actions-panel .btn {
     padding: 6px 10px;

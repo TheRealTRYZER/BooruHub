@@ -7,7 +7,7 @@
           {{ group.title }} ({{ group.allTags.length }})
         </div>
         <div class="lightbox-tag-group-chips">
-          <span v-for="tag in group.tags" 
+          <span v-for="tag in group.allTags" 
                 :key="tag" 
                 class="tag-chip" 
                 :class="group.key"
@@ -18,16 +18,6 @@
                 @keydown.space.prevent="$emit('searchTag', tag)">
             {{ tag.replace(/_/g, ' ') }}
           </span>
-          <span v-if="group.hasMore" 
-                class="tag-chip lightbox-tag-more" 
-                role="button"
-                tabindex="0"
-                style="cursor: pointer; opacity: 0.8;"
-                @click="toggleGroupExpand(group.key)"
-                @keydown.enter.prevent="toggleGroupExpand(group.key)"
-                @keydown.space.prevent="toggleGroupExpand(group.key)">
-            {{ group.isExpanded ? '« Less' : '» More (' + (group.allTags.length - group.tags.length) + ')' }}
-          </span>
         </div>
       </div>
     </div>
@@ -35,7 +25,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed } from 'vue'
 import { useLangStore } from '../stores/lang'
 import type { Post } from '../types'
 
@@ -48,7 +38,6 @@ defineEmits<{
 }>()
 
 const lang = useLangStore()
-const expandedGroups = ref<Record<string, boolean>>({})
 
 // Group post tags dynamically by category
 const groupedTags = computed(() => {
@@ -85,24 +74,14 @@ const groupedTags = computed(() => {
   return categoriesOrder
     .map(cat => {
       const allTags = groups[cat] || []
-      const limit = 15
-      const hasMore = allTags.length > limit
-      const tags = expandedGroups.value[cat] ? allTags : allTags.slice(0, limit)
       return {
         key: cat,
         title: categoryTitles[cat] || cat,
-        tags,
-        allTags,
-        hasMore,
-        isExpanded: !!expandedGroups.value[cat]
+        allTags
       }
     })
     .filter(g => g.allTags.length > 0)
 })
-
-function toggleGroupExpand(key: string) {
-  expandedGroups.value[key] = !expandedGroups.value[key]
-}
 </script>
 
 <style scoped>
@@ -203,7 +182,6 @@ function toggleGroupExpand(key: string) {
   .lightbox-sidebar {
     position: static;
     width: 95vw;
-    height: 140px;
     padding: 12px;
     margin-top: 16px;
     margin-bottom: 24px;
@@ -211,9 +189,6 @@ function toggleGroupExpand(key: string) {
   .sidebar-title {
     font-size: 13px;
     padding-bottom: 4px;
-  }
-  .lightbox-tags-list {
-    max-height: 90px;
   }
 }
 </style>
