@@ -122,28 +122,35 @@ export const useFeedStore = defineStore('feed', () => {
   }
 
   function addPosts(newPosts: Post[]) {
+    // Build O(1) lookup maps once per call instead of find()-scanning all posts per new post.
+    const byKey = new Map<string, Post>()
+    const byMd5 = new Map<string, Post>()
+    for (const p of posts.value) {
+      byKey.set(`${p.source_site}:${p.id}`, p)
+      if (p.md5) byMd5.set(p.md5, p)
+    }
+
     for (const rawPost of newPosts) {
-      // Avoid adding exact duplicate by site ID
-      const exists = posts.value.find(p => String(p.id) === String(rawPost.id) && p.source_site === rawPost.source_site)
-      if (exists) continue
+      const key = `${rawPost.source_site}:${rawPost.id}`
+      if (byKey.has(key)) continue
 
       // Clone post to prevent cache pollution
-      const post = {
+      const post: Post = {
         ...rawPost,
         tags: [...(rawPost.tags || [])],
-        duplicates: rawPost.duplicates ? rawPost.duplicates.map(d => ({ ...d, tags: [...(d.tags || [] )] })) : [],
+        duplicates: rawPost.duplicates ? rawPost.duplicates.map(d => ({ ...d, tags: [...(d.tags || [])] })) : [],
         duplicate_sites: rawPost.duplicate_sites ? [...rawPost.duplicate_sites] : [],
         tags_metadata: rawPost.tags_metadata ? { ...rawPost.tags_metadata } : null
       }
 
       // 1. Instant check: Exact MD5 match
       if (post.md5) {
-        const existingPost = posts.value.find(p => p.md5 === post.md5)
+        const existingPost = byMd5.get(post.md5)
         if (existingPost) {
           // Merge tags
           const mergedTags = new Set([...existingPost.tags, ...post.tags])
           existingPost.tags = Array.from(mergedTags)
-          
+
           // Save full duplicate post
           existingPost.duplicates = existingPost.duplicates || []
           if (!existingPost.duplicates.some(d => String(d.id) === String(post.id) && d.source_site === post.source_site)) {
@@ -157,12 +164,16 @@ export const useFeedStore = defineStore('feed', () => {
           if (!existingPost.duplicate_sites.includes(post.source_site)) {
             existingPost.duplicate_sites.push(post.source_site)
           }
+          // Future duplicates of the same site:id resolve to the merged post
+          byKey.set(key, existingPost)
           continue // Skip adding as main post
         }
+        byMd5.set(post.md5, post)
       }
 
       // Initialize with instant fallback hash so store tests pass
       post.hash = getInstantPostHash(post)
+      byKey.set(key, post)
       posts.value.push(post)
     }
   }

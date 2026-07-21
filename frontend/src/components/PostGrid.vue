@@ -130,8 +130,17 @@ function addSkeletons(count: number) {
 
 let lastFirstPostKey = ''
 
-// Watch for posts array changes (new search, scroll append, or duplicate removal)
-watch(() => props.posts, (newVal) => {
+// Watch posts via a cheap signature (length + first/last key) instead of deep-watching
+// the whole array. Deep watching traverses every nested tag/duplicate on each reactive
+// tick — O(N * tags) — which is the main source of lag with many posts.
+watch(() => {
+  const arr = props.posts
+  if (!arr || arr.length === 0) return '0|'
+  const first = arr[0]!
+  const last = arr[arr.length - 1]!
+  return `${arr.length}|${first.source_site}-${first.id}|${last.source_site}-${last.id}`
+}, () => {
+  const newVal = props.posts
   if (!newVal) return
   const firstPost = newVal[0]
   const firstPostKey = firstPost ? `${firstPost.source_site}-${firstPost.id}` : ''
@@ -182,7 +191,7 @@ watch(() => props.posts, (newVal) => {
     placedCount = newVal.length
     setTimeout(observeNewCards, 100)
   }
-}, { deep: true })
+})
 
 // Watch for card size changes
 watch(() => feed.cardSize, () => {
