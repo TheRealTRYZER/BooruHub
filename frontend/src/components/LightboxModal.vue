@@ -704,11 +704,11 @@ onUnmounted(() => {
   }
   .lightbox-media-container {
     max-width: 95vw;
-    max-height: 50vh;
+    max-height: none;
     margin-bottom: 0;
   }
   .lightbox-media {
-    max-height: 50vh;
+    max-height: none;
   }
   .lightbox-close-btn {
     top: 10px; right: 12px;

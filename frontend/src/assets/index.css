@@ -555,6 +555,7 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
 }
 .post-card-media { background: var(--bg-secondary); overflow: hidden; }
 .post-card-img { width: 100%; display: block; object-fit: cover; }
+.post-card-img.post-card-img-cropped { object-position: top center; }
 .post-card-overlay {
   position: absolute; bottom: 0; left: 0; right: 0;
   padding: calc(30px * var(--r-unit)) calc(12px * var(--r-unit)) calc(12px * var(--r-unit));

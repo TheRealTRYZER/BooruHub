@@ -7,6 +7,7 @@
       <!-- Main Content (Always Visible Instantly) -->
       <div class="post-card-media" :style="mediaStyle">
         <img class="post-card-img"
+             :class="{ 'post-card-img-cropped': isLong }"
              :src="currentUrl || placeholder"
              :alt="altText"
              loading="lazy"
@@ -179,8 +180,21 @@ const isFlash = computed(() => (displayedPost.value.file_ext || '').toLowerCase(
 const ratingClass = computed<RatingClass>(() => RATING_MAP[(displayedPost.value.rating || '').toLowerCase()] || 'unknown')
 const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
 
+const LONG_RATIO = 21 / 9 // height is >= 21/9 of width => very tall post
+
+const isLong = computed(() => {
+  const p = displayedPost.value
+  if (p.width && p.height && p.width > 0) {
+    return p.height / p.width >= LONG_RATIO
+  }
+  return false
+})
+
 const mediaStyle = computed(() => {
   const p = displayedPost.value
+  if (isLong.value) {
+    return { aspectRatio: '9 / 21', background: 'var(--bg-secondary)', overflow: 'hidden' }
+  }
   if (p.width && p.height) {
     return { aspectRatio: `${p.width} / ${p.height}`, background: 'var(--bg-secondary)', overflow: 'hidden' }
   }
