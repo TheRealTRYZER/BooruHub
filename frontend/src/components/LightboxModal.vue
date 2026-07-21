@@ -29,6 +29,7 @@
         <!-- Center Media Container (Perfect Center) -->
         <div class="lightbox-content-wrapper" @click.self="closeLightbox">
           <div class="lightbox-media-container" 
+               :class="{ 'lightbox-media-scrollable': !isVideo && isLong }"
                @click.self="closeLightbox">
             
             <!-- Video Player -->
@@ -51,9 +52,9 @@
                  :src="mediaUrl" 
                  :alt="altText" 
                  class="lightbox-media image" 
+                 :class="{ 'lightbox-media-scrollable-img': isLong, zoomed: scale > 1 }"
                  @click="toggleZoom"
-                 :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`, transition: (isPinching || isPanning) ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', cursor: scale > 1 ? 'zoom-out' : 'zoom-in', touchAction: scale > 1 ? 'none' : 'auto' }"
-                 :class="{ zoomed: scale > 1 }" />
+                 :style="{ transform: `translate(${translateX}px, ${translateY}px) scale(${scale})`, transition: (isPinching || isPanning) ? 'none' : 'transform 0.3s cubic-bezier(0.4, 0, 0.2, 1)', cursor: scale > 1 ? 'zoom-out' : 'zoom-in', touchAction: scale > 1 ? 'none' : 'auto' }" />
           </div>
         </div>
 
@@ -277,6 +278,16 @@ const isVideo = computed(() => {
   const url = (displayedPost.value.file_url || '').toLowerCase()
   const videoExts = ['webm', 'mp4', 'm4v', 'mov', 'mkv', 'ogv']
   return videoExts.includes(ext) || videoExts.some(ve => url.endsWith('.' + ve) || url.includes('.' + ve + '?'))
+})
+
+// Very tall posts (height/width >= 21/9) are shown at natural size in the lightbox
+// inside a scrollable frame so they can be read (and zoomed) without shrinking.
+const isLong = computed(() => {
+  const p = displayedPost.value
+  if (p && p.width && p.height && p.width > 0) {
+    return p.height / p.width >= 21 / 9
+  }
+  return false
 })
 
 const mediaUrl = computed(() => {
@@ -657,6 +668,31 @@ onUnmounted(() => {
 .lightbox-media.image {
   cursor: zoom-in;
 }
+
+/* Very tall posts (comics) on desktop: shown at natural size inside a scrollable
+   frame instead of being shrunk to fit. Zoom (click/pinch) still applies and the
+   frame scrolls so the whole page can be read. */
+.lightbox-media-container.lightbox-media-scrollable {
+  max-width: calc(100vw - 690px);
+  max-height: calc(100vh - 200px);
+  width: auto;
+  overflow-x: hidden;
+  overflow-y: auto;
+  align-items: flex-start;
+  justify-content: center;
+}
+.lightbox-media-container.lightbox-media-scrollable::-webkit-scrollbar { width: 6px; }
+.lightbox-media-container.lightbox-media-scrollable::-webkit-scrollbar-thumb {
+  background: rgba(255,255,255,0.18);
+  border-radius: 3px;
+}
+.lightbox-media.lightbox-media-scrollable-img {
+  width: 100%;
+  height: auto;
+  max-height: none;
+  object-fit: fill;
+  display: block;
+}
 .lightbox-media.zoomed {
   z-index: 1000;
 }
@@ -709,6 +745,13 @@ onUnmounted(() => {
   }
   .lightbox-media {
     max-height: none;
+  }
+  /* On mobile the whole post (media + tags) scrolls via .lightbox-scroll-content,
+     so the per-image frame must not impose its own scroll limit. */
+  .lightbox-media-container.lightbox-media-scrollable {
+    max-width: 95vw;
+    max-height: none;
+    overflow: visible;
   }
   .lightbox-close-btn {
     top: 10px; right: 12px;
