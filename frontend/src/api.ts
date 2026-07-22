@@ -261,8 +261,9 @@ export async function apiSearch(tags: string, site: SiteName = 'danbooru', page 
   return _fetch<SearchResponse>(`/posts/search?${params}`)
 }
 
-export async function apiSuggestTags(q: string, limit = 15, signal?: AbortSignal): Promise<TagSuggestResponse> {
+export async function apiSuggestTags(q: string, limit = 15, signal?: AbortSignal, fast = false): Promise<TagSuggestResponse> {
   const params = new URLSearchParams({ q, limit: String(limit) })
+  if (fast) params.set('fast', 'true')
   return _fetch<TagSuggestResponse>(`/posts/tags/suggest?${params}`, { signal })
 }
 

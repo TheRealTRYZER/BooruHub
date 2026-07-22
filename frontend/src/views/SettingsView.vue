@@ -288,6 +288,8 @@ const suggestions = ref<TagSuggestion[]>([])
 const activeField = ref<string | null>(null)
 let suggestTimeout: any = null
 let suggestController: AbortController | null = null
+let suggestFastController: AbortController | null = null
+let suggestQueryId = 0
 
 function onSuggest(field: string, val: string) {
   activeField.value = field
@@ -296,27 +298,53 @@ function onSuggest(field: string, val: string) {
     suggestController.abort()
     suggestController = null
   }
+  if (suggestFastController) {
+    suggestFastController.abort()
+    suggestFastController = null
+  }
   if (val.length < 2) {
+    suggestQueryId++
     suggestions.value = []
     return
   }
+  const myQueryId = ++suggestQueryId
+
+  // Phase 1: local-only, instant
+  suggestFastController = new AbortController()
+  apiSuggestTags(val, 15, suggestFastController.signal, true)
+    .then(data => {
+      if (myQueryId !== suggestQueryId || activeField.value !== field) return
+      suggestions.value = data.suggestions || []
+    })
+    .catch((e: any) => {
+      if (e.name !== 'AbortError' && myQueryId === suggestQueryId && activeField.value === field) {
+        suggestions.value = []
+      }
+    })
+    .finally(() => {
+      if (myQueryId === suggestQueryId) suggestFastController = null
+    })
+
+  // Phase 2: full remote, debounced
   suggestTimeout = setTimeout(async () => {
     suggestController = new AbortController()
     try {
       const data = await apiSuggestTags(val, 15, suggestController.signal)
+      if (myQueryId !== suggestQueryId || activeField.value !== field) return
       suggestions.value = data.suggestions || []
     } catch (e: any) {
-      if (e.name !== 'AbortError') {
+      if (e.name !== 'AbortError' && myQueryId === suggestQueryId && activeField.value === field) {
         suggestions.value = []
       }
     } finally {
-      suggestController = null
+      if (myQueryId === suggestQueryId) suggestController = null
     }
   }, 300)
 }
 
 function onBlur() {
   setTimeout(() => {
+    suggestQueryId++
     activeField.value = null
     suggestions.value = []
   }, 200)
@@ -329,7 +357,8 @@ function selectSuggest(tag: string) {
   else if (activeField.value === 'rule34') mapForm.value.rule34 = tag
   else if (activeField.value === 'blacklist') newRule.value = tag
   else if (activeField.value === 'defaultTags') defaultTags.value = tag
-  
+
+  suggestQueryId++
   suggestions.value = []
   activeField.value = null
 }

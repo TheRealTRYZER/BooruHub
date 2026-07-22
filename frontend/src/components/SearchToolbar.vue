@@ -189,7 +189,9 @@ const availableSites: SiteName[] = ['danbooru', 'e621', 'rule34']
 const suggestions = ref<TagSuggestion[]>([])
 
 let suggestController: AbortController | null = null
+let suggestFastController: AbortController | null = null
 let splitSuggestController: AbortController | null = null
+let suggestQueryId = 0
 
 // Plain Text Tag Query Builder State
 const inputVal = ref('')
@@ -291,6 +293,16 @@ function triggerSearch() {
   if (feed.tags.trim()) {
     addSearchQuery(feed.tags.trim())
   }
+  suggestQueryId++
+  clearTimeout(suggestTimeout)
+  if (suggestController) {
+    suggestController.abort()
+    suggestController = null
+  }
+  if (suggestFastController) {
+    suggestFastController.abort()
+    suggestFastController = null
+  }
   suggestions.value = []
   showHistory.value = false
   emit('search')
@@ -324,6 +336,10 @@ function onSearchInput() {
     suggestController.abort()
     suggestController = null
   }
+  if (suggestFastController) {
+    suggestFastController.abort()
+    suggestFastController = null
+  }
 
   const text = inputVal.value || ''
   const words = text.split(/\s+/)
@@ -331,17 +347,37 @@ function onSearchInput() {
   const cleanWord = lastWord.startsWith('-') ? lastWord.substring(1) : lastWord
 
   if (cleanWord && cleanWord.length >= 2) {
+    const myQueryId = ++suggestQueryId
+
+    // Phase 1: local-only (mapping/meta/cached tags) returns almost instantly
+    suggestFastController = new AbortController()
+    apiSuggestTags(cleanWord, 15, suggestFastController.signal, true)
+      .then(data => {
+        if (myQueryId !== suggestQueryId) return
+        suggestions.value = data.suggestions || []
+      })
+      .catch((e: any) => {
+        if (e.name !== 'AbortError' && myQueryId === suggestQueryId) {
+          suggestions.value = []
+        }
+      })
+      .finally(() => {
+        if (myQueryId === suggestQueryId) suggestFastController = null
+      })
+
+    // Phase 2: full (remote autocomplete) enriches/refreshes the list after debounce
     suggestTimeout = setTimeout(async () => {
       suggestController = new AbortController()
       try {
-        const data = await apiSuggestTags(cleanWord, 15, suggestController.signal)
+        const data = await apiSuggestTags(cleanWord, 15, suggestController.signal, false)
+        if (myQueryId !== suggestQueryId) return
         suggestions.value = data.suggestions || []
       } catch (e: any) {
-        if (e.name !== 'AbortError') {
+        if (e.name !== 'AbortError' && myQueryId === suggestQueryId) {
           suggestions.value = []
         }
       } finally {
-        suggestController = null
+        if (myQueryId === suggestQueryId) suggestController = null
       }
     }, 300)
   } else {
@@ -355,6 +391,7 @@ function onSearchFocus() {
 
 function onSearchBlur() {
   setTimeout(() => {
+    suggestQueryId++
     suggestions.value = []
     showHistory.value = false
   }, 200)
@@ -374,6 +411,7 @@ function selectSuggestion(tag: string) {
   } else {
     inputVal.value = tag + ' '
   }
+  suggestQueryId++
   suggestions.value = []
   syncToFeedStore()
   if (inputEl.value) inputEl.value.focus()
@@ -401,6 +439,8 @@ function onTabPress() {
 const splitSuggestions = ref<TagSuggestion[]>([])
 const activeSplitSite = ref<SiteName | null>(null)
 let splitSuggestTimeout: any = null
+let splitSuggestFastController: AbortController | null = null
+let splitSuggestQueryId = 0
 
 function onSplitSearchInput(site: SiteName) {
   clearTimeout(splitSuggestTimeout)
@@ -408,24 +448,48 @@ function onSplitSearchInput(site: SiteName) {
     splitSuggestController.abort()
     splitSuggestController = null
   }
+  if (splitSuggestFastController) {
+    splitSuggestFastController.abort()
+    splitSuggestFastController = null
+  }
 
   activeSplitSite.value = site
   const text = feed.siteTags[site] || ''
   const words = text.split(/\s+/)
   const lastWord = words[words.length - 1] || ''
-  
+
   if (lastWord && lastWord.length >= 2) {
+    const myQueryId = ++splitSuggestQueryId
+
+    // Phase 1: local-only, instant
+    splitSuggestFastController = new AbortController()
+    apiSuggestTags(lastWord, 15, splitSuggestFastController.signal, true)
+      .then(data => {
+        if (myQueryId !== splitSuggestQueryId || activeSplitSite.value !== site) return
+        splitSuggestions.value = data.suggestions || []
+      })
+      .catch((e: any) => {
+        if (e.name !== 'AbortError' && myQueryId === splitSuggestQueryId && activeSplitSite.value === site) {
+          splitSuggestions.value = []
+        }
+      })
+      .finally(() => {
+        if (myQueryId === splitSuggestQueryId) splitSuggestFastController = null
+      })
+
+    // Phase 2: full remote, debounced
     splitSuggestTimeout = setTimeout(async () => {
       splitSuggestController = new AbortController()
       try {
         const data = await apiSuggestTags(lastWord, 15, splitSuggestController.signal)
+        if (myQueryId !== splitSuggestQueryId || activeSplitSite.value !== site) return
         splitSuggestions.value = data.suggestions || []
       } catch (e: any) {
-        if (e.name !== 'AbortError') {
+        if (e.name !== 'AbortError' && myQueryId === splitSuggestQueryId && activeSplitSite.value === site) {
           splitSuggestions.value = []
         }
       } finally {
-        splitSuggestController = null
+        if (myQueryId === splitSuggestQueryId) splitSuggestController = null
       }
     }, 300)
   } else {
@@ -441,6 +505,7 @@ function onSplitSearchFocus(site: SiteName) {
 function onSplitSearchBlur(site: SiteName) {
   setTimeout(() => {
     if (activeSplitSite.value === site) {
+      splitSuggestQueryId++
       splitSuggestions.value = []
       activeSplitSite.value = null
     }
@@ -456,6 +521,7 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
   } else {
     feed.siteTags[site] = tag + ' '
   }
+  splitSuggestQueryId++
   splitSuggestions.value = []
   activeSplitSite.value = null
 }
