@@ -50,6 +50,10 @@ const props = withDefaults(defineProps<{
 const gridEl = ref<HTMLElement | null>(null)
 const colCount = ref(getColCount())
 const columns = ref<GridItem[][]>([])
+// Accumulated estimated height per column (in aspect-ratio units = height / width).
+// All columns share the same width, so comparing these is equivalent to comparing pixel
+// heights without ever touching the DOM — fixes the uneven masonry from count-based balancing.
+const colHeights = ref<number[]>([])
 
 // Track all items placed so we can append incrementally
 let placedCount = 0
@@ -65,36 +69,70 @@ function getColCount() {
 
 function initColumns() {
   columns.value = Array.from({ length: colCount.value }, () => [])
+  colHeights.value = Array.from({ length: colCount.value }, () => 0)
   placedCount = 0
   skeletonKeys = []
 }
 
+// Estimate a card's height in aspect-ratio units (height / width). Mirrors PostCard.mediaStyle:
+// known dims use the real ratio, very tall posts are capped at 9/21, unknown dims default to a square.
+function estimateHeight(post: Post): number {
+  const p = post
+  const w = p.width
+  const h = p.height
+  if (w && h && w > 0) {
+    const ratio = h / w
+    return ratio >= 21 / 9 ? 21 / 9 : ratio
+  }
+  return 1
+}
+
 function getShortestColIndex() {
-  // Use item count as proxy for height to avoid DOM measurement during render
+  // Use accumulated estimated height as the primary balance signal.
   let minIdx = 0
+  let minH = colHeights.value[0] ?? 0
   let minLen = columns.value[0]?.length ?? 0
   for (let i = 1; i < columns.value.length; i++) {
-    const col = columns.value[i]
-    if (col && col.length < minLen) {
-      minLen = col.length
+    const h = colHeights.value[i] ?? 0
+    const len = columns.value[i]?.length ?? 0
+    if (h < minH - 0.001 || (Math.abs(h - minH) <= 0.001 && len < minLen)) {
+      minH = h
+      minLen = len
       minIdx = i
     }
   }
   return minIdx
 }
 
+function appendToColumn(idx: number, item: GridItem, post?: Post) {
+  const col = columns.value[idx]
+  if (!col) return
+  col.push(item)
+  if (post) colHeights.value[idx] = (colHeights.value[idx] ?? 0) + estimateHeight(post)
+}
+
+// Recompute accumulated heights from scratch (used after filtering / removing items).
+function recomputeHeights() {
+  const heights = Array.from({ length: columns.value.length }, () => 0)
+  columns.value.forEach((col, ci) => {
+    if (!col) return
+    for (const item of col) {
+      const post = item.props?.post
+      if (post) heights[ci] = (heights[ci] ?? 0) + estimateHeight(post)
+    }
+  })
+  colHeights.value = heights
+}
+
 function placeNewPosts() {
   const newPosts = props.posts.slice(placedCount)
   for (const post of newPosts) {
     const idx = getShortestColIndex()
-    const col = columns.value[idx]
-    if (col) {
-      col.push({
-        key: `${post.source_site}-${post.id}`,
-        component: markRaw(PostCard),
-        props: { post },
-      })
-    }
+    appendToColumn(idx, {
+      key: `${post.source_site}-${post.id}`,
+      component: markRaw(PostCard),
+      props: { post },
+    }, post)
     placedCount++
   }
 }
@@ -116,14 +154,11 @@ function addSkeletons(count: number) {
   for (let i = 0; i < count; i++) {
     const idx = i % colCount.value
     const key = `sk-${Date.now()}-${i}`
-    const col = columns.value[idx]
-    if (col) {
-      col.push({
-        key,
-        component: markRaw(SkeletonCard),
-        props: {},
-      })
-    }
+    appendToColumn(idx, {
+      key,
+      component: markRaw(SkeletonCard),
+      props: {},
+    })
     skeletonKeys.push(key)
   }
 }
@@ -171,6 +206,7 @@ watch(() => {
         }
       }
     }
+    recomputeHeights()
 
     // 3. Identify and place new posts that are not yet in columns in O(N + M) time
     const placedKeys = new Set(columns.value.flatMap(col => col ? col.map(item => item.key) : []))
@@ -178,14 +214,11 @@ watch(() => {
     
     for (const post of newPosts) {
       const idx = getShortestColIndex()
-      const col = columns.value[idx]
-      if (col) {
-        col.push({
-          key: `${post.source_site}-${post.id}`,
-          component: markRaw(PostCard),
-          props: { post },
-        })
-      }
+      appendToColumn(idx, {
+        key: `${post.source_site}-${post.id}`,
+        component: markRaw(PostCard),
+        props: { post },
+      }, post)
     }
     
     placedCount = newVal.length
