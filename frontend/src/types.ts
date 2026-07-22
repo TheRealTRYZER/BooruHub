@@ -74,6 +74,7 @@ export interface TagSuggestion {
   from_rule34?: boolean
   category?: string
   post_count?: number
+  search_count?: number
 }
 
 export interface TagSuggestResponse {
@@ -182,6 +183,7 @@ export type TranslationKey =
   | 'tags_for'
   | 'bookmarks_title' | 'bookmarks_subtitle' | 'no_bookmarks'
   | 'save_bookmarks_hint' | 'error_load_bookmarks' | 'enter_tags_to_save' | 'bookmark_added_msg'
+  | 'frequent_tag_hint'
   | 'favorites_title' | 'favorites_subtitle'
   | 'dislikes_title' | 'dislikes_subtitle' | 'likes_tab' | 'dislikes_tab'
   | 'no_favorites' | 'empty_list' | 'add_favorites_hint' | 'error_load_favorites'

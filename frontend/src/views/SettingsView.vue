@@ -30,9 +30,9 @@
             <div style="display:flex;gap:8px;position:relative;">
               <input type="text" class="input" v-model="defaultTags" @input="onSuggest('defaultTags', defaultTags)" @blur="onBlur" :placeholder="lang.t('search_placeholder')" style="flex:1;">
               <button class="btn btn-secondary" @click="saveDefaultTags" :disabled="savingTags">{{ lang.t('save') }}</button>
-              <div v-if="activeField === 'defaultTags' && suggestions.length > 0" class="search-suggestions visible mapping-suggest" style="top:calc(100% + 4px);">
-                <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
-                  <span style="flex:1">{{ s.tag }}</span>
+                <div v-if="activeField === 'defaultTags' && suggestions.length > 0" class="search-suggestions visible mapping-suggest" style="top:calc(100% + 4px);">
+                <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
+                  <span style="flex:1">{{ s.tag }}<span v-if="(s.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ s.search_count }}</span></span>
                   <span v-if="s.from_danbooru" class="suggestion-source danbooru">db</span>
                   <span v-if="s.from_e621" class="suggestion-source e621">e6</span>
                   <span v-if="s.from_rule34" class="suggestion-source rule34">r34</span>
@@ -157,8 +157,8 @@
                 <label for="map-unitag-input" class="input-label" style="font-size:10px;">Unitag</label>
                 <input id="map-unitag-input" type="text" class="input btn-sm" v-model="mapForm.unitag" @input="onSuggest('unitag', mapForm.unitag)" @blur="onBlur">
                 <div v-if="activeField === 'unitag' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
-                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
-                    <span style="flex:1">{{ s.tag }}</span>
+                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
+                    <span style="flex:1">{{ s.tag }}<span v-if="(s.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ s.search_count }}</span></span>
                   </div>
                 </div>
               </div>
@@ -166,8 +166,8 @@
                 <label for="map-danbooru-input" class="input-label" style="font-size:10px;color:var(--danbooru);">Danbooru</label>
                 <input id="map-danbooru-input" type="text" class="input btn-sm" v-model="mapForm.danbooru" @input="onSuggest('danbooru', mapForm.danbooru)" @blur="onBlur">
                 <div v-if="activeField === 'danbooru' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
-                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
-                    <span style="flex:1">{{ s.tag }}</span>
+                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
+                    <span style="flex:1">{{ s.tag }}<span v-if="(s.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ s.search_count }}</span></span>
                     <span v-if="s.from_danbooru" class="suggestion-source danbooru">db</span>
                   </div>
                 </div>
@@ -176,8 +176,8 @@
                 <label for="map-e621-input" class="input-label" style="font-size:10px;color:var(--e621);">e621</label>
                 <input id="map-e621-input" type="text" class="input btn-sm" v-model="mapForm.e621" @input="onSuggest('e621', mapForm.e621)" @blur="onBlur">
                 <div v-if="activeField === 'e621' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
-                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
-                    <span style="flex:1">{{ s.tag }}</span>
+                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
+                    <span style="flex:1">{{ s.tag }}<span v-if="(s.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ s.search_count }}</span></span>
                     <span v-if="s.from_e621" class="suggestion-source e621">e6</span>
                   </div>
                 </div>
@@ -186,8 +186,8 @@
                 <label for="map-rule34-input" class="input-label" style="font-size:10px;color:var(--rule34);">Rule34</label>
                 <input id="map-rule34-input" type="text" class="input btn-sm" v-model="mapForm.rule34" @input="onSuggest('rule34', mapForm.rule34)" @blur="onBlur">
                 <div v-if="activeField === 'rule34' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
-                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
-                    <span style="flex:1">{{ s.tag }}</span>
+                  <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
+                    <span style="flex:1">{{ s.tag }}<span v-if="(s.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ s.search_count }}</span></span>
                     <span v-if="s.from_rule34" class="suggestion-source rule34">r34</span>
                   </div>
                 </div>
@@ -218,8 +218,8 @@
             <input type="text" class="input" v-model="newRule" @input="onSuggest('blacklist', newRule)" @blur="onBlur" @keydown.enter="addRule" :placeholder="lang.t('search_placeholder')" style="flex:1;">
             <button class="btn btn-primary" @click="addRule">{{ lang.t('save') }}</button>
             <div v-if="activeField === 'blacklist' && suggestions.length > 0" class="search-suggestions visible mapping-suggest" style="top:calc(100% + 4px);">
-              <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" @mousedown.prevent="selectSuggest(s.tag)">
-                <span style="flex:1">{{ s.tag }}</span>
+              <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
+                <span style="flex:1">{{ s.tag }}<span v-if="(s.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ s.search_count }}</span></span>
                 <span v-if="s.from_danbooru" class="suggestion-source danbooru">db</span>
                 <span v-if="s.from_e621" class="suggestion-source e621">e6</span>
                 <span v-if="s.from_rule34" class="suggestion-source rule34">r34</span>
@@ -733,5 +733,18 @@ input:checked + .slider:before { transform: translateX(20px); }
   left: 0;
   width: 250px;
   max-height: 200px;
+}
+.search-suggestion-item.frequent {
+  background: linear-gradient(90deg, rgba(255, 215, 0, 0.10), transparent 60%);
+}
+.frequent-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #b8860b;
+  background: rgba(255, 215, 0, 0.18);
+  border-radius: 8px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  white-space: nowrap;
 }
 </style>

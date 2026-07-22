@@ -31,11 +31,12 @@
       <div class="search-suggestions" :class="{ visible: suggestions.length > 0 }">
         <div v-for="tagObj in suggestions" :key="tagObj.tag" 
              class="search-suggestion-item" 
-             :class="{ mapped: tagObj.is_mapped }"
+             :class="{ mapped: tagObj.is_mapped, frequent: (tagObj.search_count || 0) > 0 }"
              @mousedown.prevent="selectSuggestion(tagObj.tag)">
           <span v-if="tagObj.is_mapped" class="mapped-star">⭐</span>
           <span class="suggestion-text autocomplete-tag" :class="tagObj.category">{{ tagObj.tag.replace(/_/g, ' ') }}</span>
           <span v-if="tagObj.category && tagObj.category !== 'general'" class="autocomplete-badge" :class="tagObj.category">{{ tagObj.category }}</span>
+          <span v-if="(tagObj.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ tagObj.search_count }}</span>
           
           <div class="suggestion-right-group">
             <span v-if="tagObj.post_count" class="tag-count-indicator">{{ formatCount(tagObj.post_count) }}</span>
@@ -81,11 +82,12 @@
                style="top: 100%; left: 0; width: 100%; max-height: 200px; z-index: 101;">
             <div v-for="tagObj in splitSuggestions" :key="tagObj.tag" 
                  class="search-suggestion-item" 
-                 :class="{ mapped: tagObj.is_mapped }"
+                 :class="{ mapped: tagObj.is_mapped, frequent: (tagObj.search_count || 0) > 0 }"
                  @mousedown.prevent="selectSplitSuggestion(site, tagObj.tag)">
               <span v-if="tagObj.is_mapped" class="mapped-star">⭐</span>
               <span class="suggestion-text autocomplete-tag" :class="tagObj.category">{{ tagObj.tag.replace(/_/g, ' ') }}</span>
               <span v-if="tagObj.category && tagObj.category !== 'general'" class="autocomplete-badge" :class="tagObj.category">{{ tagObj.category }}</span>
+              <span v-if="(tagObj.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ tagObj.search_count }}</span>
               
               <div class="suggestion-right-group">
                 <span v-if="tagObj.post_count" class="tag-count-indicator">{{ formatCount(tagObj.post_count) }}</span>
@@ -582,6 +584,19 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
 .mapped-star {
   margin-right: 6px;
   font-size: 10px;
+}
+.search-suggestion-item.frequent {
+  background: linear-gradient(90deg, rgba(255, 215, 0, 0.10), transparent 60%);
+}
+.frequent-badge {
+  font-size: 10px;
+  font-weight: 600;
+  color: #b8860b;
+  background: rgba(255, 215, 0, 0.18);
+  border-radius: 8px;
+  padding: 1px 6px;
+  margin-left: 6px;
+  white-space: nowrap;
 }
 .history-clock {
   margin-right: 8px;
