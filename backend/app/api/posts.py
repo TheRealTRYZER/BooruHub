@@ -378,6 +378,7 @@ async def suggest_tags(
     background_tasks: BackgroundTasks,
     q: str = Query(..., min_length=1, max_length=512, description="Tag prefix"),
     limit: int = Query(15, ge=1, le=50),
+    fast: bool = Query(False, description="Skip remote autocomplete fetches and return local sources only"),
     user: Optional[User] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
 ):
@@ -464,8 +465,8 @@ async def suggest_tags(
     remote_suggestions = []
     import sys
     in_pytest = "pytest" in sys.modules
-    
-    if q_lower and ":" not in q_lower and len(q_lower) >= 2 and not in_pytest:
+
+    if not fast and q_lower and ":" not in q_lower and len(q_lower) >= 2 and not in_pytest:
         from app.services.booru import PROVIDERS
         from fastapi import BackgroundTasks
         
