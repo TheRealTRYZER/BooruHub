@@ -86,5 +86,11 @@ async def test_suggest_tags_frequency_sorting(client: AsyncClient, mock_db: Magi
     assert tags[0] == "soldier"
     assert tags[1] == "solo"
 
+    # The frequently searched tag exposes its personal search count for UI highlighting
+    soldier = next(s for s in data["suggestions"] if s["tag"] == "soldier")
+    assert soldier["search_count"] == 1
+    solo = next(s for s in data["suggestions"] if s["tag"] == "solo")
+    assert solo["search_count"] is None
+
     # Cleanup overrides
     app.dependency_overrides = {}

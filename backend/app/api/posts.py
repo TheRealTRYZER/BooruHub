@@ -76,6 +76,7 @@ class TagSuggestion(BaseModel):
     from_rule34: bool = False
     category: Optional[str] = None
     post_count: Optional[int] = None
+    search_count: Optional[int] = None
 
 
 class TagSuggestionResponse(BaseModel):
@@ -576,6 +577,17 @@ async def suggest_tags(
 
     # Sort candidates descending
     candidates.sort(key=get_sort_key, reverse=True)
+
+    # Attach personal search frequency so the UI can highlight frequently used tags
+    for c in candidates:
+        c_name = c.tag.lower()
+        if c_name.startswith(("-", "~")):
+            c_name = c_name[1:]
+        if c_name.endswith(":"):
+            c_name = c_name[:-1]
+        count = tag_search_counts.get(c_name, 0)
+        if count:
+            c.search_count = count
 
     # Background cache remote tags task trigger
     if tag_sources_to_cache:
