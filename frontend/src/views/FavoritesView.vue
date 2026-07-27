@@ -17,7 +17,7 @@
         <button class="tab-btn" :class="{active: showDislikes}" @click="switchTab(true)">👎 {{ lang.t('dislikes_tab') || 'Dislikes' }}</button>
       </div>
 
-      <PostGrid :posts="posts" :skeletonCount="loading ? 15 : 0" @favorite-changed="onFavoriteChanged" />
+      <PostGrid :posts="posts" :skeletonCount="loading ? 15 : 0" @click-media="openLightbox" @favorite-changed="onFavoriteChanged" />
 
       <div v-if="!loading && posts.length === 0" class="empty-state">
         <div class="empty-state-icon">💫</div>
@@ -30,6 +30,13 @@
       <div v-if="!hasMore && posts.length > 0" class="no-more-posts">
         {{ lang.t('no_more_posts') }}
       </div>
+
+      <LightboxModal
+        v-if="selectedPost"
+        :post="selectedPost"
+        :posts="posts"
+        @close="selectedPost = null"
+      />
     </template>
   </div>
 </template>
@@ -56,6 +63,7 @@ import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
 import { apiGetFavorites } from '../api'
 import PostGrid from '../components/PostGrid.vue'
+import LightboxModal from '../components/LightboxModal.vue'
 import type { Post } from '../types'
 
 const auth = useAuthStore()
@@ -68,6 +76,11 @@ const hasMore = ref(false)
 const showDislikes = ref(false)
 const sentinelRef = ref<HTMLElement | null>(null)
 let observer: IntersectionObserver | null = null
+
+const selectedPost = ref<Post | null>(null)
+function openLightbox(post: Post) {
+  selectedPost.value = post
+}
 
 function switchTab(isDislike: boolean) {
   if (showDislikes.value === isDislike) return
@@ -95,9 +108,9 @@ async function loadMore() {
       tags: fav.tags || [],
       rating: fav.rating,
       score: fav.score,
-      width: null,
-      height: null,
-      file_ext: null,
+      width: fav.width,
+      height: fav.height,
+      file_ext: fav.file_ext,
       md5: null,
       created_at: null,
       is_dislike: showDislikes.value,
