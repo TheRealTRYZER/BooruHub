@@ -90,6 +90,9 @@ class Favorite(Base):
     tags = Column(ARRAY(Text), default=list)
     rating = Column(String(5))
     score = Column(Integer, default=0)
+    width = Column(Integer)
+    height = Column(Integer)
+    file_ext = Column(String(20))
     is_dislike = Column(Boolean, default=False, nullable=False, server_default='false')
     created_at = Column(
         DateTime(timezone=True),

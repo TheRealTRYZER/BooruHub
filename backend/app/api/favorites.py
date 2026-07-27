@@ -22,6 +22,9 @@ class FavoriteAdd(BaseModel):
     tags: List[str] = Field(default_factory=list)
     rating: Optional[str] = "g"
     score: int = 0
+    width: Optional[int] = None
+    height: Optional[int] = None
+    file_ext: Optional[str] = None
     is_dislike: bool = False
 
 
@@ -35,6 +38,9 @@ class FavoriteResponse(BaseModel):
     tags: List[str]
     rating: Optional[str]
     score: int
+    width: Optional[int]
+    height: Optional[int]
+    file_ext: Optional[str]
     is_dislike: bool
 
 
@@ -80,6 +86,9 @@ async def list_favorites(
                 "tags": f.tags or [],
                 "rating": f.rating,
                 "score": f.score,
+                "width": f.width,
+                "height": f.height,
+                "file_ext": f.file_ext,
                 "is_dislike": f.is_dislike,
             }
             for f in favs
@@ -132,6 +141,9 @@ async def add_favorite(
         tags=body.tags,
         rating=body.rating,
         score=body.score,
+        width=body.width,
+        height=body.height,
+        file_ext=body.file_ext,
         is_dislike=body.is_dislike,
     )
     db.add(fav)
