@@ -94,8 +94,10 @@ function getPostThumbnail(p: Post) {
 
 .post-relationship-thumb {
   width: 100%;
+  height: auto;
   aspect-ratio: 1;
   object-fit: cover;
+  display: block;
   border-radius: 8px;
   border: 2px solid transparent;
   cursor: pointer;
