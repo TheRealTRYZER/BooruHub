@@ -92,6 +92,9 @@ export interface Favorite {
   tags: string[]
   rating: string
   score: number
+  width: number | null
+  height: number | null
+  file_ext: string | null
   is_dislike: boolean
 }
 

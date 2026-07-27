@@ -289,6 +289,9 @@ export async function apiAddFavorite(post: Post, isDislike = false): Promise<unk
       tags: post.tags || [],
       rating: post.rating,
       score: post.score || 0,
+      width: post.width,
+      height: post.height,
+      file_ext: post.file_ext,
       is_dislike: isDislike,
     }),
   })
