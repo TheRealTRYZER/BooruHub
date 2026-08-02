@@ -34,7 +34,8 @@ describe('PostCard.vue', () => {
   it('should render post metadata correctly', async () => {
     const wrapper = mount(PostCard, {
       props: {
-        post: mockPost as any
+        post: mockPost as any,
+        isOffScreen: false,
       },
       global: {
         plugins: [createTestingPinia({
@@ -57,7 +58,8 @@ describe('PostCard.vue', () => {
   it('should toggle favorite status when button is clicked', async () => {
     const wrapper = mount(PostCard, {
       props: {
-        post: mockPost as any
+        post: mockPost as any,
+        isOffScreen: false,
       },
       global: {
         plugins: [createTestingPinia({
@@ -139,7 +141,8 @@ describe('PostCard.vue', () => {
 
     const wrapper = mount(PostCard, {
       props: {
-        post: mockMultiplePost as any
+        post: mockMultiplePost as any,
+        isOffScreen: false,
       },
       global: {
         plugins: [createTestingPinia({
