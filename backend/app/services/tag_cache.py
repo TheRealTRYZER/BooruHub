@@ -6,13 +6,11 @@ from sqlalchemy import func
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.core.bounded_set import BoundedSet
-from app.db.models import CachedTag, PostIndex
+from app.db.models import CachedTag
 
 logger = logging.getLogger(__name__)
 
 _recently_cached_tags = BoundedSet(maxsize=10000)
-_recently_indexed_posts = BoundedSet(maxsize=20000)
-
 
 async def _execute_with_retry(stmt, task_name: str) -> None:
     """Helper to execute an insert statement with up to 2 retries and exponential backoff."""
@@ -31,6 +29,23 @@ async def _execute_with_retry(stmt, task_name: str) -> None:
                     await asyncio.sleep(backoff * (2 ** attempt))
                 else:
                     logger.error(f"[METRIC_FAILURE] Error in background task '{task_name}' after {max_retries} retries: {e}", exc_info=True)
+
+
+async def _cache_tags_from_posts(posts: List[dict]) -> None:
+    """Build tag_sources from already-filtered posts and queue them for caching.
+
+    Runs as a background task so the request path never pays the cost of
+    iterating every post/tag.
+    """
+    if not posts:
+        return
+    tag_sources = []
+    for p in posts:
+        source = p.get("source_site")
+        for t in p.get("tags", []):
+            tag_sources.append({"tag": t, "source": source})
+    if tag_sources:
+        await _cache_tags_task(tag_sources)
 
 
 async def _cache_tags_task(tag_sources: List[dict]):
@@ -157,57 +172,3 @@ async def _cache_remote_tags_task(tag_sources: List[dict]):
     )
 
     await _execute_with_retry(stmt, "_cache_remote_tags_task")
-
-
-async def _index_posts_task(posts: List[dict]):
-    """Save all seen posts (id, source_site, tags) to the global post index in batches."""
-    if not posts:
-        return
-
-    with_md5 = []
-    without_md5 = []
-
-    for post in posts:
-        post_id = str(post.get("id", "")).strip()
-        source_site = str(post.get("source_site", "")).strip()
-        md5 = str(post.get("md5", "")).strip().lower()
-        if not post_id or not source_site:
-            continue
-            
-        tags = post.get("tags", [])
-        tags_str = " ".join(tags) if isinstance(tags, list) else str(tags)
-        
-        data = {
-            "source_site": source_site,
-            "post_id": post_id,
-            "md5": md5 if md5 else None,
-            "tags_str": tags_str,
-        }
-        
-        if md5:
-            with_md5.append(data)
-        else:
-            without_md5.append(data)
-
-    # Async-safe deduplication
-    md5_keys = [d['md5'] for d in with_md5]
-    nomd5_keys = [f"{d['source_site']}:{d['post_id']}" for d in without_md5]
-
-    new_md5 = await _recently_indexed_posts.add_many(md5_keys)
-    new_nomd5 = await _recently_indexed_posts.add_many(nomd5_keys)
-
-    new_md5_set = set(new_md5)
-    new_nomd5_set = set(new_nomd5)
-
-    final_with_md5 = [d for d in with_md5 if d['md5'] in new_md5_set]
-    final_without_md5 = [d for d in without_md5 if f"{d['source_site']}:{d['post_id']}" in new_nomd5_set]
-
-    if final_with_md5:
-        stmt = pg_insert(PostIndex).values(final_with_md5)
-        stmt = stmt.on_conflict_do_nothing(index_elements=['md5'])
-        await _execute_with_retry(stmt, "_index_posts_task (with md5)")
-
-    if final_without_md5:
-        stmt = pg_insert(PostIndex).values(final_without_md5)
-        stmt = stmt.on_conflict_do_nothing(index_elements=['source_site', 'post_id'])
-        await _execute_with_retry(stmt, "_index_posts_task (without md5)")

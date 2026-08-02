@@ -12,7 +12,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 from app.db.database import get_db
-from app.db.models import User, BlacklistRule, CachedTag, Favorite, PostIndex, UserEvent
+from app.db.models import User, BlacklistRule, CachedTag, Favorite, UserEvent
 from app.api.deps import get_current_user
 from app.services.booru_client import search_posts, search_multi_site
 from app.services.blacklist import parse_blacklist, filter_posts
@@ -27,9 +27,8 @@ from app.core.rate_limit import rate_limit
 # New service imports
 from app.services.dedup import _merge_duplicate_posts
 from app.services.tag_cache import (
-    _cache_tags_task,
+    _cache_tags_from_posts,
     _cache_remote_tags_task,
-    _index_posts_task,
 )
 from app.services.tag_suggestions import get_similar_tags
 
@@ -147,6 +146,8 @@ def _enforce_guest_rating(tag_list: List[str], context_name: str = "general") ->
     return tag_list
 
 
+
+
 async def _process_posts(
     posts: List[dict],
     *,
@@ -162,22 +163,13 @@ async def _process_posts(
     if mappings:
         apply_reverse_mapping(posts, mappings)
 
-    # Index raw posts BEFORE filtering (captures everything the API returns)
-    background_tasks.add_task(_index_posts_task, list(posts))
-
     posts = _apply_blacklist(posts, blacklist_rules, dislikes)
     posts = _inject_favorites(posts, favs)
     posts = _merge_duplicate_posts(posts)
 
-    # Cache ONLY tags from results to avoid saving typos
-    tag_sources = []
-    for p in posts:
-        source = p.get("source_site")
-        for t in p.get("tags", []):
-            tag_sources.append({"tag": t, "source": source})
-    
-    if tag_sources:
-        background_tasks.add_task(_cache_tags_task, tag_sources)
+    # Cache ONLY tags from results (built inside the background task so the
+    # request path stays cheap — the post_index write has been disabled).
+    background_tasks.add_task(_cache_tags_from_posts, posts)
 
     corrected_tags = None
     if not posts and tags_str:
@@ -594,4 +586,3 @@ async def suggest_tags(
         background_tasks.add_task(_cache_remote_tags_task, tag_sources_to_cache)
 
     return {"suggestions": candidates[:limit]}
-
