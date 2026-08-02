@@ -12,6 +12,11 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
   let lastUnfilteredCount = 0
   const activeTimeouts: any[] = []
 
+  // Set when the backend returns a 429 / "Rate limit exceeded". While set, all
+  // further loads are suppressed (no auto-retry spam) and a single toast is shown.
+  // It auto-clears after the rate-limit window so the user can resume scrolling.
+  let rateLimited = false
+
   function scheduleTimeout(cb: () => void, ms: number) {
     const id = setTimeout(() => {
       const idx = activeTimeouts.indexOf(id)
@@ -31,6 +36,9 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
 
   async function loadMore(sentinel?: HTMLElement | null, isAuto = false) {
     if (loading.value || !feed.hasMore) return
+    // Suppress everything while we're rate-limited (manual scroll loads included)
+    // — a fresh reload() (user-initiated search) clears the flag.
+    if (rateLimited) return
 
     if (!isAuto) {
       autoFetchCount = 0
@@ -138,8 +146,20 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
         }
       }
     } catch (e: any) {
-      if (gen === loadGeneration) {
-        toast.show(lang.t('failed_load') + ': ' + (e.message || e), 'error')
+      const msg = (e && e.message) ? e.message : String(e)
+      const isRateLimit = /rate limit|429/i.test(msg)
+      if (isRateLimit) {
+        // Show exactly one toast for the whole rate-limit window and stop the
+        // infinite-scroll auto-retry loop instead of toasting on every attempt.
+        if (!rateLimited && gen === loadGeneration) {
+          rateLimited = true
+          toast.show(lang.t('failed_load') + ': ' + msg, 'error')
+          // The backend search limiter window is 60s; clear after it expires so
+          // the user can resume scrolling without a manual reload.
+          scheduleTimeout(() => { rateLimited = false }, 61000)
+        }
+      } else if (gen === loadGeneration) {
+        toast.show(lang.t('failed_load') + ': ' + msg, 'error')
       }
     } finally {
       if (gen === loadGeneration) {
@@ -152,6 +172,7 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
   function reload(sentinel?: HTMLElement | null) {
     const { logSearch } = useEventLogger()
     if (feed.tags) logSearch(feed.tags)
+    rateLimited = false
     feed.resetFeed()
     correctedTags.value = null
     loadMore(sentinel)

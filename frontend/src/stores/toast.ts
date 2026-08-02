@@ -6,7 +6,20 @@ export const useToastStore = defineStore('toast', () => {
   const toasts = ref<ToastItem[]>([])
   let nextId = 0
 
+  // Suppress identical messages spammed in rapid succession (e.g. repeated 429
+  // rate-limit errors from the infinite-scroll auto-retry loop).
+  let lastDupMsg = ''
+  let lastDupTime = 0
+  const DUP_WINDOW_MS = 1500
+
   function show(message: string, type: 'success' | 'error' | 'info' = 'info', action?: { label: string; callback: () => void }) {
+    const now = Date.now()
+    if (!action && message === lastDupMsg && now - lastDupTime < DUP_WINDOW_MS) {
+      return
+    }
+    lastDupMsg = message
+    lastDupTime = now
+
     const id = nextId++
     const icons: Record<string, string> = { success: '✓', error: '✕', info: 'ℹ' }
 
