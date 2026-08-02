@@ -268,7 +268,10 @@ function ensureVisibilityObserver() {
   if (visibilityObserver) return
   visibilityObserver = new IntersectionObserver((entries) => {
     for (const entry of entries) {
-      const key = (entry.target as HTMLElement).getAttribute('data-post-key') || ''
+      // data-post-key lives on the wrapper div (parent of .post-card), not on the
+      // observed .post-card itself — resolve it via closest(), otherwise the key
+      // is always empty and every card stays on the offscreen placeholder forever.
+      const key = (entry.target as HTMLElement).closest('[data-post-key]')?.getAttribute('data-post-key') || ''
       if (key) offscreenMap.set(key, !entry.isIntersecting)
     }
   }, {
