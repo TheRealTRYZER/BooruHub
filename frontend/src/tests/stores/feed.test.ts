@@ -111,9 +111,9 @@ describe('Feed Store', () => {
   })
 
   describe('rootMargin Setting', () => {
-    it('should have a default value of 2500', () => {
+    it('should have a default value of 1200', () => {
       const store = useFeedStore()
-      expect(store.rootMargin).toBe(2500)
+      expect(store.rootMargin).toBe(1200)
     })
 
     it('should persist rootMargin changes to localStorage', async () => {

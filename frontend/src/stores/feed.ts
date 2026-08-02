@@ -24,13 +24,13 @@ export const useFeedStore = defineStore('feed', () => {
 
   const parseQuality = (val: string | null): 'thumbnail' | 'sample' | 'full' => {
     const allowed = ['thumbnail', 'sample', 'full']
-    return allowed.includes(val || '') ? (val as 'thumbnail' | 'sample' | 'full') : 'sample'
+    return allowed.includes(val || '') ? (val as 'thumbnail' | 'sample' | 'full') : 'thumbnail'
   }
   const previewQuality = ref(parseQuality(localStorage.getItem('booruhub_preview_quality')))
 
   const parseRootMargin = (val: string | null): number => {
-    const parsed = parseInt(val || '2500', 10)
-    return Number.isFinite(parsed) && parsed >= 100 && parsed <= 5000 ? parsed : 2500
+    const parsed = parseInt(val || '1200', 10)
+    return Number.isFinite(parsed) && parsed >= 100 && parsed <= 5000 ? parsed : 1200
   }
   const rootMargin = ref(parseRootMargin(localStorage.getItem('booruhub_root_margin')))
 
