@@ -62,15 +62,20 @@ import { useLangStore } from '../stores/lang'
 import { useFeedStore } from '../stores/feed'
 import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite } from '../api'
 import { useEventLogger } from '../composables/useEventLogger'
+import { useIsMobile } from '../composables/useIsMobile'
 import { RATING_MAP, RATING_LABELS } from '../types'
 import { sanitizeUrl } from '../utils/security'
 import type { Post, RatingClass, SiteName } from '../types'
 
 const feed = useFeedStore()
 
-const props = defineProps<{
-  post: Post & { favorite?: boolean }
-}>()
+const props = withDefaults(
+  defineProps<{
+    post: Post & { favorite?: boolean }
+    isOffScreen?: boolean
+  }>(),
+  { isOffScreen: true }
+)
 
 const emit = defineEmits<{
   (e: 'click-media', post: Post): void
@@ -106,6 +111,7 @@ const displayedPost = computed<Post>(() => {
   return dup || props.post
 })
 
+const isMobile = useIsMobile()
 const loaded = ref(false)
 const cardRef = ref<HTMLElement | null>(null)
 const isFav = ref(props.post.favorite ?? false)
@@ -315,20 +321,11 @@ async function doDislike() {
 const showLikeAnimation = ref(false)
 const swipeDiff = ref(0)
 const swiping = ref(false)
-const isMobile = ref(false)
 
 let touchStartX = 0
 let touchStartY = 0
 let tapTimeout: ReturnType<typeof setTimeout> | null = null
 let lastTapTime = 0
-
-function updateMobileState() {
-  isMobile.value = window.matchMedia('(max-width: 768px)').matches
-}
-
-// Offscreen Virtualization
-const isOffScreen = ref(true)
-let visibilityObserver: IntersectionObserver | null = null
 
 watch(
   () => displayedPost.value,
@@ -341,30 +338,10 @@ watch(
 
 onMounted(() => {
   updateUrl()
-  updateMobileState()
-  window.addEventListener('resize', updateMobileState)
-  
-  // Set up virtualization observer
-  visibilityObserver = new IntersectionObserver((entries) => {
-    for (const entry of entries) {
-      isOffScreen.value = !entry.isIntersecting
-    }
-  }, {
-    rootMargin: `${feed.rootMargin}px 0px ${feed.rootMargin}px 0px`,
-    threshold: 0.01
-  })
-  
-  if (cardRef.value) {
-    visibilityObserver.observe(cardRef.value)
-  }
 })
 
 onUnmounted(() => {
-  window.removeEventListener('resize', updateMobileState)
   if (tapTimeout) clearTimeout(tapTimeout)
-  if (visibilityObserver) {
-    visibilityObserver.disconnect()
-  }
 })
 
 function doLikeAnimation() {

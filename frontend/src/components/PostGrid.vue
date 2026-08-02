@@ -2,14 +2,14 @@
   <div class="post-grid" ref="gridEl" :style="{ '--card-size': feed.cardSize + 'px' }">
     <div v-for="(col, ci) in columns" :key="ci" class="post-column">
       <div v-for="item in col" :key="item.key" :data-post-key="item.key">
-        <component :is="item.component" v-bind="item.props" @click-media="handleCardClick" @favorite-changed="handleFavoriteChanged" />
+        <component :is="item.component" v-bind="item.props" :isOffScreen="offscreenMap.get(item.key)" @click-media="handleCardClick" @favorite-changed="handleFavoriteChanged" />
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted, markRaw } from 'vue'
+import { ref, reactive, watch, onMounted, onUnmounted, markRaw } from 'vue'
 import { useFeedStore } from '../stores/feed'
 import PostCard from './PostCard.vue'
 import SkeletonCard from './SkeletonCard.vue'
@@ -72,6 +72,7 @@ function initColumns() {
   colHeights.value = Array.from({ length: colCount.value }, () => 0)
   placedCount = 0
   skeletonKeys = []
+  offscreenMap.clear()
 }
 
 // Estimate a card's height in aspect-ratio units (height / width). Mirrors PostCard.mediaStyle:
@@ -258,10 +259,30 @@ function onResize() {
 const { createImpressionObserver } = useEventLogger()
 let impressionTracker: ReturnType<typeof createImpressionObserver> | null = null
 
+// Shared offscreen-virtualization observer (one instance for the whole grid
+// instead of one IntersectionObserver per card).
+const offscreenMap = reactive(new Map<string, boolean>())
+let visibilityObserver: IntersectionObserver | null = null
+
+function ensureVisibilityObserver() {
+  if (visibilityObserver) return
+  visibilityObserver = new IntersectionObserver((entries) => {
+    for (const entry of entries) {
+      const key = (entry.target as HTMLElement).getAttribute('data-post-key') || ''
+      if (key) offscreenMap.set(key, !entry.isIntersecting)
+    }
+  }, {
+    rootMargin: `${feed.rootMargin}px 0px ${feed.rootMargin}px 0px`,
+    threshold: 0.01,
+  })
+}
+
 function observeNewCards() {
   if (!gridEl.value || !impressionTracker) return
   const cards = gridEl.value.querySelectorAll('.post-card:not([data-observed])')
   if (cards.length === 0) return
+
+  ensureVisibilityObserver()
 
   // Build a fast lookup Map of props.posts in O(N)
   const postMap = new Map<string, Post>()
@@ -274,6 +295,7 @@ function observeNewCards() {
     const post = postMap.get(key)
     if (post) {
       impressionTracker!.observe(el as HTMLElement, post)
+      visibilityObserver!.observe(el as HTMLElement)
       el.setAttribute('data-observed', '1')
     }
   })
@@ -284,6 +306,7 @@ onMounted(() => {
   placeNewPosts()
   window.addEventListener('resize', onResize)
   impressionTracker = createImpressionObserver()
+  ensureVisibilityObserver()
   // Observe initially rendered cards after next tick
   setTimeout(observeNewCards, 100)
 })
@@ -291,5 +314,6 @@ onMounted(() => {
 onUnmounted(() => {
   window.removeEventListener('resize', onResize)
   if (impressionTracker) impressionTracker.disconnect()
+  if (visibilityObserver) visibilityObserver.disconnect()
 })
 </script>
