@@ -126,8 +126,8 @@ class Danbooru(BaseBooru):
             base_tags = " ".join(filtered_words)
 
             retries_attempted = 0
-            max_retries = 2
-            backoff = 1.0
+            max_retries = 1
+            backoff = 0.3
 
             # Retry Option 1: Strip credentials (if present)
             if "login" in params or "api_key" in params:
@@ -135,7 +135,6 @@ class Danbooru(BaseBooru):
                 retries_attempted += 1
                 try:
                     await asyncio.sleep(backoff)
-                    backoff *= 2.0
                     r = await client.get(url, params=no_auth_params)
                     if r.status_code == 200:
                         logger.info("Danbooru 500 -> resolved by stripping auth")
@@ -154,7 +153,6 @@ class Danbooru(BaseBooru):
                 retries_attempted += 1
                 try:
                     await asyncio.sleep(backoff)
-                    backoff *= 2.0
                     r = await client.get(url, params=retry_params)
                     if r.status_code == 200:
                         logger.info(f"Danbooru 500 -> resolved with floor {floor} (no auth)")
