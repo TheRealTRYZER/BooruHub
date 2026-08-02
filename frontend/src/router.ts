@@ -1,26 +1,20 @@
 import { createRouter, createWebHashHistory } from 'vue-router'
 import type { RouteRecordRaw } from 'vue-router'
 
+// FeedView is kept as a static import (it is the initial route); all other views
+// are code-split lazily so they don't block first paint or the feed bundle.
 import FeedView from './views/FeedView.vue'
-import PostView from './views/PostView.vue'
-import FavoritesView from './views/FavoritesView.vue'
-import BookmarksView from './views/BookmarksView.vue'
-import LoginView from './views/LoginView.vue'
-import RegisterView from './views/RegisterView.vue'
-import SettingsView from './views/SettingsView.vue'
-import GuidesView from './views/GuidesView.vue'
-import PrivacyView from './views/PrivacyView.vue'
 
 const routes: RouteRecordRaw[] = [
   { path: '/', name: 'feed', component: FeedView },
-  { path: '/post', name: 'post', component: PostView },
-  { path: '/favorites', name: 'favorites', component: FavoritesView },
-  { path: '/bookmarks', name: 'bookmarks', component: BookmarksView },
-  { path: '/login', name: 'login', component: LoginView },
-  { path: '/register', name: 'register', component: RegisterView },
-  { path: '/settings', name: 'settings', component: SettingsView },
-  { path: '/guides', name: 'guides', component: GuidesView },
-  { path: '/privacy', name: 'privacy', component: PrivacyView },
+  { path: '/post', name: 'post', component: () => import('./views/PostView.vue') },
+  { path: '/favorites', name: 'favorites', component: () => import('./views/FavoritesView.vue') },
+  { path: '/bookmarks', name: 'bookmarks', component: () => import('./views/BookmarksView.vue') },
+  { path: '/login', name: 'login', component: () => import('./views/LoginView.vue') },
+  { path: '/register', name: 'register', component: () => import('./views/RegisterView.vue') },
+  { path: '/settings', name: 'settings', component: () => import('./views/SettingsView.vue') },
+  { path: '/guides', name: 'guides', component: () => import('./views/GuidesView.vue') },
+  { path: '/privacy', name: 'privacy', component: () => import('./views/PrivacyView.vue') },
   { path: '/:pathMatch(.*)*', redirect: '/' },
 ]
 
