@@ -92,7 +92,6 @@ body::before {
     radial-gradient(circle at 80% 20%, rgba(20, 184, 166, 0.18) 0%, transparent 50%),
     radial-gradient(circle at 40% 70%, rgba(59, 130, 246, 0.18) 0%, transparent 50%),
     radial-gradient(circle at 80% 80%, rgba(244, 63, 94, 0.14) 0%, transparent 45%);
-  filter: blur(80px);
   animation: fluidBG 30s infinite alternate ease-in-out;
   pointer-events: none;
   will-change: transform;
@@ -117,6 +116,12 @@ body::before {
   }
   100% {
     transform: rotate(180deg) scale(1) translate(-3%, -2%);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  body::before {
+    animation: none;
   }
 }
 
