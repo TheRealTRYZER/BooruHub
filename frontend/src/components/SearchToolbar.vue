@@ -545,9 +545,9 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
   position: sticky;
   top: 60px; /* Flush below the 60px navbar */
   z-index: 100; /* Above grid, below modals */
-  background: color-mix(in srgb, var(--bg-card) 85%, transparent);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
+  /* Semi-transparent solid background instead of backdrop-filter blur: avoids
+     per-frame blur recomputation over the scrolling feed. */
+  background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: var(--border-radius-lg);
   padding: 16px 20px;
@@ -555,7 +555,7 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
 }
 
 [data-theme="light"] .search-toolbar-container.is-sticky {
-  background: color-mix(in srgb, var(--bg-card) 90%, transparent);
+  background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
   border-color: rgba(0, 0, 0, 0.08);
   box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
 }
