@@ -11,7 +11,7 @@ from sqlalchemy import func, select, text
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-from app.db.database import get_db
+from app.db.database import get_db, async_session
 from app.db.models import User, BlacklistRule, CachedTag, Favorite, UserEvent
 from app.api.deps import get_current_user
 from app.services.booru_client import search_posts, search_multi_site
@@ -146,6 +146,19 @@ def _enforce_guest_rating(tag_list: List[str], context_name: str = "general") ->
     return tag_list
 
 
+async def _load_user_data(user_id: int):
+    """Load the three user-data queries in parallel, each on its own session.
+
+    SQLAlchemy async sessions are not safe to share across concurrent
+    execute() calls, so each coroutine gets its own session.
+    """
+    async with async_session() as s_mappings, async_session() as s_blacklist, async_session() as s_interactions:
+        mappings, blacklist_rules, interactions = await _asyncio.gather(
+            get_user_mappings(user_id, s_mappings),
+            _get_user_blacklist(user_id, s_blacklist),
+            _get_user_interactions(user_id, s_interactions),
+        )
+    return mappings, blacklist_rules, interactions
 
 
 async def _process_posts(
@@ -219,9 +232,8 @@ async def get_feed(
     favs_set = set()
     dislikes_set = set()
     if user:
-        mappings = await get_user_mappings(user.id, db)
-        blacklist_rules = await _get_user_blacklist(user.id, db)
-        favs_set, dislikes_set = await _get_user_interactions(user.id, db)
+        mappings, blacklist_rules, interactions = await _load_user_data(user.id)
+        favs_set, dislikes_set = interactions
 
     # Build site-specific queries
     overrides = {"danbooru": danbooru_tags, "e621": e621_tags, "rule34": rule34_tags}
@@ -318,9 +330,8 @@ async def search(
     favs_set = set()
     dislikes_set = set()
     if user:
-        mappings = await get_user_mappings(user.id, db)
-        blacklist_rules = await _get_user_blacklist(user.id, db)
-        favs_set, dislikes_set = await _get_user_interactions(user.id, db)
+        mappings, blacklist_rules, interactions = await _load_user_data(user.id)
+        favs_set, dislikes_set = interactions
 
     lookup = build_lookup(mappings)
     query_str = translate_tags(tag_list, site, lookup)
@@ -586,3 +597,4 @@ async def suggest_tags(
         background_tasks.add_task(_cache_remote_tags_task, tag_sources_to_cache)
 
     return {"suggestions": candidates[:limit]}
+
