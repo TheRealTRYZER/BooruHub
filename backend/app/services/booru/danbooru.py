@@ -73,7 +73,11 @@ class Danbooru(BaseBooru):
         
         # 1. Mandatory API tags (priorities)
         orders = [t for t in all_tags if t.startswith("order:")]
-        content = [t for t in all_tags if not t.startswith(("order:", "rating:"))]
+        # Sort content tags so the same set of input tags always produces the
+        # same API query regardless of input order. Without this, reordering
+        # tags changes which tag is sent to the Danbooru API (only 2 tags are
+        # allowed), producing entirely different result sets for the same query.
+        content = sorted([t for t in all_tags if not t.startswith(("order:", "rating:"))])
         ratings = [t for t in all_tags if t.startswith("rating:")]
         
         # Limit optimization: pick 2 best tags for the API
