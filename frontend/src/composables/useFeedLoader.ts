@@ -119,7 +119,11 @@ export function useFeedLoader(feed: any, toast: any, lang: any, availableSites: 
         if (unfiltered === 0) {
           feed.hasMore = false
         } else {
-          // Backend returned matches but all were filtered — try next page
+          // Backend returned matches but all were filtered (blacklist / dedup).
+          // Reset the auto-fetch counter so blacklist-heavy feeds keep paginating
+          // through genuine backend results instead of being cut off by the
+          // infinite-loop guard — has_more will eventually end the loop.
+          autoFetchCount = 0
           feed.page++
           if (feed.hasMore && gen === loadGeneration) {
             const delay = Math.min(50 * Math.pow(2, autoFetchCount), 1000)
