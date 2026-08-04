@@ -206,8 +206,14 @@ async def search_multi_site(
         if site == "danbooru" and site_queries[site]:
             tag_count = len(site_queries[site].split())
             if tag_count > 2:
-                per_site *= 4 # Fetch 4x more (up to 200) to account for local filter drop-off
-                per_site = min(per_site, 240)
+                per_site *= 4 # Fetch 4x more to account for local filter drop-off
+        
+        # Cap at the provider's max_per_page so the has_more heuristic
+        # (total_counts >= site_limits) stays truthful — fetch_posts can never
+        # return more raw posts than max_per_page, so an uncapped site_limit
+        # would make has_more permanently false and stop pagination early.
+        max_per_page = PROVIDERS[site].max_per_page
+        per_site = min(per_site, max_per_page)
         
         site_limits[site] = per_site
         tasks.append(
