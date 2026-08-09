@@ -6,7 +6,11 @@
     <template v-if="!isOffScreen">
       <!-- Main Content (Always Visible Instantly) -->
       <div class="post-card-media" :style="mediaStyle">
-        <img class="post-card-img"
+        <!-- Long static posts render a cached top-slice canvas instead of the full
+             image (see utils/cropCache): the browser would otherwise decode the
+             whole 20-40MP strip on every scroll re-entry, causing heavy jank. -->
+        <div v-if="useCrop" :ref="setCropHost" class="post-card-crop-host"></div>
+        <img v-else class="post-card-img"
              :class="{ 'post-card-img-cropped': isLong }"
              :src="currentUrl || placeholder"
              :alt="altText"
@@ -56,6 +60,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import type { ComponentPublicInstance } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
@@ -65,6 +70,7 @@ import { useEventLogger } from '../composables/useEventLogger'
 import { useIsMobile } from '../composables/useIsMobile'
 import { RATING_MAP, RATING_LABELS } from '../types'
 import { sanitizeUrl } from '../utils/security'
+import { getCroppedCanvas, requestCroppedCanvas, cropTargetWidth } from '../utils/cropCache'
 import type { Post, RatingClass, SiteName } from '../types'
 
 const feed = useFeedStore()
@@ -206,6 +212,62 @@ const mediaStyle = computed(() => {
   }
   return { minHeight: '200px', background: 'var(--bg-secondary)', overflow: 'hidden' }
 })
+
+// Cropped-preview pipeline for long static posts. Animated/flash posts keep the
+// plain <img> path — a canvas would freeze them on the first frame.
+const cropFailed = ref(false)
+const useCrop = computed(() =>
+  isLong.value && !isAnimated.value && !isFlash.value && !!displayedPost.value.file_url && !cropFailed.value
+)
+
+const cropHostEl = ref<HTMLElement | null>(null)
+let cropGen = 0
+
+function setCropHost(el: Element | ComponentPublicInstance | null) {
+  const host = (el instanceof HTMLElement ? el : null)
+  cropHostEl.value = host
+  if (host) {
+    attachCrop(host)
+  } else {
+    cropGen++ // host unmounted by virtualization — cancel any pending attach
+  }
+}
+
+async function attachCrop(host: HTMLElement) {
+  const gen = ++cropGen
+  const p = displayedPost.value
+  const src = p.file_url ? sanitizeUrl(p.file_url) : ''
+  if (!src) {
+    cropFailed.value = true
+    return
+  }
+  const targetW = cropTargetWidth(feed.cardSize, window.devicePixelRatio || 1)
+  const key = `${p.source_site}-${p.id}-${targetW}`
+
+  const cached = getCroppedCanvas(key)
+  if (cached) {
+    if (gen === cropGen) host.replaceChildren(cached)
+    return
+  }
+
+  try {
+    const canvas = await requestCroppedCanvas(key, src, targetW)
+    if (gen === cropGen && host.isConnected) {
+      host.replaceChildren(canvas)
+    }
+  } catch {
+    if (gen === cropGen) cropFailed.value = true // fall back to the plain <img> path
+  }
+}
+
+// Rebuild the crop when the displayed version or the card size changes
+watch(
+  [() => displayedPost.value.id, () => displayedPost.value.source_site, () => feed.cardSize],
+  () => {
+    cropFailed.value = false
+    if (useCrop.value && cropHostEl.value) attachCrop(cropHostEl.value)
+  }
+)
 
 const altText = computed(() => {
   const firstTag = displayedPost.value.tags?.[0]

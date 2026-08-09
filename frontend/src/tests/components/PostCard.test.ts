@@ -238,4 +238,69 @@ describe('PostCard.vue', () => {
 
     expect(vm.swipeDiff).toBe(0) // Should have snapped back
   })
+
+  it('should render a crop canvas host instead of img for very tall static posts', async () => {
+    const longPost = {
+      id: 321,
+      source_site: 'rule34',
+      preview_url: 'https://test.com/prev.jpg',
+      sample_url: 'https://test.com/sample.jpg',
+      file_url: 'https://test.com/original.jpg',
+      file_ext: 'jpg',
+      rating: 'e',
+      tags: ['tag1'],
+      width: 1000,
+      height: 10000,
+    }
+
+    const wrapper = mount(PostCard, {
+      props: { post: longPost as any, isOffScreen: false },
+      global: {
+        plugins: [createTestingPinia({
+          createSpy: vi.fn,
+          initialState: { lang: { t: (key: string) => key } }
+        })],
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+
+    expect((wrapper.vm as any).isLong).toBe(true)
+    expect((wrapper.vm as any).useCrop).toBe(true)
+    expect(wrapper.find('.post-card-crop-host').exists()).toBe(true)
+    expect(wrapper.find('.post-card-img').exists()).toBe(false)
+  })
+
+  it('should keep the plain img path for very tall animated posts', async () => {
+    const longAnimatedPost = {
+      id: 654,
+      source_site: 'rule34',
+      preview_url: 'https://test.com/prev.jpg',
+      sample_url: 'https://test.com/sample.jpg',
+      file_url: 'https://test.com/original.gif',
+      file_ext: 'gif',
+      rating: 'e',
+      tags: ['tag1'],
+      width: 1000,
+      height: 10000,
+    }
+
+    const wrapper = mount(PostCard, {
+      props: { post: longAnimatedPost as any, isOffScreen: false },
+      global: {
+        plugins: [createTestingPinia({
+          createSpy: vi.fn,
+          initialState: { lang: { t: (key: string) => key } }
+        })],
+      }
+    })
+
+    await wrapper.vm.$nextTick()
+
+    expect((wrapper.vm as any).isLong).toBe(true)
+    expect((wrapper.vm as any).useCrop).toBe(false)
+    const img = wrapper.find('.post-card-img')
+    expect(img.exists()).toBe(true)
+    expect(img.classes()).toContain('post-card-img-cropped')
+  })
 })
