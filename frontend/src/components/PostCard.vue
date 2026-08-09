@@ -125,34 +125,36 @@ const placeholder = 'data:image/svg+xml,%3Csvg xmlns="http://www.w3.org/2000/svg
 
 const currentUrl = ref('')
 
-function updateUrl() {
-  const q = feed.previewQuality // 'thumbnail' | 'sample' | 'full'
-  const p = displayedPost.value
-  let newUrl = ''
-  
-  const videoExtensions = ['mp4', 'webm', 'm4v', 'mov', 'mkv', 'swf', 'ogv']
-  const isVideoExt = (url: string) => {
-    if (!url) return false
-    const cleanUrl = (url.split('?')[0] ?? '').toLowerCase()
-    return videoExtensions.some(ext => cleanUrl.endsWith('.' + ext))
-  }
+const videoExtensions = ['mp4', 'webm', 'm4v', 'mov', 'mkv', 'swf', 'ogv']
+const isVideoExt = (url: string) => {
+  if (!url) return false
+  const cleanUrl = (url.split('?')[0] ?? '').toLowerCase()
+  return videoExtensions.some(ext => cleanUrl.endsWith('.' + ext))
+}
 
-  const getFirstNonVideo = (candidates: (string | null | undefined)[]) => {
-    for (const c of candidates) {
-      if (c && !isVideoExt(c)) {
-        return c
-      }
+const getFirstNonVideo = (candidates: (string | null | undefined)[]) => {
+  for (const c of candidates) {
+    if (c && !isVideoExt(c)) {
+      return c
     }
-    return (candidates.find(c => c) || '') as string
   }
+  return (candidates.find(c => c) || '') as string
+}
 
+// Shared URL selection so the crop source honors the same quality preset
+// (thumbnail | sample | full) as the plain <img> path.
+function pickImageUrl(p: Post, q: string): string {
   if (q === 'thumbnail') {
-    newUrl = getFirstNonVideo([p.preview_url, p.sample_url, p.file_url])
+    return getFirstNonVideo([p.preview_url, p.sample_url, p.file_url])
   } else if (q === 'sample') {
-    newUrl = getFirstNonVideo([p.sample_url, p.preview_url, p.file_url])
+    return getFirstNonVideo([p.sample_url, p.preview_url, p.file_url])
   } else { // 'full'
-    newUrl = getFirstNonVideo([p.file_url, p.sample_url, p.preview_url])
+    return getFirstNonVideo([p.file_url, p.sample_url, p.preview_url])
   }
+}
+
+function updateUrl() {
+  let newUrl = pickImageUrl(displayedPost.value, feed.previewQuality) // 'thumbnail' | 'sample' | 'full'
   
   if (isVideoExt(newUrl)) {
     newUrl = ''
@@ -236,13 +238,13 @@ function setCropHost(el: Element | ComponentPublicInstance | null) {
 async function attachCrop(host: HTMLElement) {
   const gen = ++cropGen
   const p = displayedPost.value
-  const src = p.file_url ? sanitizeUrl(p.file_url) : ''
+  const src = sanitizeUrl(pickImageUrl(p, feed.previewQuality))
   if (!src) {
     cropFailed.value = true
     return
   }
   const targetW = cropTargetWidth(feed.cardSize, window.devicePixelRatio || 1)
-  const key = `${p.source_site}-${p.id}-${targetW}`
+  const key = `${p.source_site}-${p.id}-${feed.previewQuality}-${targetW}`
 
   const cached = getCroppedCanvas(key)
   if (cached) {
@@ -260,9 +262,15 @@ async function attachCrop(host: HTMLElement) {
   }
 }
 
-// Rebuild the crop when the displayed version or the card size changes
+// Rebuild the crop when the displayed version, card size or the quality
+// preset changes
 watch(
-  [() => displayedPost.value.id, () => displayedPost.value.source_site, () => feed.cardSize],
+  [
+    () => displayedPost.value.id,
+    () => displayedPost.value.source_site,
+    () => feed.cardSize,
+    () => feed.previewQuality
+  ],
   () => {
     cropFailed.value = false
     if (useCrop.value && cropHostEl.value) attachCrop(cropHostEl.value)
