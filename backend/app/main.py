@@ -99,6 +99,13 @@ def _validate_security_settings() -> None:
     elif not settings.is_development and not settings.cors_origin_list:
         issues.append("Explicit CORS origins must be specified in production")
 
+    # Non-fatal: plain-HTTP deployments intentionally disable Secure cookies.
+    if not settings.is_development and not settings.COOKIE_SECURE:
+        logger.warning(
+            "COOKIE_SECURE is disabled outside development; auth cookies will be "
+            "sent over plain HTTP. Use TLS unless this is an intentional IP/HTTP deployment."
+        )
+
     if settings.is_development:
         if issues:
             logger.warning("Security configuration warnings in development: %s", "; ".join(issues))
@@ -125,7 +132,7 @@ app = FastAPI(
     description="Imageboard aggregator API",
     version="1.1.0",
     lifespan=lifespan,
-    docs_url="/api/docs" if settings.is_development else None,
+    docs_url="/api/docs" if settings.ENABLE_API_DOCS else None,
     redoc_url=None,
 )
 

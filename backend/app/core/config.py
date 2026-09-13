@@ -7,13 +7,21 @@ from pydantic_settings import BaseSettings
 
 class Settings(BaseSettings):
     ENVIRONMENT: str = "development"
+    # COOKIE_SECURE defaults to True outside development. Deployments served over
+    # plain HTTP (e.g. an IP address without TLS) MUST set COOKIE_SECURE=false,
+    # otherwise browsers silently drop the auth cookies and login appears broken.
     COOKIE_SECURE: bool | None = None
     COOKIE_SAMESITE: str = "lax"
+    # API docs are decoupled from ENVIRONMENT: they default to enabled only in
+    # development, but can be forced on/off explicitly for any environment.
+    ENABLE_API_DOCS: bool | None = None
 
     @model_validator(mode="after")
     def resolve_cookie_secure(self) -> "Settings":
         if self.COOKIE_SECURE is None:
             self.COOKIE_SECURE = self.ENVIRONMENT.lower() != "development"
+        if self.ENABLE_API_DOCS is None:
+            self.ENABLE_API_DOCS = self.ENVIRONMENT.lower() == "development"
         return self
 
 

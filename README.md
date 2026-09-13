@@ -23,6 +23,8 @@ Copy `.env.example` to `.env` and generate fresh values before exposing the stac
 - `JWT_SECRET` must be a random secret at least 32 characters long.
 - `ENCRYPTION_KEY` must be a dedicated Fernet key and should not reuse the JWT secret.
 - `ENCRYPTION_KEY_FALLBACKS` can hold previous encryption keys during rotation so existing stored API keys remain decryptable.
+- `COOKIE_SECURE` must be `false` when the app is served over plain HTTP (e.g. `http://<ip>:8080` without TLS), otherwise browsers silently drop the auth cookies and login will not work. Leave it unset/`true` when serving over HTTPS.
+- `ENABLE_API_DOCS` controls `/api/docs`; it defaults to enabled only when `ENVIRONMENT=development`.
 - In the default Docker stack only `nginx` is published; `db` and `backend` stay on the internal Docker network.
 
 ---
