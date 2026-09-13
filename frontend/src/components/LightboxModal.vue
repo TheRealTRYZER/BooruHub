@@ -572,7 +572,8 @@ onUnmounted(() => {
 .lightbox-overlay {
   position: fixed;
   top: 0; left: 0; right: 0; bottom: 0;
-  width: 100vw; height: 100vh;
+  width: 100%; height: 100vh;
+  height: 100dvh;
   background: rgba(8, 8, 10, 0.94);
   z-index: 99999;
   display: flex;
@@ -727,7 +728,7 @@ onUnmounted(() => {
     flex: 1 1 auto;
     min-height: 0;
     padding-top: 64px;   /* leave room for the fixed header */
-    padding-bottom: 88px; /* leave room for the fixed actions bar */
+    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); /* leave room for the fixed actions bar */
     -webkit-overflow-scrolling: touch;
   }
   .lightbox-content-wrapper {
