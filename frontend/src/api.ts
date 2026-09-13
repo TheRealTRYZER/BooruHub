@@ -93,7 +93,10 @@ async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
     cache.delete(cacheKey)
   }
 
-  const timeoutSec = Number(localStorage.getItem('booruhub_search_timeout') || '30')
+  const timeoutSec = (() => {
+    const parsed = Number(localStorage.getItem('booruhub_search_timeout') || '30')
+    return Number.isFinite(parsed) && parsed >= 1 && parsed <= 120 ? parsed : 30
+  })()
   const controller = new AbortController()
   const timeoutId = setTimeout(() => controller.abort(), timeoutSec * 1000)
 

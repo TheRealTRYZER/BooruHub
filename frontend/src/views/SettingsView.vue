@@ -272,6 +272,14 @@ const keys = ref({
 const keysConfiguredSites = ref<string[]>([])
 const savingKeys = ref(false)
 
+// `api.ts` reads the request timeout from localStorage, so mirror the saved
+// server value there for every request that doesn't go through this view.
+function persistSearchTimeout(value: number) {
+  if (Number.isFinite(value)) {
+    localStorage.setItem('booruhub_search_timeout', String(value))
+  }
+}
+
 const savingAdvanced = ref(false)
 const rootMargin = ref(feed.rootMargin)
 
@@ -390,7 +398,10 @@ async function loadKeysStatus() {
       keys.value.search_limit = status.search_limit
       feed.postsLimit = status.search_limit
     }
-    if ((status as any).search_timeout) keys.value.search_timeout = (status as any).search_timeout
+    if ((status as any).search_timeout) {
+      keys.value.search_timeout = (status as any).search_timeout
+      persistSearchTimeout(keys.value.search_timeout)
+    }
     if (status.search_interval !== undefined && status.search_interval !== null) keys.value.search_interval = status.search_interval
     
     keys.value.danbooru_login = status.danbooru_login || ''
@@ -441,6 +452,7 @@ async function saveAdvancedSettings() {
   feed.rootMargin = rootMargin.value
   localStorage.setItem('booruhub_root_margin', String(rootMargin.value))
   feed.postsLimit = keys.value.search_limit
+  persistSearchTimeout(keys.value.search_timeout)
 
   // 2. Save search preferences to the backend database
   const data: ApiKeysUpdate = {
