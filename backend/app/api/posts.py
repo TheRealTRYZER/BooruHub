@@ -166,9 +166,14 @@ def _enforce_guest_rating(tag_list: List[str], context_name: str = "general") ->
 
 async def _load_user_data(user_id: int):
     """Load the three user-data queries in parallel, each on its own session.
-    
+
     SQLAlchemy async sessions are not safe to share across concurrent
-    execute() calls, so each coroutine gets its own session.
+    execute() calls, so each coroutine gets its own session. The sessions are
+    closed before the caller talks to the upstream boorus: holding a
+    connection across a 30s upstream call is what exhausted the pool.
+
+    Closing the sessions detaches the returned ORM objects while keeping their
+    loaded column values, which is all the mapping and blacklist helpers read.
     """
     async with async_session() as s_mappings, async_session() as s_blacklist, async_session() as s_interactions:
         mappings, blacklist_rules, interactions = await _asyncio.gather(
@@ -279,6 +284,12 @@ async def get_feed(
             q_list = _enforce_guest_rating(q_list, s)
             site_queries[s] = " ".join(q_list)
 
+    # Release the connection held by the request session (still checked out
+    # from get_current_user) before the slow upstream fan-out. The pool holds
+    # 30 connections; without this a handful of concurrent authenticated
+    # feed requests would occupy every one of them for the whole fetch.
+    await db.close()
+
     # Fetch
     posts, site_counts, has_more = await search_multi_site(
         site_queries, limit, page,
@@ -353,6 +364,10 @@ async def search(
 
     lookup = build_lookup(mappings)
     query_str = translate_tags(tag_list, site, lookup)
+
+    # Release the connection held by the request session before the upstream
+    # call; see the same note in get_feed.
+    await db.close()
 
     has_more = False
     if query_str is None:
