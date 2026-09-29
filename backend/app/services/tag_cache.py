@@ -12,8 +12,11 @@ logger = logging.getLogger(__name__)
 
 _recently_cached_tags = BoundedSet(maxsize=10000)
 
-async def _execute_with_retry(stmt, task_name: str) -> None:
-    """Helper to execute an insert statement with up to 2 retries and exponential backoff."""
+async def _execute_with_retry(stmt, task_name: str) -> bool:
+    """Helper to execute an insert statement with up to 2 retries and exponential backoff.
+
+    Returns True when the write landed.
+    """
     from app.db.database import async_session
     max_retries = 2
     backoff = 0.5
@@ -22,13 +25,14 @@ async def _execute_with_retry(stmt, task_name: str) -> None:
             try:
                 await db.execute(stmt)
                 await db.commit()
-                return
+                return True
             except Exception as e:
                 await db.rollback()
                 if attempt < max_retries:
                     await asyncio.sleep(backoff * (2 ** attempt))
                 else:
                     logger.error(f"[METRIC_FAILURE] Error in background task '{task_name}' after {max_retries} retries: {e}", exc_info=True)
+    return False
 
 
 async def _cache_tags_from_posts(posts: List[dict]) -> None:
@@ -84,11 +88,11 @@ async def _cache_tags_task(tag_sources: List[dict]):
 
     # Filter out recently cached tags (thread/async-safe)
     all_tags = list(tag_map.keys())
-    new_tag_names = await _recently_cached_tags.add_many(all_tags)
-    
+    new_tag_names = await _recently_cached_tags.peek_new(all_tags)
+
     if not new_tag_names:
         return
-    
+
     values = [tag_map[t] for t in new_tag_names]
 
     # Batch UPSERT
@@ -104,7 +108,10 @@ async def _cache_tags_task(tag_sources: List[dict]):
         )
     )
 
-    await _execute_with_retry(stmt, "_cache_tags_task")
+    # Only mark the tags as seen once the write actually landed, otherwise a
+    # failed insert left them permanently uncached.
+    if await _execute_with_retry(stmt, "_cache_tags_task"):
+        await _recently_cached_tags.add_many(new_tag_names)
 
 
 async def _cache_remote_tags_task(tag_sources: List[dict]):
@@ -150,11 +157,11 @@ async def _cache_remote_tags_task(tag_sources: List[dict]):
         return
 
     all_tags = list(tag_map.keys())
-    new_tag_names = await _recently_cached_tags.add_many(all_tags)
-    
+    new_tag_names = await _recently_cached_tags.peek_new(all_tags)
+
     if not new_tag_names:
         return
-    
+
     values = [tag_map[t] for t in new_tag_names]
 
     stmt = pg_insert(CachedTag).values(values)
@@ -171,4 +178,5 @@ async def _cache_remote_tags_task(tag_sources: List[dict]):
         )
     )
 
-    await _execute_with_retry(stmt, "_cache_remote_tags_task")
+    if await _execute_with_retry(stmt, "_cache_remote_tags_task"):
+        await _recently_cached_tags.add_many(new_tag_names)
