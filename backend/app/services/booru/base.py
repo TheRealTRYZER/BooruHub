@@ -204,7 +204,18 @@ class BaseBooru(ABC):
 
             data = resp.json()
         except httpx.HTTPStatusError as e:
-            logger.warning(f"[{self.__class__.__name__}] HTTP {e.response.status_code} for tags='{tags}'")
+            status_code = e.response.status_code
+            # A 4xx means the request itself was rejected (bad query, unknown
+            # tag). That is an empty result, not a provider outage, so it must
+            # not be reported as a failure or feed the circuit breaker.
+            if 400 <= status_code < 500 and status_code not in (408, 429):
+                logger.warning(
+                    f"[{self.__class__.__name__}] HTTP {status_code} for tags='{tags}'"
+                )
+                return [], 0
+            logger.warning(
+                f"[{self.__class__.__name__}] HTTP {status_code} for tags='{tags}'"
+            )
             return [], -1
         except httpx.RequestError as e:
             logger.error(f"[{self.__class__.__name__}] Network error: {e}")

@@ -23,6 +23,22 @@ logger = logging.getLogger(__name__)
 _CACHE_MAX = 256
 _CACHE_TTL = 300  # seconds
 
+
+    """Shallow-copy each post dict so callers cannot mutate cached entries.
+
+    Downstream post-processing (reverse tag mapping, favourite injection,
+    duplicate merging) writes keys such as "favorite" and "duplicates" straight
+    onto the post dicts. Without a copy those writes persisted in the cache for
+    the whole TTL, so a favourite state or merged-duplicate list leaked into
+    later responses.
+    """
+    if len(value) != 2:
+        return value
+    posts, count = value
+    if not isinstance(posts, list):
+        return value
+    return ([dict(p) for p in posts], count)
+
 class _LRUCache:
     """Thread-safe bounded LRU cache with TTL using asyncio.Lock."""
 
@@ -34,6 +50,7 @@ class _LRUCache:
         self._lock: Optional[asyncio.Lock] = None
 
     async def get(self, key: tuple) -> Optional[tuple]:
+        """Return a private copy of the cached entry, or None."""
         if self._lock is None:
             self._lock = asyncio.Lock()
         async with self._lock:
@@ -160,7 +177,10 @@ async def search_posts(
         posts, count = await provider.fetch_posts(tags, page, limit, user, timeout)
 
     result = (posts, count)
-    await _cache.put(cache_key, result)
+    # count == -1 marks an upstream failure. Caching it would turn one 429 or
+    # timeout into a 5-minute outage for this exact query.
+    if count >= 0:
+        await _cache.put(cache_key, result)
     logger.debug(f"[{site}] {len(posts)} posts (tags='{tags}' page={page})")
     return result
 
