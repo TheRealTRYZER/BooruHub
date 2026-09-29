@@ -4,6 +4,7 @@ import base64
 import hashlib
 import hmac
 import logging
+import secrets
 from datetime import datetime, timedelta, timezone
 from typing import Optional
 
@@ -165,6 +166,9 @@ def create_access_token(data: dict, expires_delta: Optional[timedelta] = None) -
     to_encode["type"] = "access"
     to_encode["iss"] = "booruhub"
     to_encode["aud"] = "booruhub_users"
+    # A unique id per token keeps two tokens minted for the same user inside
+    # the same second from being byte-identical.
+    to_encode["jti"] = secrets.token_hex(16)
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
@@ -186,7 +190,12 @@ def decode_access_token(token: str) -> Optional[dict]:
 
 
 def create_refresh_token(data: dict) -> str:
-    """Create a long-lived refresh token (30 days)."""
+    """Create a long-lived refresh token (30 days).
+
+    ``jti`` makes every token unique. Without it, two tokens for the same user
+    issued within the same clock second were byte-identical and collided on the
+    unique token_hash index.
+    """
     settings = get_settings()
     to_encode = data.copy()
     expire = datetime.now(timezone.utc) + timedelta(days=_REFRESH_EXPIRE_DAYS)
@@ -194,6 +203,7 @@ def create_refresh_token(data: dict) -> str:
     to_encode["type"] = "refresh"
     to_encode["iss"] = "booruhub"
     to_encode["aud"] = "booruhub_users"
+    to_encode["jti"] = secrets.token_hex(16)
     return jwt.encode(to_encode, settings.JWT_SECRET, algorithm=settings.JWT_ALGORITHM)
 
 
