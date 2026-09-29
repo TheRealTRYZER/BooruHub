@@ -131,24 +131,42 @@ def _inject_favorites(posts: List[dict], favs: set) -> List[dict]:
     return posts
 
 
+def _is_relation_lookup_tag(tag: str) -> bool:
+    """True only for an exact id:<id> or parent:<id> lookup.
+
+    Prefix matching on "id:"/"parent:" used to be enough, but that also matched
+    range and comparison forms such as "id:>1", which is a normal feed query
+    rather than a relation lookup and must not skip the rating floor.
+    """
+    lowered = tag.lower()
+    if lowered.startswith(("~", "-")):
+        lowered = lowered[1:]
+    name, sep, value = lowered.partition(":")
+    return bool(sep) and name in ("id", "parent") and value.isdigit()
+
+
+def _is_rating_tag(t: str) -> bool:
+    ct = t.lower()
+    if ct.startswith(("-", "~")):
+        ct = ct[1:]
+    return ct.startswith("rating:")
+
+
 def _enforce_guest_rating(tag_list: List[str], context_name: str = "general") -> List[str]:
     """Enforce rating:general for guest requests (override other rating filters)."""
-    is_relation_lookup = any(t.startswith(("id:", "parent:")) for t in tag_list)
+    is_relation_lookup = any(_is_relation_lookup_tag(t) for t in tag_list)
+    # Any rating token is dropped either way, so a relation lookup cannot
+    # smuggle in a rating override.
+    tag_list = [t for t in tag_list if not _is_rating_tag(t)]
     if not is_relation_lookup:
         logger.info(f"[GUEST_MODE] Enforcing rating:general in {context_name}")
-        def _is_rating_tag(t: str) -> bool:
-            ct = t.lower()
-            if ct.startswith(("-", "~")):
-                ct = ct[1:]
-            return ct.startswith("rating:")
-        tag_list = [t for t in tag_list if not _is_rating_tag(t)]
         tag_list.append("rating:general")
     return tag_list
 
 
 async def _load_user_data(user_id: int):
     """Load the three user-data queries in parallel, each on its own session.
-
+    
     SQLAlchemy async sessions are not safe to share across concurrent
     execute() calls, so each coroutine gets its own session.
     """
