@@ -211,6 +211,9 @@ class RefreshToken(Base):
     token_hash = Column(String(64), nullable=False, unique=True, index=True)  # SHA-256
     expires_at = Column(DateTime(timezone=True), nullable=False)
     revoked = Column(Boolean, default=False, nullable=False, server_default="false")
+    # When the token was revoked, used to tell a just-rotated token (benign
+    # multi-tab race) apart from a genuine replay attempt.
+    revoked_at = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="refresh_tokens")

@@ -34,6 +34,13 @@ class Settings(BaseSettings):
     JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 15  # 15 minutes
+    # When a refresh token is rotated, the previous one is revoked. A second
+    # request carrying the same (now revoked) token is normally a replay
+    # attempt and revokes every session. Browsers legitimately produce that
+    # race when two tabs refresh at once, so reuse is tolerated for this many
+    # seconds after the rotation before it is treated as an attack.
+    REFRESH_REUSE_GRACE_SECONDS: int = 30
+
     # Encryption (for API keys stored in DB)
     ENCRYPTION_KEY: str = ""
     ENCRYPTION_KEY_FALLBACKS: str = ""
@@ -74,6 +81,18 @@ class Settings(BaseSettings):
             if ip.strip()
         ]
 
+    @computed_field  # type: ignore[prop-decorator]
+    def trusted_proxy_networks(self) -> list[Union[ipaddress.IPv4Network, ipaddress.IPv6Network]]:
+        """TRUSTED_PROXY_IPS entries that are CIDR blocks rather than single IPs."""
+        networks = []
+        for entry in self.trusted_proxy_ip_list:
+            if "/" not in entry:
+                continue
+            try:
+                networks.append(ipaddress.ip_network(entry, strict=False))
+            except ValueError:
+                continue
+        return networks
 
     @property
     def is_development(self) -> bool:
