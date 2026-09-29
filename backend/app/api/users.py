@@ -3,10 +3,11 @@ import logging
 from typing import Optional
 
 from fastapi import APIRouter, Depends
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.db.database import get_db
+from app.core.config import get_settings
 from app.db.models import User
 from app.api.deps import require_user
 from app.core.security import encrypt_key
@@ -16,15 +17,16 @@ router = APIRouter(prefix="/api/user", tags=["user"])
 
 
 class ApiSettingsUpdate(BaseModel):
-    danbooru_login: Optional[str] = None
-    danbooru_api_key: Optional[str] = None
-    e621_login: Optional[str] = None
-    e621_api_key: Optional[str] = None
-    rule34_user_id: Optional[str] = None
-    rule34_api_key: Optional[str] = None
-    search_limit: Optional[int] = None
-    search_timeout: Optional[float] = None
-    search_interval: Optional[float] = None
+    # Login columns are String(255); wider values raised a DataError.
+    danbooru_login: Optional[str] = Field(default=None, max_length=255)
+    danbooru_api_key: Optional[str] = Field(default=None, max_length=255)
+    e621_login: Optional[str] = Field(default=None, max_length=255)
+    e621_api_key: Optional[str] = Field(default=None, max_length=255)
+    rule34_user_id: Optional[str] = Field(default=None, max_length=255)
+    rule34_api_key: Optional[str] = Field(default=None, max_length=512)
+    search_limit: Optional[int] = Field(default=None, ge=1, le=200)
+    search_timeout: Optional[float] = Field(default=None, ge=1.0, le=120.0)
+    search_interval: Optional[float] = Field(default=None, ge=0.0, le=60.0)
 
 
 @router.put("/keys")
@@ -36,21 +38,25 @@ async def update_settings(
     # Danbooru
     if body.danbooru_login is not None:
         user.danbooru_login = body.danbooru_login
-    if body.danbooru_api_key:
-        user.danbooru_api_key = encrypt_key(body.danbooru_api_key)
+    if body.danbooru_api_key is not None:
+        # An empty value clears the stored key. The old `if body.x_api_key:`
+        # check ignored falsy values, so a key could be set but never removed.
+        user.danbooru_api_key = encrypt_key(body.danbooru_api_key) if body.danbooru_api_key else None
 
     # e621
     if body.e621_login is not None:
         user.e621_login = body.e621_login
-    if body.e621_api_key:
-        user.e621_api_key = encrypt_key(body.e621_api_key)
+    if body.e621_api_key is not None:
+        user.e621_api_key = encrypt_key(body.e621_api_key) if body.e621_api_key else None
 
     # Rule34
     if body.rule34_user_id is not None:
         user.rule34_user_id = body.rule34_user_id
-    if body.rule34_api_key:
+    if body.rule34_api_key is not None:
         val = body.rule34_api_key.strip()
-        if "api_key=" in val or "user_id=" in val:
+        if not val:
+            user.rule34_api_key = None
+        elif "api_key=" in val or "user_id=" in val:
             import urllib.parse
             # Parse query-string format like "&api_key=abc&user_id=123"
             parsed = urllib.parse.parse_qs(val.lstrip('&?'))
