@@ -60,8 +60,10 @@ async def test_register_endpoint_saves_refresh_token(client, mock_db):
 
 @pytest.mark.asyncio
 async def test_login_endpoint_saves_refresh_token(client, mock_db):
-    user = User(id=1, username="testuser", email="test@example.com", default_tags="", password_hash="$2b$12$somehashedpassword")
-    
+    # The "sha256$" marker means needs_rehash() is False, so login does not
+    # trigger a real bcrypt re-hash in this test.
+    user = User(id=1, username="testuser", email="test@example.com", default_tags="", password_hash="sha256$$2b$12$somehashedpassword")
+
     # 1. User query (return user)
     mock_user_query = MagicMock()
     mock_user_query.scalar_one_or_none.return_value = user
@@ -72,7 +74,7 @@ async def test_login_endpoint_saves_refresh_token(client, mock_db):
 
     mock_db.execute.side_effect = [mock_user_query, mock_reload]
 
-    with patch("app.api.auth.verify_password", return_value=True):
+    with patch("app.api.auth.verify_password_async", return_value=True):
         payload = {
             "login": "testuser",
             "password": "password123"

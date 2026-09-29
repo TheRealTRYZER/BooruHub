@@ -1,4 +1,5 @@
 """JWT, password hashing, and API-key encryption utilities."""
+import asyncio
 import base64
 import hashlib
 import hmac
@@ -68,32 +69,87 @@ def decrypt_key(encrypted_text: str) -> str:
     return ""
 
 
+_PREFIXED_HASH_MARKER = "sha256$"
+# Cost of a single bcrypt call, used to equalise login timing between existing
+# and non-existing accounts.
+_DUMMY_HASH = bcrypt.hashpw(
+    hashlib.sha256(b"booruhub-timing-equaliser").hexdigest().encode(),
+    bcrypt.gensalt(),
+).decode()
+
+
+def _prehash(password: str) -> bytes:
+    return hashlib.sha256(password.encode()).hexdigest().encode()
+
+
 def hash_password(password: str) -> str:
-    """Hash password pre-hashed with SHA-256 to avoid bcrypt 72-byte truncation.
-    
-    DEPRECATED: Pre-hashing with SHA-256 before bcrypt is deprecated and kept for backward compatibility.
+    """Hash a password with SHA-256 pre-hashing plus bcrypt.
+
+    Pre-hashing avoids bcrypt's 72-byte truncation, and the ``sha256$`` marker
+    records which scheme produced the hash so verification never has to guess
+    (and therefore never has to pay for a second bcrypt call). Hashes written
+    before the marker existed have no prefix and are still verified.
     """
-    pre_hashed = hashlib.sha256(password.encode()).hexdigest()
-    return bcrypt.hashpw(pre_hashed.encode(), bcrypt.gensalt()).decode()
+    return _PREFIXED_HASH_MARKER + bcrypt.hashpw(
+        _prehash(password), bcrypt.gensalt()
+    ).decode()
 
 
 def verify_password(password: str, hashed: str) -> bool:
-    """Verify password with SHA-256 pre-hashing and legacy fallback support.
-    
-    DEPRECATED: Legacy pre-hashed format verification, kept for backward compatibility.
+    """Verify a password against a stored hash.
+
+    ``sha256$``-prefixed hashes use the pre-hashed scheme. Unprefixed hashes are
+    legacy raw-password hashes and fall back to the original comparison.
     """
-    pre_hashed = hashlib.sha256(password.encode()).hexdigest()
-    try:
-        if bcrypt.checkpw(pre_hashed.encode(), hashed.encode()):
-            return True
-    except ValueError:
-        pass
-    
-    # Fallback to legacy verify without SHA-256 pre-hashing
+    if not hashed:
+        return False
+
+    if hashed.startswith(_PREFIXED_HASH_MARKER):
+        try:
+            return bcrypt.checkpw(
+                _prehash(password), hashed[len(_PREFIXED_HASH_MARKER):].encode()
+            )
+        except ValueError:
+            return False
+
+    # Legacy: password was hashed directly by bcrypt, without pre-hashing.
     try:
         return bcrypt.checkpw(password.encode(), hashed.encode())
     except ValueError:
         return False
+
+
+def needs_rehash(hashed: str) -> bool:
+    """Return True when a legacy hash should be upgraded on next login."""
+    return not hashed.startswith(_PREFIXED_HASH_MARKER)
+
+
+def dummy_verify() -> None:
+    """Burn one bcrypt call to flatten the login response time.
+
+    Called when the account does not exist so a wrong password and a
+    non-existent user cost the same wall-clock time.
+    """
+    bcrypt.checkpw(_prehash("unimportant"), _DUMMY_HASH.encode())
+
+
+async def hash_password_async(password: str) -> str:
+    """Off-loop password hashing.
+
+    bcrypt is CPU-bound and takes ~100-300ms; running it inline in an async
+    handler stalls the whole event loop, and this app runs a single worker.
+    """
+    return await asyncio.to_thread(hash_password, password)
+
+
+async def verify_password_async(password: str, hashed: str) -> bool:
+    """Off-loop password verification (see :func:`hash_password_async`)."""
+    return await asyncio.to_thread(verify_password, password, hashed)
+
+
+async def dummy_verify_async() -> None:
+    """Off-loop timing equaliser (see :func:`dummy_verify`)."""
+    await asyncio.to_thread(dummy_verify)
 
 
 _REFRESH_EXPIRE_DAYS = 30
