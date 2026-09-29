@@ -53,15 +53,18 @@ class Rule34(BaseBooru):
         clean = tags.strip()
         if not clean:
             return "", []
-        
+
         words = clean.split()
         mapped = []
         for w in words:
-            lower_w = w.lower()
-            if "rating:general" in lower_w:
-                w = w.replace("rating:general", "rating:safe")
-            elif "rating:s" in lower_w and "rating:safe" not in lower_w:
-                w = w.replace("rating:s", "rating:safe")
+            # Whole-token comparison: a substring replace turned
+            # "rating:sensitive" into "rating:safeensitive", which is not a tag
+            # Rule34 knows and silently emptied the result set.
+            lowered = w.lower()
+            if lowered in ("rating:general", "rating:g"):
+                w = w[: len(w) - len(lowered)] + "rating:safe"
+            elif lowered in ("rating:s", "rating:sensitive"):
+                w = w[: len(w) - len(lowered)] + "rating:safe"
             mapped.append(w)
         return " ".join(mapped), []
 
