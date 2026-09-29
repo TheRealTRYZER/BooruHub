@@ -47,7 +47,9 @@
           <div style="display:flex;flex-direction:column;gap:12px;">
             <div>
               <label for="danbooru-login-input" class="input-label" style="color:var(--danbooru);font-size:10px;">
-                Danbooru (Login / API Key) <span v-if="statusFlags.danbooru" style="color:var(--success)">✅</span>
+                Danbooru (Login / API Key)
+                <span v-if="unreadableKeys.includes('danbooru')" style="color:var(--warning)" :title="unreadableKeyHint">⚠</span>
+                <span v-else-if="statusFlags.danbooru" style="color:var(--success)">✅</span>
               </label>
               <div style="display:flex;gap:4px;">
                 <input id="danbooru-login-input" type="text" class="input btn-sm" v-model="keys.danbooru_login" placeholder="Login" style="width:80px;" autocomplete="off">
@@ -56,7 +58,9 @@
             </div>
             <div>
               <label for="e621-login-input" class="input-label" style="color:var(--e621);font-size:10px;">
-                e621 (Login / API Key) <span v-if="statusFlags.e621" style="color:var(--success)">✅</span>
+                e621 (Login / API Key)
+                <span v-if="unreadableKeys.includes('e621')" style="color:var(--warning)" :title="unreadableKeyHint">⚠</span>
+                <span v-else-if="statusFlags.e621" style="color:var(--success)">✅</span>
               </label>
               <div style="display:flex;gap:4px;">
                 <input id="e621-login-input" type="text" class="input btn-sm" v-model="keys.e621_login" placeholder="Login" style="width:80px;" autocomplete="off">
@@ -65,7 +69,9 @@
             </div>
             <div>
               <label for="rule34-userid-input" class="input-label" style="color:var(--rule34);font-size:10px;">
-                Rule34 (User ID / API Key) <span v-if="statusFlags.rule34" style="color:var(--success)">✅</span>
+                Rule34 (User ID / API Key)
+                <span v-if="unreadableKeys.includes('rule34')" style="color:var(--warning)" :title="unreadableKeyHint">⚠</span>
+                <span v-else-if="statusFlags.rule34" style="color:var(--success)">✅</span>
               </label>
               <div style="display:flex;gap:4px;">
                 <input id="rule34-userid-input" type="text" class="input btn-sm" v-model="keys.rule34_user_id" placeholder="ID" style="width:80px;" autocomplete="off">
@@ -240,7 +246,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
@@ -270,6 +276,10 @@ const keys = ref({
   search_limit: 40, search_timeout: 30.0, search_interval: 0.0
 })
 const keysConfiguredSites = ref<string[]>([])
+// Sites holding a stored key that the backend can no longer decrypt. The
+// requests go out unauthenticated, so this is surfaced instead of a green tick.
+const unreadableKeys = ref<string[]>([])
+const unreadableKeyHint = computed(() => lang.t('api_key_unreadable'))
 const savingKeys = ref(false)
 
 // `api.ts` reads the request timeout from localStorage, so mirror the saved
@@ -411,6 +421,7 @@ async function loadKeysStatus() {
     statusFlags.value.danbooru = status.danbooru
     statusFlags.value.e621 = status.e621
     statusFlags.value.rule34 = status.rule34
+    unreadableKeys.value = status.unreadable || []
     dataConsent.value = !!(status as any).data_consent
   } catch (e) {
     keysConfiguredSites.value = []

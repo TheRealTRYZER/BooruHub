@@ -10,7 +10,7 @@ from app.db.database import get_db
 from app.core.config import get_settings
 from app.db.models import User
 from app.api.deps import require_user
-from app.core.security import encrypt_key
+from app.core.security import encrypt_key, decrypt_key
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/user", tags=["user"])
@@ -81,16 +81,59 @@ async def update_settings(
     return {"message": "Settings updated"}
 
 
+def _credential_usable(ciphertext: Optional[str], login: Optional[str], env_login: str, env_key: str) -> bool:
+    """Return True when this site can actually authenticate.
+
+    Reporting `bool(ciphertext)` was wrong: a key encrypted under a previous
+    ENCRYPTION_KEY still exists in the database, so the UI showed a green tick
+    while every request went out unauthenticated. This mirrors the pair
+    get_auth_params() in BaseBooru needs (login + decryptable key), and treats
+    the global .env credentials as a usable fallback.
+    """
+    if env_login.strip() and env_key.strip():
+        return True
+    if not ciphertext or not (login or "").strip():
+        return False
+    return bool(decrypt_key(ciphertext))
+
+
 @router.get("/keys/status")
 async def get_keys_status(user: User = Depends(require_user)):
     """Return which API keys are configured (without revealing values)."""
+    settings = get_settings()
+
+    danbooru = _credential_usable(
+        user.danbooru_api_key, user.danbooru_login,
+        settings.DANBOORU_LOGIN, settings.DANBOORU_API_KEY,
+    )
+    e621 = _credential_usable(
+        user.e621_api_key, user.e621_login,
+        settings.E621_LOGIN, settings.E621_API_KEY,
+    )
+    rule34 = _credential_usable(
+        user.rule34_api_key, user.rule34_user_id,
+        settings.RULE34_USER_ID, settings.RULE34_API_KEY,
+    )
+
+    # A stored key that can no longer be decrypted is worth calling out: it
+    # only happens after ENCRYPTION_KEY is rotated, and the fix is to re-enter
+    # the key.
+    unreadable = [
+        site for site, stored, usable in (
+            ("danbooru", bool(user.danbooru_api_key), danbooru),
+            ("e621", bool(user.e621_api_key), e621),
+            ("rule34", bool(user.rule34_api_key), rule34),
+        ) if stored and not usable
+    ]
+
     return {
-        "danbooru": bool(user.danbooru_api_key),
+        "danbooru": danbooru,
         "danbooru_login": user.danbooru_login or "",
-        "e621": bool(user.e621_api_key),
+        "e621": e621,
         "e621_login": user.e621_login or "",
-        "rule34": bool(user.rule34_api_key),
+        "rule34": rule34,
         "rule34_user_id": user.rule34_user_id or "",
+        "unreadable": unreadable,
         "search_limit": user.search_limit,
         "search_timeout": user.search_timeout,
         "search_interval": user.search_interval,
