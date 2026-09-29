@@ -3,7 +3,7 @@ from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.exc import IntegrityError
 
 from app.db.database import get_db
@@ -13,19 +13,23 @@ from app.services.tag_mapping import invalidate_user_cache
 
 router = APIRouter(prefix="/api/mappings", tags=["mappings"])
 
+# All mapping columns are String(255); wider values raised a DataError.
+MAX_UNITAG_LENGTH = 255
+MAX_MAPPINGS_PER_USER = 500
+
 
 class MappingCreate(BaseModel):
-    unitag: str = Field(min_length=1)
-    danbooru_tags: str = ""
-    e621_tags: str = ""
-    rule34_tags: str = ""
+    unitag: str = Field(min_length=1, max_length=MAX_UNITAG_LENGTH)
+    danbooru_tags: str = Field(default="", max_length=MAX_UNITAG_LENGTH)
+    e621_tags: str = Field(default="", max_length=MAX_UNITAG_LENGTH)
+    rule34_tags: str = Field(default="", max_length=MAX_UNITAG_LENGTH)
 
 
 class MappingUpdate(BaseModel):
-    unitag: Optional[str] = None
-    danbooru_tags: Optional[str] = None
-    e621_tags: Optional[str] = None
-    rule34_tags: Optional[str] = None
+    unitag: Optional[str] = Field(default=None, min_length=1, max_length=MAX_UNITAG_LENGTH)
+    danbooru_tags: Optional[str] = Field(default=None, max_length=MAX_UNITAG_LENGTH)
+    e621_tags: Optional[str] = Field(default=None, max_length=MAX_UNITAG_LENGTH)
+    rule34_tags: Optional[str] = Field(default=None, max_length=MAX_UNITAG_LENGTH)
 
 
 class MappingResponse(BaseModel):
@@ -37,7 +41,8 @@ class MappingResponse(BaseModel):
 
 
 class DefaultTagsUpdate(BaseModel):
-    default_tags: str
+    # users.default_tags is String(255).
+    default_tags: str = Field(default="", max_length=255)
 
 
 @router.get("", response_model=List[MappingResponse])
@@ -58,21 +63,34 @@ async def create_mapping(
     db: AsyncSession = Depends(get_db),
 ):
     # Check if unitag already exists for this user
+    unitag = body.unitag.strip().lower()
+    if not unitag:
+        raise HTTPException(status_code=422, detail="unitag cannot be empty")
+
     existing = await db.execute(
         select(UserTagMapping).where(
             UserTagMapping.user_id == user.id,
-            UserTagMapping.unitag == body.unitag.strip().lower()
+            UserTagMapping.unitag == unitag
         )
     )
     if existing.scalar_one_or_none():
         raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT, 
+            status_code=status.HTTP_409_CONFLICT,
             detail="Mapping for this unitag already exists"
+        )
+
+    count = await db.scalar(
+        select(func.count(UserTagMapping.id)).where(UserTagMapping.user_id == user.id)
+    )
+    if (count or 0) >= MAX_MAPPINGS_PER_USER:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail=f"Mapping limit reached ({MAX_MAPPINGS_PER_USER})",
         )
 
     mapping = UserTagMapping(
         user_id=user.id,
-        unitag=body.unitag.strip().lower(),
+        unitag=unitag,
         danbooru_tags=body.danbooru_tags.strip(),
         e621_tags=body.e621_tags.strip(),
         rule34_tags=body.rule34_tags.strip(),
@@ -112,6 +130,8 @@ async def update_mapping(
 
     if body.unitag is not None:
         new_unitag = body.unitag.strip().lower()
+        if not new_unitag:
+            raise HTTPException(status_code=422, detail="unitag cannot be empty")
         # Pre-check unitag uniqueness excluding the current id (B-M16)
         existing = await db.execute(
             select(UserTagMapping).where(

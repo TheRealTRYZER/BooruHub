@@ -3,7 +3,7 @@ import logging
 from typing import List, Optional
 
 from fastapi import APIRouter, Depends, HTTPException, status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import delete, func, select
 
@@ -18,18 +18,35 @@ router = APIRouter(prefix="/api/events", tags=["events"])
 
 ALLOWED_TYPES = {"impression", "view", "like", "favourite", "search"}
 
+MAX_EVENTS_PER_BATCH = 50
+MAX_TAGS = 100
+MAX_TAG_LENGTH = 255
+# Ceiling on stored events per user. Events are append-only and the write path
+# is rate limited per IP, which a forged X-Forwarded-For could previously
+# bypass, so the table needed a hard bound of its own.
+MAX_EVENTS_PER_USER = 50_000
+
 
 class EventPayload(BaseModel):
-    type: str = Field(..., max_length=50, description="Event type: impression, view, like, favourite, search")
-    source: Optional[str] = Field(None, max_length=100)
-    post_id: Optional[str] = Field(None, max_length=100)
-    tags: Optional[List[str]] = Field(None, max_length=100)
+    # Lengths mirror the column widths in app/db/models.py. A value wider than
+    # its column raised a DataError and the whole batch was discarded.
+    type: str = Field(..., max_length=16)
+    source: Optional[str] = Field(None, max_length=32)
+    post_id: Optional[str] = Field(None, max_length=50)
+    tags: Optional[List[str]] = Field(None, max_length=MAX_TAGS)
     query: Optional[str] = Field(None, max_length=512)
     duration_sec: Optional[int] = Field(None, ge=0)
 
+    @field_validator("tags")
+    @classmethod
+    def tags_bounded(cls, v: Optional[List[str]]) -> Optional[List[str]]:
+        if v is None:
+            return None
+        return [t[:MAX_TAG_LENGTH] for t in v]
+
 
 class BatchEventsRequest(BaseModel):
-    events: List[EventPayload] = Field(..., max_length=50)
+    events: List[EventPayload] = Field(..., max_length=MAX_EVENTS_PER_BATCH)
 
 
 class EventCountResponse(BaseModel):
@@ -76,6 +93,20 @@ async def log_events_batch(
 
     if accepted > 0:
         try:
+            await db.commit()
+            # Trim the oldest rows so one user cannot grow the table without
+            # bound. Single statement, runs only on the write path.
+            await db.execute(
+                delete(UserEvent).where(
+                    UserEvent.id.in_(
+                        select(UserEvent.id)
+                        .where(UserEvent.user_id == user.id)
+                        .order_by(UserEvent.ts.desc(), UserEvent.id.desc())
+                        .limit(MAX_EVENTS_PER_USER)
+                        .offset(MAX_EVENTS_PER_USER)
+                    )
+                )
+            )
             await db.commit()
         except Exception as e:
             logger.error(f"Failed to log events: {e}")

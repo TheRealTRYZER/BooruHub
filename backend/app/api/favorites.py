@@ -1,6 +1,6 @@
 """Favorites API — CRUD for user's favorite posts."""
 from fastapi import APIRouter, Depends, HTTPException, status, Query
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 from typing import List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func
@@ -9,23 +9,42 @@ from sqlalchemy.exc import IntegrityError
 from app.db.database import get_db
 from app.db.models import User, Favorite
 from app.api.deps import require_user
+from app.services.booru import PROVIDERS
 
 router = APIRouter(prefix="/api/favorites", tags=["favorites"])
 
+MAX_TAGS = 100
+MAX_TAG_LENGTH = 255
+MAX_URL_LENGTH = 2048
+
 
 class FavoriteAdd(BaseModel):
-    source_site: str
-    post_id: str
-    preview_url: Optional[str] = None
-    file_url: Optional[str] = None
-    sample_url: Optional[str] = None
-    tags: List[str] = Field(default_factory=list)
-    rating: Optional[str] = "g"
+    # Lengths mirror the column widths in app/db/models.py; exceeding them
+    # used to raise a DataError and return a 500.
+    source_site: str = Field(min_length=1, max_length=20)
+    post_id: str = Field(min_length=1, max_length=50)
+    preview_url: Optional[str] = Field(default=None, max_length=MAX_URL_LENGTH)
+    file_url: Optional[str] = Field(default=None, max_length=MAX_URL_LENGTH)
+    sample_url: Optional[str] = Field(default=None, max_length=MAX_URL_LENGTH)
+    tags: List[str] = Field(default_factory=list, max_length=MAX_TAGS)
+    rating: Optional[str] = Field(default="g", max_length=5)
     score: int = 0
     width: Optional[int] = None
     height: Optional[int] = None
-    file_ext: Optional[str] = None
+    file_ext: Optional[str] = Field(default=None, max_length=20)
     is_dislike: bool = False
+
+    @field_validator("tags")
+    @classmethod
+    def tags_bounded(cls, v: List[str]) -> List[str]:
+        return [t[:MAX_TAG_LENGTH] for t in v]
+
+    @field_validator("source_site")
+    @classmethod
+    def known_site(cls, v: str) -> str:
+        if v not in PROVIDERS:
+            raise ValueError("Unknown source_site")
+        return v
 
 
 class FavoriteResponse(BaseModel):
@@ -179,8 +198,8 @@ async def remove_favorite(
 
 @router.get("/check")
 async def check_favorite(
-    source_site: str,
-    post_id: str,
+    source_site: str = Query(..., min_length=1, max_length=20),
+    post_id: str = Query(..., min_length=1, max_length=50),
     user: User = Depends(require_user),
     db: AsyncSession = Depends(get_db),
 ):
