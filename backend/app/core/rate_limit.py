@@ -15,12 +15,45 @@ from fastapi import Request, HTTPException, status
 from app.core.config import get_settings
 
 
+# Networks whose members are treated as reverse proxies even when they are not
+# listed in TRUSTED_PROXY_IPS. This covers the bundled nginx (same private
+# Docker network) and local development. The ranges are spelled out rather
+# than derived from ipaddress.is_private, because Python also classifies the
+# documentation ranges (192.0.2.0/24, 198.51.100.0/24, 203.0.113.0/24) as
+# private, and those must never be trusted as a proxy.
+IMPLICIT_PROXY_NETWORKS = tuple(
+    ipaddress.ip_network(cidr)
+    for cidr in ("127.0.0.0/8", "10.0.0.0/8", "172.16.0.0/12", "192.168.0.0/16")
+)
+
+
 def _is_valid_ip(ip: str) -> bool:
     try:
         ipaddress.ip_address(ip)
         return True
     except ValueError:
         return False
+
+
+def _is_trusted_peer(remote_addr: str) -> bool:
+    """Return True when the direct peer is a proxy allowed to supply client IPs.
+
+    A peer is trusted when it is listed in TRUSTED_PROXY_IPS (as a single
+    address or a CIDR block) or falls in one of IMPLICIT_PROXY_NETWORKS. The
+    backend port is never published, so a request arriving straight from the
+    internet always has a public peer address and is never treated as a proxy.
+    """
+    if not _is_valid_ip(remote_addr):
+        return False
+
+    settings = get_settings()
+    if remote_addr in set(settings.trusted_proxy_ip_list):
+        return True
+
+    ip = ipaddress.ip_address(remote_addr)
+    if any(ip in net for net in settings.trusted_proxy_networks):
+        return True
+    return any(ip in net for net in IMPLICIT_PROXY_NETWORKS)
 
 
 class _SlidingWindow:
@@ -82,19 +115,27 @@ _window = _SlidingWindow()
 
 
 def _get_client_ip(request: Request) -> str:
-    """Extract client IP, trusting proxy headers only from configured proxies."""
+    """Extract the client IP for rate-limit bucketing.
+
+    Proxy headers are only consulted when the direct peer is a trusted proxy,
+    so a client cannot rotate its bucket by forging a header. X-Real-IP is
+    preferred because nginx sets it to a single $remote_addr value; the
+    X-Forwarded-For leftmost entry is used as a fallback for other setups.
+    """
     remote_addr = request.client.host if request.client else "unknown"
-    trusted_proxies = set(get_settings().trusted_proxy_ip_list)
+    if not _is_valid_ip(remote_addr):
+        return "127.0.0.1"
 
-    forwarded = request.headers.get("x-forwarded-for")
-    if forwarded and remote_addr in trusted_proxies:
-        first_ip = forwarded.split(",")[0].strip()
-        if _is_valid_ip(first_ip):
-            return first_ip
+    if _is_trusted_peer(remote_addr):
+        for header in ("x-real-ip", "x-forwarded-for"):
+            forwarded = request.headers.get(header)
+            if not forwarded:
+                continue
+            first_ip = forwarded.split(",")[0].strip()
+            if _is_valid_ip(first_ip):
+                return first_ip
 
-    if _is_valid_ip(remote_addr):
-        return remote_addr
-    return "127.0.0.1"
+    return remote_addr
 
 
 def rate_limit(

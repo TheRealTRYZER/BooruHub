@@ -1,5 +1,7 @@
 """BooruHub backend configuration."""
+import ipaddress
 from functools import lru_cache
+from typing import Union
 
 from pydantic import computed_field, model_validator
 from pydantic_settings import BaseSettings
@@ -32,7 +34,6 @@ class Settings(BaseSettings):
     JWT_SECRET: str = ""
     JWT_ALGORITHM: str = "HS256"
     JWT_EXPIRE_MINUTES: int = 15  # 15 minutes
-
     # Encryption (for API keys stored in DB)
     ENCRYPTION_KEY: str = ""
     ENCRYPTION_KEY_FALLBACKS: str = ""
@@ -72,6 +73,7 @@ class Settings(BaseSettings):
             for ip in self.TRUSTED_PROXY_IPS.split(",")
             if ip.strip()
         ]
+
 
     @property
     def is_development(self) -> bool:

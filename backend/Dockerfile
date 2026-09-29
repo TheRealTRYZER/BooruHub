@@ -16,4 +16,8 @@ COPY . .
 RUN chown -R app:app /app
 USER app
 
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1 --proxy-headers --forwarded-allow-ips='*'"]
+# --proxy-headers is intentionally absent. With it, uvicorn takes the client
+# address from the X-Forwarded-For chain, and a wildcard trust means the
+# leftmost (client-controlled) entry wins. The backend port is never published,
+# and app/core/rate_limit.py resolves the real client from X-Real-IP itself.
+CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000 --workers 1"]
