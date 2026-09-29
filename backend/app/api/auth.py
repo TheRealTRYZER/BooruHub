@@ -214,6 +214,46 @@ async def login(
     )
 
 
+async def _issue_refreshed_tokens(user: User, response: Response, db: AsyncSession) -> dict:
+    """Mint and persist a new token pair for an already-authenticated user."""
+    new_access = create_access_token({"sub": str(user.id)})
+    new_refresh = create_refresh_token({"sub": str(user.id)})
+
+    db.add(RefreshToken(
+        user_id=user.id,
+        token_hash=hash_refresh_token(new_refresh),
+        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
+    ))
+
+    # Clean up expired and long-revoked tokens
+    await db.execute(
+        delete(RefreshToken).where(
+            (RefreshToken.expires_at < datetime.now(timezone.utc)) |
+            ((RefreshToken.revoked == True) & (RefreshToken.created_at < datetime.now(timezone.utc) - timedelta(days=30)))
+        )
+    )
+
+    try:
+        await db.commit()
+    except IntegrityError:
+        # A jti collision is practically impossible, but never leak a 500.
+        await db.rollback()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid or revoked refresh token",
+        )
+
+    settings = get_settings()
+    response.set_cookie("access_token", new_access, httponly=True, secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE, path="/")
+    response.set_cookie("refresh_token", new_refresh, httponly=True, secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE, path="/")
+
+    return {
+        "access_token": new_access,
+        "refresh_token": new_refresh,
+        "token_type": "bearer",
+    }
+
+
 @router.post("/refresh")
 async def refresh_token(
     req: RefreshRequest,
@@ -255,10 +295,29 @@ async def refresh_token(
             detail="Invalid or revoked refresh token",
         )
 
+    now = datetime.now(timezone.utc)
     if db_token.revoked:
-        # Replay attack: revoke all tokens for this user
+        # A token revoked moments ago is usually two tabs racing to refresh
+        # with the same cookie, not an attacker replaying a stolen token. Only
+        # treat it as a replay once the grace window has passed.
+        settings = get_settings()
+        revoked_at = db_token.revoked_at
+        within_grace = (
+            revoked_at is not None
+            and (now - revoked_at).total_seconds() <= settings.REFRESH_REUSE_GRACE_SECONDS
+        )
+        if within_grace:
+            result = await db.execute(select(User).where(User.id == int(user_id)))
+            user = result.scalar_one_or_none()
+            if user is None:
+                raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
+            return await _issue_refreshed_tokens(user, response, db)
+
+        # Genuine replay: revoke all tokens for this user.
         await db.execute(
-            update(RefreshToken).where(RefreshToken.user_id == db_token.user_id).values(revoked=True)
+            update(RefreshToken)
+            .where(RefreshToken.user_id == db_token.user_id)
+            .values(revoked=True, revoked_at=now)
         )
         await db.commit()
         raise HTTPException(
@@ -266,7 +325,7 @@ async def refresh_token(
             detail="Invalid or revoked refresh token",
         )
 
-    if db_token.expires_at < datetime.now(timezone.utc):
+    if db_token.expires_at < now:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid or revoked refresh token",
@@ -279,38 +338,9 @@ async def refresh_token(
 
     # Mark old token as revoked
     db_token.revoked = True
+    db_token.revoked_at = now
 
-    # Generate new tokens
-    new_access = create_access_token({"sub": str(user.id)})
-    new_refresh = create_refresh_token({"sub": str(user.id)})
-
-    # Save new refresh token in DB
-    new_db_refresh = RefreshToken(
-        user_id=user.id,
-        token_hash=hash_refresh_token(new_refresh),
-        expires_at=datetime.now(timezone.utc) + timedelta(days=30),
-    )
-    db.add(new_db_refresh)
-    
-    # B-M1: Clean up expired and old revoked tokens
-    await db.execute(
-        delete(RefreshToken).where(
-            (RefreshToken.expires_at < datetime.now(timezone.utc)) |
-            ((RefreshToken.revoked == True) & (RefreshToken.created_at < datetime.now(timezone.utc) - timedelta(days=30)))
-        )
-    )
-    
-    await db.commit()
-
-    settings = get_settings()
-    response.set_cookie("access_token", new_access, httponly=True, secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE, path="/")
-    response.set_cookie("refresh_token", new_refresh, httponly=True, secure=settings.COOKIE_SECURE, samesite=settings.COOKIE_SAMESITE, path="/")
-
-    return {
-        "access_token": new_access,
-        "refresh_token": new_refresh,
-        "token_type": "bearer",
-    }
+    return await _issue_refreshed_tokens(user, response, db)
 
 
 
