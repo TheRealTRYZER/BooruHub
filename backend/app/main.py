@@ -23,6 +23,11 @@ from app.api.users import router as users_router
 from app.api.events import router as events_router
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+# httpx logs the full request URL at INFO, and the booru providers pass user
+# API keys as query parameters, so the default level would write those keys to
+# stdout in clear text.
+for _noisy in ("httpx", "httpcore", "hpack"):
+    logging.getLogger(_noisy).setLevel(logging.WARNING)
 logger = logging.getLogger(__name__)
 
 
