@@ -1,6 +1,13 @@
+import os
+
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 from httpx import ASGITransport, AsyncClient
+
+# Must be set before app.main imports get_settings(), which is cached on first
+# use. Production never sets this, so CSRF protection is always active there.
+os.environ["CSRF_BYPASS_HOSTNAME"] = "test"
+
 from app.main import app
 from app.db.database import get_db
 

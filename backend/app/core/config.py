@@ -41,6 +41,11 @@ class Settings(BaseSettings):
     # seconds after the rotation before it is treated as an attack.
     REFRESH_REUSE_GRACE_SECONDS: int = 30
 
+    # CSRF protection is always on in production. The hostname check below is a
+    # test-only escape hatch (see tests/conftest.py) and stays disabled unless
+    # explicitly configured.
+    CSRF_BYPASS_HOSTNAME: str = ""
+
     # Encryption (for API keys stored in DB)
     ENCRYPTION_KEY: str = ""
     ENCRYPTION_KEY_FALLBACKS: str = ""

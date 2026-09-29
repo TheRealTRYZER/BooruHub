@@ -33,7 +33,7 @@ logger = logging.getLogger(__name__)
 
 class CSRFMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        if request.base_url.hostname == "test":
+        if settings.CSRF_BYPASS_HOSTNAME and request.base_url.hostname == settings.CSRF_BYPASS_HOSTNAME:
             return await call_next(request)
             
         exempt_paths = {"/api/auth/login", "/api/auth/register", "/api/health"}
@@ -110,6 +110,9 @@ def _validate_security_settings() -> None:
             "COOKIE_SECURE is disabled outside development; auth cookies will be "
             "sent over plain HTTP. Use TLS unless this is an intentional IP/HTTP deployment."
         )
+
+    if not settings.CSRF_BYPASS_HOSTNAME:
+        logger.info("CSRF protection active for all hosts (no bypass configured).")
 
     if settings.is_development:
         if issues:
