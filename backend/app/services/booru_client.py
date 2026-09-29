@@ -24,6 +24,7 @@ _CACHE_MAX = 256
 _CACHE_TTL = 300  # seconds
 
 
+def _copy_result(value: tuple) -> tuple:
     """Shallow-copy each post dict so callers cannot mutate cached entries.
 
     Downstream post-processing (reverse tag mapping, favourite injection,
@@ -62,7 +63,7 @@ class _LRUCache:
                 self._data.pop(key, None)
                 return None
             self._data.move_to_end(key)
-            return value
+            return _copy_result(value)
 
     async def put(self, key: tuple, value: tuple) -> None:
         if not value:
@@ -70,7 +71,7 @@ class _LRUCache:
         if self._lock is None:
             self._lock = asyncio.Lock()
         async with self._lock:
-            self._data[key] = (value, time.monotonic() + _CACHE_TTL)
+            self._data[key] = (_copy_result(value), time.monotonic() + _CACHE_TTL)
             self._data.move_to_end(key)
             while len(self._data) > self._max:
                 self._data.popitem(last=False)

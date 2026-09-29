@@ -55,6 +55,12 @@ class PostResponse(BaseModel):
     parent_id: Optional[int] = None
     has_children: Optional[bool] = False
     tags_metadata: Optional[Dict[str, str]] = None
+    # Set by _inject_favorites; without it declared here FastAPI's response
+    # validation silently dropped the field and the UI never showed the
+    # saved state of a post on first paint.
+    favorite: Optional[bool] = None
+    source: Optional[str] = None
+    created_at: Optional[str] = None
 
 
 class FeedResponse(BaseModel):
