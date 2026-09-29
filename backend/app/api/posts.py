@@ -416,6 +416,15 @@ async def search(
     }
 
 
+def _escape_like_prefix(value: str) -> str:
+    """Escape LIKE wildcards so a user prefix cannot broaden the match.
+
+    Without this, a query of "%" matched every cached tag and returned the most
+    popular ones, turning the autocomplete into a full table scan.
+    """
+    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+
+
 @router.get("/tags/suggest", response_model=TagSuggestionResponse)
 async def suggest_tags(
     background_tasks: BackgroundTasks,
@@ -424,6 +433,9 @@ async def suggest_tags(
     fast: bool = Query(False, description="Skip remote autocomplete fetches and return local sources only"),
     user: Optional[User] = Depends(get_current_user),
     db: AsyncSession = Depends(get_db),
+    # This fans out to three upstream boorus APIs on every call, so it needs
+    # its own budget instead of riding along unauthenticated.
+    _rl=Depends(rate_limit("suggest", max_requests=30, window_seconds=60)),
 ):
     q_lower = q.lower()
     tag_sources_to_cache = []
@@ -543,7 +555,7 @@ async def suggest_tags(
         try:
             result = await db.execute(
                 select(CachedTag)
-                .where(CachedTag.tag.like(f"{q_lower}%"))
+                .where(CachedTag.tag.like(_escape_like_prefix(q_lower) + "%", escape="\\"))
                 .order_by(CachedTag.usage_count.desc())
                 .limit(100)
             )
