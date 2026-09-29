@@ -84,6 +84,9 @@ def _validate_security_settings() -> None:
     ):
         jwt_issues.append("JWT_SECRET must not use the published placeholder value")
 
+    if settings.ENCRYPTION_KEY == "replace-with-a-generated-fernet-key":
+        issues.append("ENCRYPTION_KEY must not use the published placeholder value")
+
     if jwt_issues:
         raise RuntimeError("Critical security configuration error: " + "; ".join(jwt_issues))
 
@@ -94,9 +97,10 @@ def _validate_security_settings() -> None:
         issues.append("ENCRYPTION_KEY must be a valid 32-byte urlsafe-base64 key")
 
     # Validate fallback keys
-    for fb_key in settings.encryption_key_fallback_list:
+    for i, fb_key in enumerate(settings.encryption_key_fallback_list):
         if not is_fernet_key(fb_key):
-            issues.append(f"Fallback ENCRYPTION_KEY '{fb_key}' must be a valid 32-byte urlsafe-base64 key")
+            # Report the position, never the value: it is key material.
+            issues.append(f"ENCRYPTION_KEY_FALLBACKS entry #{i + 1} must be a valid 32-byte urlsafe-base64 key")
 
     # CORS checks
     if "*" in settings.cors_origin_list:
