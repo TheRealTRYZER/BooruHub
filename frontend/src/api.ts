@@ -349,7 +349,10 @@ export async function apiDeleteBlacklistRule(id: number): Promise<unknown> {
 
 // Mappings
 export async function apiGetMappings(): Promise<TagMapping[]> {
-  const data = await _fetch<{ mappings: TagMapping[] }>('/mappings')
+  // The endpoint returns a bare JSON array; older builds read `.mappings`
+  // off it, which was always undefined and left the settings list empty.
+  const data = await _fetch<TagMapping[] | { mappings?: TagMapping[] }>('/mappings')
+  if (Array.isArray(data)) return data
   return data.mappings || []
 }
 
