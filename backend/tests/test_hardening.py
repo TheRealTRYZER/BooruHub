@@ -8,10 +8,13 @@ input-bound gaps.
 import asyncio
 import time
 from datetime import datetime, timedelta, timezone
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from cryptography.fernet import Fernet
+from fastapi import HTTPException
+from httpx import ASGITransport, AsyncClient
 
 from app.core import security
 from app.core.bounded_set import BoundedSet
@@ -104,6 +107,15 @@ class TestGuestRatingFloor:
         assert _enforce_guest_rating(["id:123"]) == ["id:123"]
         assert _enforce_guest_rating(["parent:5"]) == ["parent:5"]
 
+    def test_negated_id_lookup_is_not_a_relation_lookup(self):
+        """'-id:5' and '~id:5' exclude one post from a wider query; they are
+        not a lookup of a single post and must not drop the rating floor."""
+        from app.api.posts import _enforce_guest_rating
+
+        for query in (["-id:123"], ["~id:123"], ["-parent:5"], ["~id:123", "~cat"]):
+            result = _enforce_guest_rating(list(query))
+            assert "rating:general" in result, query
+
     def test_relation_lookup_cannot_smuggle_a_rating(self):
         from app.api.posts import _enforce_guest_rating
 
@@ -150,6 +162,26 @@ class TestPasswordHashing:
         assert security.needs_rehash(legacy)
         assert security.verify_password("legacy-password", legacy)
         assert not security.verify_password("other-password", legacy)
+
+    def test_pre_marker_prehashed_hash_still_verifies(self):
+        """The pre-marker code stored SHA-256 pre-hashed bcrypt without any
+        prefix. Those are the hashes of every account created before the marker
+        landed, and an unprefixed bcrypt digest over a 60-character input is
+        indistinguishable from a raw-password hash, so both must be tried."""
+        import hashlib
+
+        import bcrypt
+
+        password = "account-created-before-the-marker"
+        prehashed = bcrypt.hashpw(
+            hashlib.sha256(password.encode()).hexdigest().encode(),
+            bcrypt.gensalt(rounds=4),
+        ).decode()
+
+        assert not prehashed.startswith("sha256$")
+        assert security.needs_rehash(prehashed)
+        assert security.verify_password(password, prehashed)
+        assert not security.verify_password("wrong-password", prehashed)
 
     def test_empty_hash_is_rejected(self):
         assert not security.verify_password("anything", "")
@@ -465,6 +497,121 @@ class TestAccountIdentity:
         assert request.username == "admin"
         assert request.email == "a@b.com"
 
+    @pytest.mark.asyncio
+    async def test_registration_folds_case_like_login_does(self):
+        """Registration compared the raw column against an already lower-cased
+        value, so "LegacyUser" and "legacyuser" were both accepted. The pair then
+        matched the case-insensitive login predicate and turned login into a
+        500 instead of a rejection."""
+        from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from app.api.auth import user_login_predicate
+        from app.db.database import get_db
+        from app.db.models import Base, User
+        from app.main import app
+
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with sessions() as session:
+            session.add(User(username="LegacyUser", email="legacy@example.com", password_hash="x"))
+            await session.commit()
+
+        async def override_get_db():
+            async with sessions() as session:
+                yield session
+
+        app.dependency_overrides[get_db] = override_get_db
+        try:
+            transport = ASGITransport(app=app, raise_app_exceptions=False)
+            async with AsyncClient(transport=transport, base_url="http://test") as client:
+                same_name = await client.post(
+                    "/api/auth/register",
+                    json={"username": "legacyuser", "email": "other@example.com", "password": "password123"},
+                )
+                same_email = await client.post(
+                    "/api/auth/register",
+                    json={"username": "otheruser", "email": "LEGACY@example.com", "password": "password123"},
+                )
+        finally:
+            app.dependency_overrides = {}
+            await engine.dispose()
+
+        assert same_name.status_code == 409, same_name.text
+        assert same_email.status_code == 409, same_email.text
+
+    @pytest.mark.asyncio
+    async def test_ambiguous_login_fails_closed_instead_of_500(self):
+        """Rows that differ only by casing both match the login predicate.
+        scalar_one_or_none() raised on that pair, so login returned 500."""
+        from datetime import datetime, timedelta, timezone
+
+        from fastapi import Response
+        from sqlalchemy import select
+        from sqlalchemy.ext.asyncio import async_sessionmaker, create_async_engine
+
+        from app.api.auth import LoginRequest, login
+        from app.core import security
+        from app.db.models import Base, User
+
+        password = "shared-password"
+        engine = create_async_engine("sqlite+aiosqlite:///:memory:")
+        sessions = async_sessionmaker(engine, expire_on_commit=False)
+        async with engine.begin() as conn:
+            await conn.run_sync(Base.metadata.create_all)
+        async with sessions() as session:
+            session.add(User(username="Twin", email="twin-a@example.com", password_hash=security.hash_password(password)))
+            session.add(User(username="twin", email="twin-b@example.com", password_hash=security.hash_password(password)))
+            await session.commit()
+
+            with pytest.raises(HTTPException) as excinfo:
+                await login(LoginRequest(login="TWIN", password=password), Response(), session)
+
+        await engine.dispose()
+        assert excinfo.value.status_code == 401
+
+
+class TestLogoutRevocation:
+    @pytest.mark.asyncio
+    async def test_logout_revocation_is_marked_and_not_grace_eligible(self):
+        """The reuse grace window exists for the two-tab rotation race. A token
+        revoked by logout must never be revived by it."""
+        from fastapi import Response
+
+        from app.api.auth import LogoutRequest, logout
+        from app.core import security
+        from app.db.models import RefreshToken
+
+        token = security.create_refresh_token({"sub": "7"})
+        stored = RefreshToken(
+            user_id=7,
+            token_hash=security.hash_refresh_token(token),
+            expires_at=datetime.now(timezone.utc) + timedelta(days=1),
+            revoked=False,
+        )
+        session = AsyncMock()
+        result = MagicMock()
+        result.scalar_one_or_none.return_value = stored
+        session.execute.return_value = result
+
+        request = SimpleNamespace(cookies={"refresh_token": token})
+        await logout(LogoutRequest(), request, Response(), session)
+
+        assert stored.revoked is True
+        assert stored.revoked_at is not None
+        assert stored.revoked_by_logout is True
+
+    def test_rotation_revocation_stays_grace_eligible(self):
+        """The benign race the window exists for must keep working."""
+        from app.db.models import RefreshToken
+
+        rotated = RefreshToken(user_id=1, token_hash="x" * 64, revoked=True,
+                               revoked_at=datetime.now(timezone.utc), revoked_by_logout=False)
+
+        assert rotated.revoked_by_logout is False
+
 
 # --------------------------------------------------------------------------- #
 #  Provider tag translation                                                   #
@@ -490,6 +637,31 @@ class TestRatingTranslation:
 
         api_tags, _ = Rule34().prepare_tags("1girl rating:explicit")
         assert api_tags == "1girl rating:explicit"
+
+    def test_numeric_change_timestamp_is_coerced_to_a_string(self):
+        """Rule34 sends 'change' as an int. Leaving it numeric failed
+        PostResponse validation and dropped the whole page."""
+        from app.api.posts import PostResponse
+        from app.services.booru.rule34 import Rule34
+
+        post = Rule34().normalize_post(
+            {"id": 1, "file_url": "https://example.invalid/i.jpg", "change": 1700000000}
+        )
+
+        assert isinstance(post["created_at"], str)
+        assert PostResponse.model_validate(post).created_at == "1700000000"
+
+    def test_created_at_string_is_preferred_over_change(self):
+        from app.services.booru.rule34 import Rule34
+
+        post = Rule34().normalize_post({
+            "id": 1,
+            "file_url": "https://example.invalid/i.jpg",
+            "created_at": "2026-01-01 00:00:00",
+            "change": 1700000000,
+        })
+
+        assert post["created_at"] == "2026-01-01 00:00:00"
 
 
 # --------------------------------------------------------------------------- #
@@ -542,11 +714,42 @@ class TestCredentialStatus:
         from app.api.users import _credential_usable
 
         assert _credential_usable(None, None, "admin", "env-key") is True
-
     def test_nothing_configured_is_not_usable(self):
+
         from app.api.users import _credential_usable
 
         assert _credential_usable(None, None, "", "") is False
+
+    def test_rule34_key_input_fits_the_ciphertext_column(self):
+        """The stored column holds an encrypted token, so the accepted input
+        length has to leave room for the Fernet overhead."""
+        from pydantic import ValidationError
+
+        from app.api.users import MAX_RULE34_API_KEY_LENGTH, ApiSettingsUpdate
+        from app.db.models import User
+
+        column_width = User.__table__.c.rule34_api_key.type.length
+        accepted = MAX_RULE34_API_KEY_LENGTH
+        # Fernet token length for an n-byte plaintext: 4*ceil(n/3) + 57.
+        ciphertext_length = 4 * ((accepted + 2) // 3) + 57
+
+        assert ciphertext_length <= column_width
+        assert ApiSettingsUpdate(rule34_api_key="x" * accepted)
+        with pytest.raises(ValidationError):
+            ApiSettingsUpdate(rule34_api_key="x" * (column_width + 1))
+
+    @pytest.mark.asyncio
+    async def test_encrypted_rule34_key_is_storable(self):
+        """End to end: the longest accepted key must still fit the column."""
+        from app.api.users import MAX_RULE34_API_KEY_LENGTH, ApiSettingsUpdate, update_settings
+        from app.db.models import User
+
+        user = SimpleNamespace(id=1)
+        await update_settings(
+            ApiSettingsUpdate(rule34_api_key="k" * MAX_RULE34_API_KEY_LENGTH), user, AsyncMock()
+        )
+
+        assert len(user.rule34_api_key) <= User.__table__.c.rule34_api_key.type.length
 
 
 class TestBoundedSetPeek:

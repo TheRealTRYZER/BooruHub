@@ -99,8 +99,13 @@ def hash_password(password: str) -> str:
 def verify_password(password: str, hashed: str) -> bool:
     """Verify a password against a stored hash.
 
-    ``sha256$``-prefixed hashes use the pre-hashed scheme. Unprefixed hashes are
-    legacy raw-password hashes and fall back to the original comparison.
+    ``sha256$``-prefixed hashes use the pre-hashed scheme and are unambiguous.
+    An unprefixed hash is ambiguous: hashes written by the pre-marker code used
+    SHA-256 pre-hashing, while the oldest ones hashed the password directly.
+    Both are bcrypt digests over a 60-character input, so the format alone
+    cannot tell them apart and each candidate has to be tried. Login pays for
+    that with one extra bcrypt call and immediately rehashes to the prefixed
+    scheme, so it only happens once per account.
     """
     if not hashed:
         return False
@@ -113,7 +118,14 @@ def verify_password(password: str, hashed: str) -> bool:
         except ValueError:
             return False
 
-    # Legacy: password was hashed directly by bcrypt, without pre-hashing.
+    # Legacy pre-hashed scheme, as written by the pre-marker code.
+    try:
+        if bcrypt.checkpw(_prehash(password), hashed.encode()):
+            return True
+    except ValueError:
+        return False
+
+    # Oldest scheme: bcrypt applied straight to the password.
     try:
         return bcrypt.checkpw(password.encode(), hashed.encode())
     except ValueError:
