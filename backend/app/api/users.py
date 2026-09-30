@@ -15,6 +15,12 @@ from app.core.security import encrypt_key, decrypt_key
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/user", tags=["user"])
 
+# users.rule34_api_key is String(512) and stores a Fernet token. A token's
+# length is 4*ceil(n/3) + 57 bytes for an n-byte plaintext, so the longest
+# plaintext that still fits is 256 bytes; leaving headroom for the timestamp
+# token gives 240 characters.
+MAX_RULE34_API_KEY_LENGTH = 240
+
 
 class ApiSettingsUpdate(BaseModel):
     # Login columns are String(255); wider values raised a DataError.
@@ -23,7 +29,10 @@ class ApiSettingsUpdate(BaseModel):
     e621_login: Optional[str] = Field(default=None, max_length=255)
     e621_api_key: Optional[str] = Field(default=None, max_length=255)
     rule34_user_id: Optional[str] = Field(default=None, max_length=255)
-    rule34_api_key: Optional[str] = Field(default=None, max_length=512)
+    # The stored column is String(512) but holds a Fernet token, not the key:
+    # encrypting a 512-character key produces ~780 characters and overflowed the
+    # column. The limit below keeps the ciphertext inside it.
+    rule34_api_key: Optional[str] = Field(default=None, max_length=MAX_RULE34_API_KEY_LENGTH)
     search_limit: Optional[int] = Field(default=None, ge=1, le=200)
     search_timeout: Optional[float] = Field(default=None, ge=1.0, le=120.0)
     search_interval: Optional[float] = Field(default=None, ge=0.0, le=60.0)
