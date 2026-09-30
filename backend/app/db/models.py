@@ -214,6 +214,11 @@ class RefreshToken(Base):
     # When the token was revoked, used to tell a just-rotated token (benign
     # multi-tab race) apart from a genuine replay attempt.
     revoked_at = Column(DateTime(timezone=True), nullable=True)
+    # Set when the revocation came from an explicit logout. Such a token is
+    # never eligible for the reuse grace window, so a captured copy of the
+    # cookie cannot be replayed during the grace period to restore a session
+    # the user deliberately ended.
+    revoked_by_logout = Column(Boolean, default=False, nullable=False, server_default="false")
     created_at = Column(DateTime(timezone=True), default=lambda: datetime.now(timezone.utc))
 
     user = relationship("User", back_populates="refresh_tokens")

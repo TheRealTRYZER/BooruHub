@@ -1,3 +1,4 @@
+import logging
 from datetime import datetime, timezone, timedelta
 import re
 from typing import Optional
@@ -20,6 +21,7 @@ from app.core.defaults import DEFAULT_USER_TAGS, STARTER_MAPPINGS
 from app.core.rate_limit import rate_limit
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
+logger = logging.getLogger(__name__)
 
 
 class AuthUserResponse(BaseModel):
@@ -75,13 +77,25 @@ async def register(
     _rl=Depends(rate_limit("register", max_requests=3, window_seconds=60)),
 ):
     try:
-        # Existing checks
+        # Existing checks. The comparison has to fold case the same way login
+        # does, otherwise "Admin" and "admin" are both accepted by the
+        # case-sensitive unique index and the pair becomes an ambiguous login
+        # that can no longer authenticate.
         existing_q = await db.execute(
-            select(User).where((User.username == req.username) | (User.email == req.email))
+            select(User).where(user_login_predicate(req.username))
         )
-        if existing_q.scalar_one_or_none():
+        if existing_q.scalars().first() is not None:
             raise HTTPException(
-                status_code=status.HTTP_409_CONFLICT, 
+                status_code=status.HTTP_409_CONFLICT,
+                detail="Username or email already taken"
+            )
+
+        existing_q = await db.execute(
+            select(User).where(user_login_predicate(req.email))
+        )
+        if existing_q.scalars().first() is not None:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
                 detail="Username or email already taken"
             )
 
@@ -152,7 +166,25 @@ async def login(
     _rl=Depends(rate_limit("login", max_requests=10, window_seconds=60)),
 ):
     result = await db.execute(select(User).where(user_login_predicate(req.login)))
-    user = result.scalar_one_or_none()
+    matches = result.scalars().all()
+
+    if len(matches) > 1:
+        # Rows that differ only by casing (written before username
+        # normalisation) collide under the case-insensitive predicate. Which
+        # account owns the password is unknowable, so fail closed instead of
+        # letting scalar_one_or_none() raise and return a 500.
+        logger.error(
+            "Ambiguous login: %d accounts match login %r; refusing to authenticate",
+            len(matches),
+            req.login[:64],
+        )
+        await dummy_verify_async()
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail="Invalid credentials"
+        )
+
+    user = matches[0] if matches else None
 
     if not user:
         # Spend the same time as a real verification so response latency does
@@ -316,17 +348,29 @@ async def refresh_token(
             and (now - revoked_at).total_seconds() <= settings.REFRESH_REUSE_GRACE_SECONDS
         )
         if within_grace:
+            # The grace window only covers the rotation race, where the
+            # replacement token was issued in the same call. A token the user
+            # revoked deliberately through logout must stay dead: honouring
+            # the window there would let a copy of the cookie restore a
+            # session the user just ended.
+            if db_token.revoked_by_logout:
+                raise HTTPException(
+                    status_code=status.HTTP_401_UNAUTHORIZED,
+                    detail="Invalid or revoked refresh token",
+                )
             result = await db.execute(select(User).where(User.id == int(user_id)))
             user = result.scalar_one_or_none()
             if user is None:
                 raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="User not found")
             return await _issue_refreshed_tokens(user, response, db)
 
-        # Genuine replay: revoke all tokens for this user.
+        # Genuine replay: revoke all tokens for this user. The logout marker is
+        # cleared so these tokens fall under the strict replay path and can
+        # never be revived by a later grace window.
         await db.execute(
             update(RefreshToken)
             .where(RefreshToken.user_id == db_token.user_id)
-            .values(revoked=True, revoked_at=now)
+            .values(revoked=True, revoked_at=now, revoked_by_logout=False)
         )
         await db.commit()
         raise HTTPException(
@@ -373,6 +417,7 @@ async def logout(
         if db_token:
             db_token.revoked = True
             db_token.revoked_at = datetime.now(timezone.utc)
+            db_token.revoked_by_logout = True
             await db.commit()
             
     response.delete_cookie("access_token", path="/")

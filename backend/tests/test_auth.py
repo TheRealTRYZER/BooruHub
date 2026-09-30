@@ -25,9 +25,10 @@ def test_register_request_username_validation():
 
 @pytest.mark.asyncio
 async def test_register_endpoint_saves_refresh_token(client, mock_db):
-    # 1. Check existing user (None)
+    # 1. Check existing user/email (none). Registration folds case the same way
+    # login does, so the duplicate checks read through scalars().first().
     mock_existing = MagicMock()
-    mock_existing.scalar_one_or_none.return_value = None
+    mock_existing.scalars.return_value.first.return_value = None
     mock_db.execute.return_value = mock_existing
 
     # Mock db.refresh to assign attributes since it's normally handled by DB autofill/refresh
@@ -64,9 +65,9 @@ async def test_login_endpoint_saves_refresh_token(client, mock_db):
     # trigger a real bcrypt re-hash in this test.
     user = User(id=1, username="testuser", email="test@example.com", default_tags="", password_hash="sha256$$2b$12$somehashedpassword")
 
-    # 1. User query (return user)
+    # 1. User query (return the single matching account)
     mock_user_query = MagicMock()
-    mock_user_query.scalar_one_or_none.return_value = user
+    mock_user_query.scalars.return_value.all.return_value = [user]
 
     # 2. Reload user during commit (return user)
     mock_reload = MagicMock()
