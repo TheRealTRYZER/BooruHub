@@ -123,6 +123,17 @@ class Rule34(BaseBooru):
         h_child = raw.get("has_children")
         has_children = str(h_child).lower() in ("true", "1") if h_child is not None else False
 
+        # Rule34 sends a Unix timestamp as an int in "change" and a formatted
+        # string in "created_at". Coercing here keeps the value a string for the
+        # response model; leaving the int in place failed response validation
+        # and dropped the whole page.
+        created_at = raw.get("created_at")
+        if not isinstance(created_at, str):
+            created_at = "" if created_at is None else str(created_at)
+        if not created_at:
+            change = raw.get("change")
+            created_at = "" if change is None else str(change)
+
         # Build tag category metadata dictionary using heuristics
         tags_metadata = {}
         for t in (tag_str.split() if isinstance(tag_str, str) else []):
@@ -149,7 +160,7 @@ class Rule34(BaseBooru):
             "file_ext": ext,
             "md5": raw.get("hash") or raw.get("md5", ""),
             "source": raw.get("source", ""),
-            "created_at": raw.get("created_at", raw.get("change", "")),
+            "created_at": created_at,
             "parent_id": parent_id,
             "has_children": has_children,
             "tags_metadata": tags_metadata,
