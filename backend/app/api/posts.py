@@ -138,15 +138,17 @@ def _inject_favorites(posts: List[dict], favs: set) -> List[dict]:
 
 
 def _is_relation_lookup_tag(tag: str) -> bool:
-    """True only for an exact id:<id> or parent:<id> lookup.
+    """True only for a positive, exact id:<id> or parent:<id> lookup.
 
     Prefix matching on "id:"/"parent:" used to be enough, but that also matched
     range and comparison forms such as "id:>1", which is a normal feed query
-    rather than a relation lookup and must not skip the rating floor.
+    rather than a relation lookup and must not skip the rating floor. A "-id:5"
+    or "~id:5" exclusion is likewise not a lookup: it constrains a wider query,
+    so the rating floor still has to apply.
     """
     lowered = tag.lower()
     if lowered.startswith(("~", "-")):
-        lowered = lowered[1:]
+        return False
     name, sep, value = lowered.partition(":")
     return bool(sep) and name in ("id", "parent") and value.isdigit()
 
