@@ -96,6 +96,42 @@ async def test_closed_session_leaves_objects_readable():
 
 
 @pytest.mark.asyncio
+async def test_login_matches_usernames_case_insensitively():
+    """Rows written before username normalisation can hold any casing.
+
+    Comparing the raw column against a lower-cased login locked those accounts
+    out of username login entirely (they could still sign in by email).
+    """
+    from app.api.auth import user_login_predicate
+
+    engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
+    session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+
+    async with session_factory() as session:
+        session.add(User(id=1, username="TRYZER", email="TRYZE@Example.com", password_hash="x"))
+        session.add(User(id=2, username="lowercase", email="lower@example.com", password_hash="x"))
+        await session.commit()
+
+    cases = [
+        ("TRYZER", 1), ("tryzer", 1), ("Tryzer", 1), ("  TRYZER  ", 1),
+        ("TRYZE@Example.com", 1), ("tryze@example.com", 1),
+        ("lowercase", 2), ("LOWERCASE", 2),
+        ("lower@example.com", 2), ("LOWER@EXAMPLE.COM", 2),
+        ("nosuchuser", None),
+    ]
+    for login, expected in cases:
+        async with session_factory() as session:
+            found = (await session.execute(
+                select(User).where(user_login_predicate(login))
+            )).scalar_one_or_none()
+        assert (found.id if found else None) == expected, login
+
+    await engine.dispose()
+
+
+@pytest.mark.asyncio
 async def test_refresh_token_revoked_at_round_trips():
     engine = create_async_engine("sqlite+aiosqlite:///:memory:", echo=False)
     session_factory = async_sessionmaker(engine, class_=AsyncSession, expire_on_commit=False)

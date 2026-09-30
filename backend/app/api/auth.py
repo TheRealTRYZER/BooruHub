@@ -151,12 +151,7 @@ async def login(
     db: AsyncSession = Depends(get_db),
     _rl=Depends(rate_limit("login", max_requests=10, window_seconds=60)),
 ):
-    # Usernames are stored lower-cased; match existing mixed-case emails too.
-    result = await db.execute(
-        select(User).where(
-            (User.username == req.login.lower()) | (func.lower(User.email) == req.login.lower())
-        )
-    )
+    result = await db.execute(select(User).where(user_login_predicate(req.login)))
     user = result.scalar_one_or_none()
 
     if not user:
@@ -211,6 +206,20 @@ async def login(
             email=user.email, 
             default_tags=user.default_tags
         ),
+    )
+
+
+def user_login_predicate(login: str):
+    """Match an account by username or email, case-insensitively.
+
+    Usernames and emails are stored lower-cased at registration, but rows
+    written before that normalisation can still hold any casing. Comparing
+    against the raw column would lock those accounts out of username login,
+    so both sides are folded here.
+    """
+    folded = login.strip().lower()
+    return (
+        (func.lower(User.username) == folded) | (func.lower(User.email) == folded)
     )
 
 
