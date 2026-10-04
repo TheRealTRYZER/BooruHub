@@ -28,7 +28,7 @@
           <div style="margin-top:16px; border-top:1px solid rgba(128,128,128,0.1); padding-top:16px;">
             <label class="input-label" style="display:block;margin-bottom:8px;">{{ lang.t('start_tags') }}</label>
             <div style="display:flex;gap:8px;position:relative;">
-              <input type="text" class="input" v-model="defaultTags" @input="onSuggest('defaultTags', defaultTags)" @blur="onBlur" :placeholder="lang.t('search_placeholder')" style="flex:1;">
+              <input type="text" class="input" v-model="defaultTags" @input="onSuggest('defaultTags', defaultTags)" @focus="onSuggest('defaultTags', defaultTags)" @blur="onSuggestBlur" :placeholder="lang.t('search_placeholder')" style="flex:1;">
               <button class="btn btn-secondary" @click="saveDefaultTags" :disabled="savingTags">{{ lang.t('save') }}</button>
                 <div v-if="activeField === 'defaultTags' && suggestions.length > 0" class="search-suggestions visible mapping-suggest" style="top:calc(100% + 4px);">
                 <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
@@ -161,7 +161,7 @@
             <div class="mapping-grid">
               <div style="position:relative;">
                 <label for="map-unitag-input" class="input-label" style="font-size:10px;">Unitag</label>
-                <input id="map-unitag-input" type="text" class="input btn-sm" v-model="mapForm.unitag" @input="onSuggest('unitag', mapForm.unitag)" @blur="onBlur">
+                <input id="map-unitag-input" type="text" class="input btn-sm" v-model="mapForm.unitag" @input="onSuggest('unitag', mapForm.unitag)" @focus="onSuggest('unitag', mapForm.unitag)" @blur="onSuggestBlur">
                 <div v-if="activeField === 'unitag' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
                   <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
                     <span style="flex:1">{{ s.tag }}<span v-if="(s.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ s.search_count }}</span></span>
@@ -170,7 +170,7 @@
               </div>
               <div style="position:relative;">
                 <label for="map-danbooru-input" class="input-label" style="font-size:10px;color:var(--danbooru);">Danbooru</label>
-                <input id="map-danbooru-input" type="text" class="input btn-sm" v-model="mapForm.danbooru" @input="onSuggest('danbooru', mapForm.danbooru)" @blur="onBlur">
+                <input id="map-danbooru-input" type="text" class="input btn-sm" v-model="mapForm.danbooru" @input="onSuggest('danbooru', mapForm.danbooru)" @focus="onSuggest('danbooru', mapForm.danbooru)" @blur="onSuggestBlur">
                 <div v-if="activeField === 'danbooru' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
                   <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
                     <span style="flex:1">{{ s.tag }}<span v-if="(s.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ s.search_count }}</span></span>
@@ -180,7 +180,7 @@
               </div>
               <div style="position:relative;">
                 <label for="map-e621-input" class="input-label" style="font-size:10px;color:var(--e621);">e621</label>
-                <input id="map-e621-input" type="text" class="input btn-sm" v-model="mapForm.e621" @input="onSuggest('e621', mapForm.e621)" @blur="onBlur">
+                <input id="map-e621-input" type="text" class="input btn-sm" v-model="mapForm.e621" @input="onSuggest('e621', mapForm.e621)" @focus="onSuggest('e621', mapForm.e621)" @blur="onSuggestBlur">
                 <div v-if="activeField === 'e621' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
                   <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
                     <span style="flex:1">{{ s.tag }}<span v-if="(s.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ s.search_count }}</span></span>
@@ -190,7 +190,7 @@
               </div>
               <div style="position:relative;">
                 <label for="map-rule34-input" class="input-label" style="font-size:10px;color:var(--rule34);">Rule34</label>
-                <input id="map-rule34-input" type="text" class="input btn-sm" v-model="mapForm.rule34" @input="onSuggest('rule34', mapForm.rule34)" @blur="onBlur">
+                <input id="map-rule34-input" type="text" class="input btn-sm" v-model="mapForm.rule34" @input="onSuggest('rule34', mapForm.rule34)" @focus="onSuggest('rule34', mapForm.rule34)" @blur="onSuggestBlur">
                 <div v-if="activeField === 'rule34' && suggestions.length > 0" class="search-suggestions visible mapping-suggest">
                   <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
                     <span style="flex:1">{{ s.tag }}<span v-if="(s.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ s.search_count }}</span></span>
@@ -221,7 +221,7 @@
         <div class="settings-section">
           <div class="settings-title">🚫 {{ lang.t('blacklist_title') }}</div>
           <div style="display:flex;gap:8px;margin-bottom:12px;position:relative;">
-            <input type="text" class="input" v-model="newRule" @input="onSuggest('blacklist', newRule)" @blur="onBlur" @keydown.enter="addRule" :placeholder="lang.t('search_placeholder')" style="flex:1;">
+            <input type="text" class="input" v-model="newRule" @input="onSuggest('blacklist', newRule)" @focus="onSuggest('blacklist', newRule)" @blur="onSuggestBlur" @keydown.enter="addRule" :placeholder="lang.t('search_placeholder')" style="flex:1;">
             <button class="btn btn-primary" @click="addRule">{{ lang.t('save') }}</button>
             <div v-if="activeField === 'blacklist' && suggestions.length > 0" class="search-suggestions visible mapping-suggest" style="top:calc(100% + 4px);">
               <div v-for="s in suggestions" :key="s.tag" class="search-suggestion-item" :class="{ frequent: (s.search_count || 0) > 0 }" @mousedown.prevent="selectSuggest(s.tag)">
@@ -255,10 +255,10 @@ import {
   apiUpdateDefaultTags, apiGetApiKeysStatus, apiUpdateApiKeys,
   apiGetMappings, apiCreateMapping, apiUpdateMapping, apiDeleteMapping,
   apiGetBlacklist, apiAddBlacklistRule, apiUpdateBlacklistRule, apiDeleteBlacklistRule,
-  apiDeleteHistory as apiDeleteHistoryFn, apiGetEventCount, apiUpdateConsent,
-  apiSuggestTags
+  apiDeleteHistory as apiDeleteHistoryFn, apiGetEventCount, apiUpdateConsent
 } from '../api'
-import type { TagMapping, BlacklistRule, ApiKeysStatus, ApiKeysUpdate, TagSuggestion } from '../types'
+import { useTagSuggestions } from '../composables/useTagSuggestions'
+import type { TagMapping, BlacklistRule, ApiKeysStatus, ApiKeysUpdate } from '../types'
 
 const auth = useAuthStore()
 const toast = useToastStore()
@@ -302,70 +302,36 @@ const newRule = ref('')
 const eventCount = ref(0)
 const deletingHistory = ref(false)
 const dataConsent = ref(false)
-const suggestions = ref<TagSuggestion[]>([])
 const activeField = ref<string | null>(null)
-let suggestTimeout: any = null
-let suggestController: AbortController | null = null
-let suggestFastController: AbortController | null = null
-let suggestQueryId = 0
+
+// Which field the currently displayed suggestions belong to. Read from the async
+// callbacks so a late response for a field the user already left can never
+// overwrite the list of the field they are typing in now.
+let queryOwner: string | null = null
+
+const {
+  items: suggestionItems,
+  query: querySuggestions,
+  clear: clearSuggestions,
+  onBlur: scheduleSuggestionsClose,
+} = useTagSuggestions({
+  isActive: () => activeField.value !== null && activeField.value === queryOwner,
+  onClose: () => {
+    activeField.value = null
+    queryOwner = null
+  },
+})
+
+const suggestions = computed(() => suggestionItems.value)
 
 function onSuggest(field: string, val: string) {
   activeField.value = field
-  clearTimeout(suggestTimeout)
-  if (suggestController) {
-    suggestController.abort()
-    suggestController = null
-  }
-  if (suggestFastController) {
-    suggestFastController.abort()
-    suggestFastController = null
-  }
-  if (val.length < 2) {
-    suggestQueryId++
-    suggestions.value = []
-    return
-  }
-  const myQueryId = ++suggestQueryId
-
-  // Phase 1: local-only, instant
-  suggestFastController = new AbortController()
-  apiSuggestTags(val, 15, suggestFastController.signal, true)
-    .then(data => {
-      if (myQueryId !== suggestQueryId || activeField.value !== field) return
-      suggestions.value = data.suggestions || []
-    })
-    .catch((e: any) => {
-      if (e.name !== 'AbortError' && myQueryId === suggestQueryId && activeField.value === field) {
-        suggestions.value = []
-      }
-    })
-    .finally(() => {
-      if (myQueryId === suggestQueryId) suggestFastController = null
-    })
-
-  // Phase 2: full remote, debounced
-  suggestTimeout = setTimeout(async () => {
-    suggestController = new AbortController()
-    try {
-      const data = await apiSuggestTags(val, 15, suggestController.signal)
-      if (myQueryId !== suggestQueryId || activeField.value !== field) return
-      suggestions.value = data.suggestions || []
-    } catch (e: any) {
-      if (e.name !== 'AbortError' && myQueryId === suggestQueryId && activeField.value === field) {
-        suggestions.value = []
-      }
-    } finally {
-      if (myQueryId === suggestQueryId) suggestController = null
-    }
-  }, 300)
+  queryOwner = field
+  querySuggestions(val)
 }
 
-function onBlur() {
-  setTimeout(() => {
-    suggestQueryId++
-    activeField.value = null
-    suggestions.value = []
-  }, 200)
+function onSuggestBlur() {
+  scheduleSuggestionsClose()
 }
 
 function selectSuggest(tag: string) {
@@ -376,10 +342,12 @@ function selectSuggest(tag: string) {
   else if (activeField.value === 'blacklist') newRule.value = tag
   else if (activeField.value === 'defaultTags') defaultTags.value = tag
 
-  suggestQueryId++
-  suggestions.value = []
+  clearSuggestions()
   activeField.value = null
+  queryOwner = null
 }
+
+
 
 async function saveDefaultTags() {
   savingTags.value = true

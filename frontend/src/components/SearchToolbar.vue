@@ -28,7 +28,7 @@
       </div>
       
       <!-- Autosuggestions Dropdown -->
-      <div class="search-suggestions" :class="{ visible: suggestions.length > 0 }">
+      <div class="search-suggestions" :class="{ visible: hasSuggestions }">
         <div v-for="tagObj in suggestions" :key="tagObj.tag" 
              class="search-suggestion-item" 
              :class="{ mapped: tagObj.is_mapped, frequent: (tagObj.search_count || 0) > 0 }"
@@ -50,7 +50,7 @@
       </div>
       
       <!-- Search History Dropdown -->
-      <div class="search-suggestions" :class="{ visible: showHistory && searchHistory.length > 0 && suggestions.length === 0 }">
+      <div class="search-suggestions" :class="{ visible: showHistory && searchHistory.length > 0 && !hasSuggestions }">
         <div v-for="q in searchHistory" :key="q" class="search-suggestion-item history-item"
              @mousedown.prevent="selectHistory(q)">
           <span class="history-clock">🕐</span>
@@ -78,7 +78,7 @@
           
           <!-- Split Suggestions Dropdown -->
           <div class="search-suggestions split-suggestions" 
-               :class="{ visible: activeSplitSite === site && splitSuggestions.length > 0 }"
+               :class="{ visible: activeSplitSite === site && hasSplitSuggestions }"
                style="top: 100%; left: 0; width: 100%; max-height: 200px; z-index: 101;">
             <div v-for="tagObj in splitSuggestions" :key="tagObj.tag" 
                  class="search-suggestion-item" 
@@ -126,19 +126,24 @@
 
       <div class="feed-controls">
         <div class="feed-control-group">
-          <label class="feed-control-label">🎚️ {{ lang.t('card_size') }}</label>
+          <label class="feed-control-label"><span class="control-emoji" aria-hidden="true">🎚️</span>{{ lang.t('card_size') }}</label>
           <input type="range" min="75" max="400" step="5" v-model.number="feed.cardSize" class="size-slider">
           <span class="size-val">{{ feed.cardSize }}px</span>
           <div class="col-select-dropdown">
-            <button class="col-select-btn" @click.stop="toggleColDropdown">
-              <span>🔢</span>
-              <span style="font-size: 8px; margin-left: 2px;">▼</span>
+            <button class="col-select-btn" @click.stop="toggleColDropdown"
+                    :title="lang.t('posts_per_row')"
+                    :aria-label="lang.t('posts_per_row')"
+                    :aria-expanded="showColDropdown">
+              <span aria-hidden="true">🔢</span>
+              <span class="col-select-count">{{ currentColCount }}</span>
+              <span aria-hidden="true" class="col-select-caret">▼</span>
             </button>
             <div v-if="showColDropdown" class="col-dropdown-menu">
-              <div v-for="c in [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]" :key="c" 
-                   class="col-dropdown-item" 
+              <div v-for="c in COL_OPTIONS" :key="c" 
+                   class="col-dropdown-item"
+                   :class="{ active: c === currentColCount }"
                    @click.stop="selectColCount(c)">
-                {{ c }} {{ c === 1 ? 'post' : 'posts' }}
+                {{ lang.t('posts_per_row_item', { count: c }) }}
               </div>
             </div>
           </div>
@@ -164,14 +169,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '../stores/auth'
 import { useFeedStore } from '../stores/feed'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
-import { apiSuggestTags, apiAddBookmark } from '../api'
+import { apiAddBookmark } from '../api'
 import { useSearchHistory } from '../composables/useSearchHistory'
-import type { SiteName, TagSuggestion } from '../types'
+import { useTagSuggestions } from '../composables/useTagSuggestions'
+import { cardSizeForColumns, columnsForCardSize } from '../utils/gridLayout'
+import type { SiteName } from '../types'
 
 const auth = useAuthStore()
 const feed = useFeedStore()
@@ -188,16 +195,37 @@ const emit = defineEmits<{
 }>()
 
 const availableSites: SiteName[] = ['danbooru', 'e621', 'rule34']
-const suggestions = ref<TagSuggestion[]>([])
-
-let suggestController: AbortController | null = null
-let suggestFastController: AbortController | null = null
-let splitSuggestController: AbortController | null = null
-let suggestQueryId = 0
 
 // Plain Text Tag Query Builder State
 const inputVal = ref('')
 const inputEl = ref<HTMLInputElement | null>(null)
+
+const {
+  items: suggestions,
+  isOpen: hasSuggestions,
+  query: fetchSuggestions,
+  clear: clearSuggestions,
+  onFocus: cancelSuggestClose,
+  onBlur: scheduleSuggestClose,
+} = useTagSuggestions({
+  isFocused: () => document.activeElement === inputEl.value,
+})
+
+const activeSplitSite = ref<SiteName | null>(null)
+const {
+  items: splitSuggestions,
+  isOpen: hasSplitSuggestions,
+  query: fetchSplitSuggestions,
+  clear: clearSplitSuggestions,
+  onFocus: cancelSplitClose,
+  onBlur: scheduleSplitClose,
+} = useTagSuggestions({
+  isActive: () => activeSplitSite.value !== null,
+  isFocused: () => document.activeElement?.classList.contains('split-tag-input') === true,
+  onClose: () => {
+    activeSplitSite.value = null
+  },
+})
 
 function focusActualInput() {
   if (inputEl.value) inputEl.value.focus()
@@ -244,19 +272,23 @@ function handleScroll() {
 
 const showColDropdown = ref(false)
 
+// Reactive so the "N per row" badge keeps up with a window resize; the grid
+// reflows on resize too and the two must agree.
+const viewportWidth = ref(typeof window !== 'undefined' ? window.innerWidth : 1280)
+const currentColCount = computed(() => columnsForCardSize(feed.cardSize, viewportWidth.value))
+const COL_OPTIONS = [1, 2, 3, 4, 5, 6, 7, 8, 10, 12]
+
+function onViewportResize() {
+  viewportWidth.value = window.innerWidth
+}
+
 function toggleColDropdown() {
   showColDropdown.value = !showColDropdown.value
 }
 
 function selectColCount(cols: number) {
   showColDropdown.value = false
-  const w = window.innerWidth
-  const gap = w <= 768 ? 8 : 16
-  const availableWidth = w - 40
-  
-  let targetSize = Math.floor((availableWidth + gap) / cols) - gap
-  targetSize = Math.max(75, Math.min(400, targetSize))
-  feed.cardSize = targetSize
+  feed.cardSize = cardSizeForColumns(cols, viewportWidth.value)
 }
 
 function closeDropdowns(_e: MouseEvent) {
@@ -267,13 +299,17 @@ function closeDropdowns(_e: MouseEvent) {
 
 onMounted(() => {
   inputVal.value = feed.tags
+  onViewportResize()
   window.addEventListener('scroll', handleScroll, { passive: true })
+  window.addEventListener('resize', onViewportResize, { passive: true })
   document.addEventListener('click', closeDropdowns)
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
+  window.removeEventListener('resize', onViewportResize)
   document.removeEventListener('click', closeDropdowns)
+  closeHistory()
 })
 
 function formatCount(num?: number): string {
@@ -287,26 +323,24 @@ function formatCount(num?: number): string {
   return String(num)
 }
 const showHistory = ref(false)
-let suggestTimeout: any = null
+let historyBlurTimer: ReturnType<typeof setTimeout> | null = null
 
 const { history: searchHistory, addQuery: addSearchQuery, removeQuery: removeSearchQuery } = useSearchHistory()
+
+function closeHistory() {
+  if (historyBlurTimer) {
+    clearTimeout(historyBlurTimer)
+    historyBlurTimer = null
+  }
+  showHistory.value = false
+}
 
 function triggerSearch() {
   if (feed.tags.trim()) {
     addSearchQuery(feed.tags.trim())
   }
-  suggestQueryId++
-  clearTimeout(suggestTimeout)
-  if (suggestController) {
-    suggestController.abort()
-    suggestController = null
-  }
-  if (suggestFastController) {
-    suggestFastController.abort()
-    suggestFastController = null
-  }
-  suggestions.value = []
-  showHistory.value = false
+  clearSuggestions()
+  closeHistory()
   emit('search')
 }
 
@@ -332,69 +366,35 @@ async function saveBookmark() {
   }
 }
 
-function onSearchInput() {
-  clearTimeout(suggestTimeout)
-  if (suggestController) {
-    suggestController.abort()
-    suggestController = null
-  }
-  if (suggestFastController) {
-    suggestFastController.abort()
-    suggestFastController = null
-  }
-
-  const text = inputVal.value || ''
-  const words = text.split(/\s+/)
+/** The tag fragment the caret sits on, with any `-` operator stripped. */
+function activePrefix(): string {
+  const words = (inputVal.value || '').split(/\s+/)
   const lastWord = words[words.length - 1] || ''
-  const cleanWord = lastWord.startsWith('-') ? lastWord.substring(1) : lastWord
+  return lastWord.startsWith('-') ? lastWord.substring(1) : lastWord
+}
 
-  if (cleanWord && cleanWord.length >= 2) {
-    const myQueryId = ++suggestQueryId
-
-    // Phase 1: local-only (mapping/meta/cached tags) returns almost instantly
-    suggestFastController = new AbortController()
-    apiSuggestTags(cleanWord, 15, suggestFastController.signal, true)
-      .then(data => {
-        if (myQueryId !== suggestQueryId) return
-        suggestions.value = data.suggestions || []
-      })
-      .catch((e: any) => {
-        if (e.name !== 'AbortError' && myQueryId === suggestQueryId) {
-          suggestions.value = []
-        }
-      })
-      .finally(() => {
-        if (myQueryId === suggestQueryId) suggestFastController = null
-      })
-
-    // Phase 2: full (remote autocomplete) enriches/refreshes the list after debounce
-    suggestTimeout = setTimeout(async () => {
-      suggestController = new AbortController()
-      try {
-        const data = await apiSuggestTags(cleanWord, 15, suggestController.signal, false)
-        if (myQueryId !== suggestQueryId) return
-        suggestions.value = data.suggestions || []
-      } catch (e: any) {
-        if (e.name !== 'AbortError' && myQueryId === suggestQueryId) {
-          suggestions.value = []
-        }
-      } finally {
-        if (myQueryId === suggestQueryId) suggestController = null
-      }
-    }, 300)
-  } else {
-    suggestions.value = []
-  }
+function onSearchInput() {
+  fetchSuggestions(activePrefix())
 }
 
 function onSearchFocus() {
-  if (!inputVal.value.trim()) showHistory.value = true
+  // Cancels the close a preceding blur scheduled, so clicking back into the
+  // input no longer wipes the list that was about to disappear.
+  cancelSuggestClose()
+  if (!inputVal.value.trim()) {
+    showHistory.value = true
+    return
+  }
+  // Re-run the lookup: without this the dropdown only returned after another
+  // keystroke, so focusing an already filled input showed nothing at all.
+  fetchSuggestions(activePrefix())
 }
 
 function onSearchBlur() {
-  setTimeout(() => {
-    suggestQueryId++
-    suggestions.value = []
+  scheduleSuggestClose()
+  if (historyBlurTimer) clearTimeout(historyBlurTimer)
+  historyBlurTimer = setTimeout(() => {
+    historyBlurTimer = null
     showHistory.value = false
   }, 200)
 }
@@ -413,15 +413,15 @@ function selectSuggestion(tag: string) {
   } else {
     inputVal.value = tag + ' '
   }
-  suggestQueryId++
-  suggestions.value = []
+  clearSuggestions()
+  closeHistory()
   syncToFeedStore()
   if (inputEl.value) inputEl.value.focus()
 }
 
 function selectHistory(q: string) {
   feed.tags = q
-  showHistory.value = false
+  closeHistory()
 }
 
 function removeHistory(q: string) {
@@ -429,89 +429,26 @@ function removeHistory(q: string) {
 }
 
 function onTabPress() {
-  if (suggestions.value.length > 0) {
-    const first = suggestions.value[0]
-    if (first) {
-      selectSuggestion(first.tag)
-    }
+  const first = suggestions.value[0]
+  if (first) {
+    selectSuggestion(first.tag)
   }
 }
 
 // Split Search Autocomplete Logic
-const splitSuggestions = ref<TagSuggestion[]>([])
-const activeSplitSite = ref<SiteName | null>(null)
-let splitSuggestTimeout: any = null
-let splitSuggestFastController: AbortController | null = null
-let splitSuggestQueryId = 0
-
 function onSplitSearchInput(site: SiteName) {
-  clearTimeout(splitSuggestTimeout)
-  if (splitSuggestController) {
-    splitSuggestController.abort()
-    splitSuggestController = null
-  }
-  if (splitSuggestFastController) {
-    splitSuggestFastController.abort()
-    splitSuggestFastController = null
-  }
-
   activeSplitSite.value = site
-  const text = feed.siteTags[site] || ''
-  const words = text.split(/\s+/)
-  const lastWord = words[words.length - 1] || ''
-
-  if (lastWord && lastWord.length >= 2) {
-    const myQueryId = ++splitSuggestQueryId
-
-    // Phase 1: local-only, instant
-    splitSuggestFastController = new AbortController()
-    apiSuggestTags(lastWord, 15, splitSuggestFastController.signal, true)
-      .then(data => {
-        if (myQueryId !== splitSuggestQueryId || activeSplitSite.value !== site) return
-        splitSuggestions.value = data.suggestions || []
-      })
-      .catch((e: any) => {
-        if (e.name !== 'AbortError' && myQueryId === splitSuggestQueryId && activeSplitSite.value === site) {
-          splitSuggestions.value = []
-        }
-      })
-      .finally(() => {
-        if (myQueryId === splitSuggestQueryId) splitSuggestFastController = null
-      })
-
-    // Phase 2: full remote, debounced
-    splitSuggestTimeout = setTimeout(async () => {
-      splitSuggestController = new AbortController()
-      try {
-        const data = await apiSuggestTags(lastWord, 15, splitSuggestController.signal)
-        if (myQueryId !== splitSuggestQueryId || activeSplitSite.value !== site) return
-        splitSuggestions.value = data.suggestions || []
-      } catch (e: any) {
-        if (e.name !== 'AbortError' && myQueryId === splitSuggestQueryId && activeSplitSite.value === site) {
-          splitSuggestions.value = []
-        }
-      } finally {
-        if (myQueryId === splitSuggestQueryId) splitSuggestController = null
-      }
-    }, 300)
-  } else {
-    splitSuggestions.value = []
-  }
+  const words = (feed.siteTags[site] || '').split(/\s+/)
+  fetchSplitSuggestions(words[words.length - 1] || '')
 }
 
 function onSplitSearchFocus(site: SiteName) {
-  activeSplitSite.value = site
+  cancelSplitClose()
   onSplitSearchInput(site)
 }
 
-function onSplitSearchBlur(site: SiteName) {
-  setTimeout(() => {
-    if (activeSplitSite.value === site) {
-      splitSuggestQueryId++
-      splitSuggestions.value = []
-      activeSplitSite.value = null
-    }
-  }, 200)
+function onSplitSearchBlur(_site: SiteName) {
+  scheduleSplitClose()
 }
 
 function selectSplitSuggestion(site: SiteName, tag: string) {
@@ -523,8 +460,7 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
   } else {
     feed.siteTags[site] = tag + ' '
   }
-  splitSuggestQueryId++
-  splitSuggestions.value = []
+  clearSplitSuggestions()
   activeSplitSite.value = null
 }
 </script>
@@ -659,7 +595,9 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
 .col-select-dropdown {
   position: relative;
   display: inline-block;
-  margin-left: 8px;
+  /* The row wraps on narrow screens, so an extra left margin would only offset
+     the button once it lands on its own line. */
+  margin-left: 0;
 }
 .col-select-btn {
   display: inline-flex;
@@ -673,8 +611,18 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
   font-size: 13px;
   cursor: pointer;
   height: 32px;
+  /* Never let the control grow past the row it lives in on a 320px screen. */
+  min-width: 0;
+  max-width: 100%;
   padding: 0 10px;
   transition: background-color 0.2s;
+}
+.col-select-count {
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+}
+.col-select-caret {
+  font-size: 8px;
 }
 .col-select-btn:hover {
   background: var(--bg-card-hover);
@@ -690,6 +638,7 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
   box-shadow: 0 8px 24px rgba(0,0,0,0.35);
   z-index: 102;
   min-width: 130px;
+  max-width: calc(100vw - 24px);
   display: flex;
   flex-direction: column;
   padding: 4px 0;
@@ -700,10 +649,25 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
   cursor: pointer;
   color: var(--text-secondary);
   text-align: left;
+  white-space: nowrap;
   transition: background-color 0.15s, color 0.15s;
 }
 .col-dropdown-item:hover {
   background: var(--bg-card-hover);
   color: var(--accent);
+}
+.col-dropdown-item.active {
+  color: var(--accent);
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .col-select-btn {
+    padding: 0 8px;
+  }
+  /* Reclaim the icon's width exactly where the row was overflowing. */
+  .control-emoji {
+    display: none;
+  }
 }
 </style>

@@ -16,9 +16,12 @@ export const useFeedStore = defineStore('feed', () => {
   const savedSites = localStorage.getItem('booruhub_sites')
   const sites = ref<SiteName[]>(savedSites ? JSON.parse(savedSites) : ['danbooru', 'e621', 'rule34'])
 
+  // Range must match the slider and the posts-per-row control (utils/gridLayout):
+  // a tighter lower bound silently discarded the small card sizes that picking a
+  // high column count produces, snapping the grid back to 250px on reload.
   const parseCardSize = (val: string | null): number => {
     const parsed = parseInt(val || '250', 10)
-    return Number.isFinite(parsed) && parsed >= 100 && parsed <= 500 ? parsed : 250
+    return Number.isFinite(parsed) && parsed >= 75 && parsed <= 500 ? parsed : 250
   }
   const cardSize = ref(parseCardSize(localStorage.getItem('booruhub_card_size')))
 

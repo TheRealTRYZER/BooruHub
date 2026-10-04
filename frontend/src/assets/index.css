@@ -448,18 +448,27 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   display: flex;
   align-items: center;
   gap: 12px;
+  /* Without wrapping, the card-size row needs ~350px and pushed the
+     posts-per-row button past the right edge of a 360-400px phone screen. */
+  flex-wrap: wrap;
+  min-width: 0;
 }
 .feed-control-label {
   font-size: 13px;
   font-weight: 700;
   color: var(--text-secondary);
   white-space: nowrap;
+  min-width: 0;
 }
 .size-slider {
   margin: 0;
   cursor: pointer;
   accent-color: var(--accent);
-  width: 120px;
+  /* Flexible basis instead of a hard width: the slider now yields space to the
+     posts-per-row button on narrow screens and keeps 120px on wide ones. */
+  flex: 1 1 120px;
+  min-width: 64px;
+  max-width: 160px;
   height: 6px;
   background: var(--bg-input);
   border-radius: 3px;
@@ -481,6 +490,8 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
   font-size: 13px;
   outline: none;
   cursor: pointer;
+  max-width: 100%;
+  min-width: 0;
   transition: all 0.2s;
 }
 .quality-select:focus {
@@ -496,7 +507,14 @@ button:disabled { opacity: 0.5; cursor: not-allowed; }
     padding: 10px 14px;
   }
   .size-slider {
-    width: 100px;
+    flex-basis: 90px;
+  }
+  /* On phones the label gets its own line instead of being squeezed into a
+     truncated sliver, which is what used to push the row past the viewport. */
+  .feed-control-label {
+    flex: 1 1 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
   }
 }
 
