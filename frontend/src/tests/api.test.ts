@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest'
-import { apiGetMappings, apiClearCache } from '../api'
+import { apiGetMappings, apiRegister, apiClearCache } from '../api'
 import type { TagMapping } from '../types'
 
 /**
@@ -63,5 +63,73 @@ describe('apiGetMappings', () => {
     respondWith({})
 
     await expect(apiGetMappings()).resolves.toEqual([])
+  })
+})
+
+describe('API error formatting', () => {
+  let fetchMock: ReturnType<typeof vi.fn>
+
+  beforeEach(() => {
+    apiClearCache()
+    fetchMock = vi.fn()
+    vi.stubGlobal('fetch', fetchMock)
+  })
+
+  afterEach(() => {
+    vi.unstubAllGlobals()
+    vi.restoreAllMocks()
+  })
+
+  function rejectWith(status: number, body: unknown) {
+    fetchMock.mockResolvedValue({
+      ok: false,
+      status,
+      json: async () => body,
+    })
+  }
+
+  it('surfaces the field and message from a validation detail array', async () => {
+    rejectWith(422, {
+      detail: [
+        {
+          type: 'string_too_short',
+          loc: ['body', 'password'],
+          msg: 'String should have at least 8 characters',
+          input: '123456',
+          ctx: { min_length: 8 },
+        },
+      ],
+    })
+
+    await expect(apiRegister('newuser', 'new@example.com', '123456')).rejects.toThrow(
+      'password: String should have at least 8 characters',
+    )
+  })
+
+  it('joins several validation errors into one message', async () => {
+    rejectWith(422, {
+      detail: [
+        { loc: ['body', 'username'], msg: 'String should have at least 3 characters' },
+        { loc: ['body', 'email'], msg: 'value is not a valid email address' },
+      ],
+    })
+
+    await expect(apiRegister('ab', 'nope', '12345678')).rejects.toThrow(
+      'username: String should have at least 3 characters; email: value is not a valid email address',
+    )
+  })
+
+  it('keeps the plain string detail unchanged', async () => {
+    rejectWith(409, { detail: 'Username or email already taken' })
+
+    await expect(apiRegister('taken', 'taken@example.com', '12345678')).rejects.toThrow(
+      'Username or email already taken',
+    )
+  })
+
+  it('falls back to the HTTP status when the body has no detail', async () => {
+    rejectWith(429, {})
+
+    await expect(apiRegister('limited', 'limited@example.com', '12345678')).rejects.toThrow('HTTP 429')
   })
 })

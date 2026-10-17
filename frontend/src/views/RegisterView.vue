@@ -15,7 +15,7 @@
         </div>
         <div class="input-group">
           <label class="input-label">{{ lang.t('password') }}</label>
-          <input type="password" class="input" v-model="password" :placeholder="lang.t('password')" required minlength="6" autocomplete="new-password">
+          <input type="password" class="input" v-model="password" :placeholder="lang.t('password')" required minlength="8" maxlength="128" autocomplete="new-password">
         </div>
         
         <div class="input-group" style="flex-direction:row;align-items:center;gap:8px;">

@@ -82,6 +82,30 @@ function invalidateCache(prefix: string) {
   }
 }
 
+function formatApiError(data: Record<string, unknown>, status: number): string {
+  const detail = data.detail
+  if (typeof detail === 'string' && detail) return detail
+  if (Array.isArray(detail)) {
+    const parts = detail
+      .map((item) => {
+        if (typeof item === 'string') return item
+        if (item && typeof item === 'object') {
+          const entry = item as { loc?: unknown; msg?: unknown }
+          const loc = Array.isArray(entry.loc)
+            ? entry.loc.filter((part) => part !== 'body').join('.')
+            : ''
+          const msg = typeof entry.msg === 'string' ? entry.msg : ''
+          if (loc && msg) return `${loc}: ${msg}`
+          return msg
+        }
+        return ''
+      })
+      .filter((part): part is string => Boolean(part))
+    if (parts.length) return parts.join('; ')
+  }
+  return `HTTP ${status}`
+}
+
 async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
   const method = opts.method || 'GET'
   const isCacheable = method === 'GET'
@@ -179,7 +203,7 @@ async function _fetch<T>(url: string, opts: FetchOptions = {}): Promise<T> {
   }
 
   const data: Record<string, unknown> = await resp.json().catch(() => ({}))
-  if (!resp.ok) throw new Error((data.detail as string) || `HTTP ${resp.status}`)
+  if (!resp.ok) throw new Error(formatApiError(data, resp.status))
 
   if (isCacheable) {
     cache.set(cacheKey, { data, expiry: Date.now() + CACHE_TTL })
