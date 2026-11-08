@@ -268,10 +268,13 @@ class TestUpstreamFailures:
         provider.max_per_page = 200
         provider.fetch_posts = AsyncMock(return_value=([], -1))
 
-        with patch.dict("app.services.booru_client.PROVIDERS", {"danbooru": provider}, clear=True):
+        with patch.dict("app.services.booru_client.PROVIDERS", {"danbooru": provider}, clear=True),                 patch("app.services.booru_client.asyncio.sleep", new=AsyncMock()):
             await search_posts("danbooru", "1girl", 40, 1, user=None, skip_interval=True)
-            # Second call must reach the provider again, not the cache.
-            provider.fetch_posts.assert_awaited_once()
+            # Initial attempt plus the transient-failure retries.
+            assert provider.fetch_posts.await_count == 3
+            # A repeat call must reach the provider again, not the cache.
+            await search_posts("danbooru", "1girl", 40, 1, user=None, skip_interval=True)
+            assert provider.fetch_posts.await_count == 6
 
         _cache._data.clear()
 

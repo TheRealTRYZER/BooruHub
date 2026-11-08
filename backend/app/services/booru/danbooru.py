@@ -49,7 +49,7 @@ class Danbooru(BaseBooru):
             posts, total = await super().fetch_posts(tags, page, limit, user, timeout)
             if total == -1:
                 self._consecutive_failures += 1
-                if self._consecutive_failures >= 5:
+                if self._consecutive_failures >= 9:
                     self._circuit_broken_until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=60)
                     logger.error(f"Danbooru consecutive failures reached {self._consecutive_failures}. Circuit breaker tripped for 60 seconds.")
             else:
@@ -57,7 +57,7 @@ class Danbooru(BaseBooru):
             return posts, total
         except Exception as e:
             self._consecutive_failures += 1
-            if self._consecutive_failures >= 5:
+            if self._consecutive_failures >= 9:
                 self._circuit_broken_until = datetime.datetime.now(datetime.timezone.utc) + datetime.timedelta(seconds=60)
                 logger.error(f"Danbooru consecutive failures reached {self._consecutive_failures}. Circuit breaker tripped for 60 seconds.")
             raise e
@@ -73,35 +73,30 @@ class Danbooru(BaseBooru):
         
         # 1. Mandatory API tags (priorities)
         orders = [t for t in all_tags if t.startswith("order:")]
-        # Sort content tags so the same set of input tags always produces the
-        # same API query regardless of input order. Without this, reordering
-        # tags changes which tag is sent to the Danbooru API (only 2 tags are
-        # allowed), producing entirely different result sets for the same query.
-        content = sorted([t for t in all_tags if not t.startswith(("order:", "rating:"))])
         ratings = [t for t in all_tags if t.startswith("rating:")]
-        
-        # Limit optimization: pick 2 best tags for the API
+        rest = [t for t in all_tags if not t.startswith(("order:", "rating:"))]
+        # Sorted so the same tag set always yields the same API query. Positive tags
+        # narrow the server-side result; a negation as the only API tag would return a
+        # huge pool in which the positive tags rarely match.
+        positives = sorted(t for t in rest if not t.startswith(("-", "~")))
+        negatives = sorted(t for t in rest if t.startswith("-"))
+
         api_list = []
-        
-        # Priority 1: order: (max 1, otherwise it conflicts/breaks)
         if orders:
             api_list.append(orders[0])
-            
-        # Priority 2: most important content tag (the first one)
-        if content and len(api_list) < 2:
-            api_list.append(content[0])
-            
-        # Priority 3: score floor if order:score is present and no content tag (prevents 500s)
-        if any(t == "order:score" for t in api_list) and not content and len(api_list) < 2:
+        if positives and len(api_list) < 2:
+            api_list.append(positives[0])
+        elif not positives and negatives and len(api_list) < 2:
+            api_list.append(negatives[0])
+        # order:score without a content tag 500s on Danbooru; a score floor prevents it.
+        if "order:score" in api_list and not rest and not ratings and len(api_list) < 2:
             api_list.append("score:>=250")
-
-        # Priority 4: rating: (if we still have room)
         if ratings and len(api_list) < 2:
             api_list.append(ratings[0])
-            
-        # Priority 5: second content tag if room
-        if len(content) > 1 and len(api_list) < 2:
-            api_list.append(content[1])
+        if len(positives) > 1 and len(api_list) < 2:
+            api_list.append(positives[1])
+        if negatives and len(api_list) < 2 and negatives[0] not in api_list:
+            api_list.append(negatives[0])
 
         api_tags = " ".join(api_list)
         

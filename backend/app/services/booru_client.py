@@ -130,6 +130,21 @@ def _get_lock(key: tuple) -> TrackedLock:
 #  Single-site search                                                         #
 # --------------------------------------------------------------------------- #
 
+# Extra attempts after a transient upstream failure (timeout, 5xx, 429).
+SEARCH_RETRIES = 2
+
+
+async def _fetch_with_retries(provider, tags, page, limit, user, timeout, retries=SEARCH_RETRIES):
+    """Fetch posts, retrying a couple of times when the provider reports a failure (-1)."""
+    posts, count = await provider.fetch_posts(tags, page, limit, user, timeout)
+    attempt = 1
+    while count == -1 and attempt <= retries:
+        await asyncio.sleep(0.4 * attempt)
+        posts, count = await provider.fetch_posts(tags, page, limit, user, timeout)
+        attempt += 1
+    return posts, count
+
+
 async def search_posts(
     site: str,
     tags: str,
@@ -172,10 +187,10 @@ async def search_posts(
             wait = interval - (time.monotonic() - last)
             if wait > 0:
                 await asyncio.sleep(wait)
-            posts, count = await provider.fetch_posts(tags, page, limit, user, timeout)
+            posts, count = await _fetch_with_retries(provider, tags, page, limit, user, timeout)
             _last_search[lock_key] = time.monotonic()
     else:
-        posts, count = await provider.fetch_posts(tags, page, limit, user, timeout)
+        posts, count = await _fetch_with_retries(provider, tags, page, limit, user, timeout)
 
     result = (posts, count)
     # count == -1 marks an upstream failure. Caching it would turn one 429 or
@@ -312,5 +327,7 @@ async def search_multi_site(
                 has_more = True
                 break
 
-    truncated_posts = interleaved[:limit]
+    # Danbooru over-fetches and filters locally; cutting that surplus would silently skip posts.
+    keep_all = len(sites) == 1 and sites[0] == "danbooru"
+    truncated_posts = interleaved if keep_all else interleaved[:limit]
     return truncated_posts, total_counts, has_more

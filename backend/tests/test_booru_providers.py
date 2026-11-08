@@ -28,15 +28,26 @@ def test_danbooru_score_floor_injection():
     assert "score:>=250" not in api_tags
     assert "order:score" in api_tags
 
-def test_danbooru_score_floor_injection_with_rating():
+def test_danbooru_rating_replaces_score_floor():
     db = Danbooru()
-    # If order:score is present and rating:general is enforced (making it 2 tags),
-    # it should prioritize score:>=250 floor injection over rating and push rating to extra tags
+    # A rating already narrows order:score enough, so it is sent instead of a score floor.
     api_tags, extra = db.prepare_tags("order:score rating:general")
-    assert "score:>=250" in api_tags
+    assert "score:>=250" not in api_tags
     assert "order:score" in api_tags
-    assert "rating:general" not in api_tags
-    assert "rating:general" in extra
+    assert "rating:general" in api_tags
+
+
+def test_danbooru_prefers_positive_tags_over_negations():
+    db = Danbooru()
+    api_tags, extra = db.prepare_tags("-solo 1girl blue_eyes")
+    assert api_tags.split() == ["1girl", "blue_eyes"]
+    assert extra == ["-solo"]
+
+
+def test_danbooru_negation_only_still_reaches_api():
+    db = Danbooru()
+    api_tags, extra = db.prepare_tags("-solo")
+    assert api_tags == "-solo"
 
 
 def test_danbooru_normalization():
