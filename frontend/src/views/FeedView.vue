@@ -14,7 +14,7 @@
     <div ref="sentinel" style="height:20px; margin-top:50px;"></div>
 
     <div v-if="!loading && !feed.hasMore && feed.posts.length === 0 && !correctedTags" class="empty-state" style="padding:100px 20px; text-align:center;">
-      <div class="empty-state-icon" style="font-size:4rem; margin-bottom:20px;">🔍</div>
+      <div class="empty-state-icon" style="margin-bottom:20px;"><AppIcon name="search" :size="56" :stroke-width="1.4" /></div>
       <div class="empty-state-title" style="font-size:1.5rem; font-weight:700;">{{ lang.t('no_results') }}</div>
       <div class="empty-state-text" style="color:var(--text-muted);">{{ lang.t('try_changing') }}</div>
     </div>
@@ -30,7 +30,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import { useRoute } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
 import { useFeedStore } from '../stores/feed'
@@ -41,6 +41,7 @@ import { useSearchHistory } from '../composables/useSearchHistory'
 import PostGrid from '../components/PostGrid.vue'
 import SearchToolbar from '../components/SearchToolbar.vue'
 import LightboxModal from '../components/LightboxModal.vue'
+import AppIcon from '../components/AppIcon.vue'
 import type { Post, SiteName } from '../types'
 
 const route = useRoute()
@@ -70,6 +71,14 @@ function applyCorrection(newTags: string) {
   feed.tags = newTags
   handleReload()
 }
+
+// The feed stays mounted while the lightbox navigates to it with a new ?tags=,
+// so onMounted alone would miss a tag picked in the lightbox.
+watch(() => route.query, (q) => {
+  if (route.name !== 'feed' || typeof q.tags !== 'string' || !q.tags) return
+  feed.tags = q.tags
+  handleReload()
+})
 
 onMounted(() => {
   const guestDefault = "order:score rating:general"

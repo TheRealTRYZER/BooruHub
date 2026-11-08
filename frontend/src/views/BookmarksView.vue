@@ -1,21 +1,21 @@
 <template>
   <div>
     <div v-if="!auth.isAuthenticated" class="empty-state">
-      <div class="empty-state-icon">🔒</div>
+      <div class="empty-state-icon"><AppIcon name="lock" :size="48" :stroke-width="1.4" /></div>
       <div class="empty-state-title">{{ lang.t('login') }}</div>
       <div class="empty-state-text">{{ lang.t('login_to_fav') }}</div>
       <button class="btn btn-primary" @click="$router.push('/login')" style="margin-top:16px;">{{ lang.t('login') }}</button>
     </div>
     <template v-else>
       <div class="page-header">
-        <h1 class="page-title">🔖 {{ lang.t('bookmarks_title') }}</h1>
+        <h1 class="page-title">{{ lang.t('bookmarks_title') }}</h1>
         <p class="page-subtitle">{{ lang.t('bookmarks_subtitle') }}</p>
       </div>
 
       <div v-if="loading" class="loading-spinner"></div>
       
       <div v-if="!loading && bookmarks.length === 0" class="empty-state">
-        <div class="empty-state-icon">📑</div>
+        <div class="empty-state-icon"><AppIcon name="bookmark" :size="48" :stroke-width="1.4" /></div>
         <div class="empty-state-title">{{ lang.t('no_bookmarks') }}</div>
         <div class="empty-state-text">{{ lang.t('save_bookmarks_hint') }}</div>
       </div>
@@ -37,11 +37,13 @@
               <span v-for="s in b.sites || []" :key="s" class="post-card-badge" :class="s" style="font-size:9px;">{{ s }}</span>
             </div>
           </div>
-          <button class="btn btn-primary btn-sm" @click.stop="apply(b.query)">
-            🔍 {{ lang.t('search_btn') }}
+          <button class="btn btn-primary bookmark-action" @click.stop="apply(b.query)"
+                  :title="lang.t('search_btn')" :aria-label="lang.t('search_btn')">
+            <AppIcon name="search" :size="16" :stroke-width="2" />
           </button>
-          <button class="btn btn-danger btn-sm" @click.stop="del(b.id)">
-            ✕
+          <button class="btn btn-danger bookmark-action" @click.stop="del(b.id)"
+                  :title="lang.t('confirm_delete')" :aria-label="lang.t('confirm_delete')">
+            <AppIcon name="close" :size="16" :stroke-width="2" />
           </button>
         </div>
       </div>
@@ -58,6 +60,7 @@ import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
 import { apiGetBookmarks, apiDeleteBookmark } from '../api'
 import type { Bookmark } from '../types'
+import AppIcon from '../components/AppIcon.vue'
 
 const auth = useAuthStore()
 const feed = useFeedStore()

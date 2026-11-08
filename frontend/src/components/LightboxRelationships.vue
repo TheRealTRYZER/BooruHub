@@ -61,8 +61,7 @@ function getPostThumbnail(p: Post) {
   top: 80px;
   bottom: 24px;
   width: 300px;
-  background: rgba(15, 15, 20, 0.55);
-  backdrop-filter: blur(16px);
+  background: rgba(0, 0, 0, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   padding: 20px;

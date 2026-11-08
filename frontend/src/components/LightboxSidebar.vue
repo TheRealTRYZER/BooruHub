@@ -61,14 +61,14 @@ const groupedTags = computed(() => {
   }
   
   const categoryTitles: Record<string, string> = {
-    artist: '👤 Artists',
-    character: '🎭 Characters',
-    copyright: '📚 Copyrights',
-    species: '🐾 Species',
-    general: '🏷️ General Tags',
-    metadata: '⚙️ Metadata',
-    lore: '📜 Lore',
-    invalid: '❌ Invalid'
+    artist: 'Artists',
+    character: 'Characters',
+    copyright: 'Copyrights',
+    species: 'Species',
+    general: 'General Tags',
+    metadata: 'Metadata',
+    lore: 'Lore',
+    invalid: 'Invalid'
   }
   
   return categoriesOrder
@@ -91,8 +91,7 @@ const groupedTags = computed(() => {
   top: 80px;
   bottom: 24px;
   width: 300px;
-  background: rgba(15, 15, 20, 0.55);
-  backdrop-filter: blur(16px);
+  background: rgba(0, 0, 0, 0.82);
   border: 1px solid rgba(255, 255, 255, 0.08);
   border-radius: 16px;
   padding: 20px;
@@ -152,7 +151,7 @@ const groupedTags = computed(() => {
 }
 .lightbox-tag-group-title.artist { color: #f43f5e; }
 .lightbox-tag-group-title.character { color: #34d399; }
-.lightbox-tag-group-title.copyright { color: #a78bfa; }
+.lightbox-tag-group-title.copyright { color: #fb923c; }
 .lightbox-tag-group-title.species { color: #fb923c; }
 .lightbox-tag-group-title.general { color: #38bdf8; }
 .lightbox-tag-group-title.metadata { color: #fbbf24; }

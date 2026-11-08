@@ -1,22 +1,27 @@
 <template>
   <div class="lightbox-actions-panel">
     <button class="btn btn-glass" :class="{ 'btn-fav-active': isFav }" @click="$emit('toggleFav')">
-      {{ isFav ? '❤️ ' + lang.t('nav_favorites') : '🤍 ' + lang.t('nav_favorites') }}
+      <AppIcon name="heart" :size="16" :filled="isFav" />
+      <span>{{ lang.t('nav_favorites') }}</span>
     </button>
-    <button class="btn btn-glass" :class="{ 'btn-dislike-active': isDisliked }" @click="$emit('toggleDislike')">
-      👎
+    <button class="btn btn-glass" :class="{ 'btn-dislike-active': isDisliked }" @click="$emit('toggleDislike')"
+            :title="lang.t('dislikes_tab')" :aria-label="lang.t('dislikes_tab')">
+      <AppIcon name="thumbs-down" :size="16" :filled="isDisliked" />
     </button>
     <button class="btn btn-glass" @click="$emit('download')">
-      ⬇️ {{ lang.t('download') }}
+      <AppIcon name="download" :size="16" />
+      <span>{{ lang.t('download') }}</span>
     </button>
     <button class="btn btn-glass" @click="$emit('openOriginal')">
-      🔗 {{ lang.t('original') }}
+      <AppIcon name="link" :size="16" />
+      <span>{{ lang.t('original') }}</span>
     </button>
   </div>
 </template>
 
 <script setup lang="ts">
 import { useLangStore } from '../stores/lang'
+import AppIcon from './AppIcon.vue'
 
 defineProps<{
   isFav: boolean
@@ -41,13 +46,16 @@ const lang = useLangStore()
   transform: translateX(-50%);
   display: flex;
   justify-content: center;
+  flex-wrap: wrap;
+  /* With left: 50% the shrink-to-fit width is capped at half the overlay, so the
+     buttons used to spill out of the panel; size it to its content instead. */
+  width: max-content;
+  max-width: calc(100% - 24px);
   gap: 10px;
-  background: rgba(15, 15, 20, 0.55);
-  backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   padding: 12px 20px;
-  border-radius: 16px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+  border-radius: var(--border-radius-lg);
   z-index: 999;
 }
 
@@ -65,16 +73,13 @@ const lang = useLangStore()
 }
 
 .btn-fav-active {
-  background: rgba(239, 68, 68, 0.2) !important;
-  border-color: rgba(239, 68, 68, 0.4) !important;
-  color: #ef4444 !important;
-  box-shadow: 0 0 10px rgba(239, 68, 68, 0.2);
+  border-color: var(--rating-explicit) !important;
+  color: var(--rating-explicit) !important;
 }
 
 .btn-dislike-active {
-  background: rgba(249, 115, 22, 0.2) !important;
-  border-color: rgba(249, 115, 22, 0.4) !important;
-  color: #f97316 !important;
+  border-color: var(--rating-questionable) !important;
+  color: var(--rating-questionable) !important;
 }
 
 @media (max-width: 768px) {
@@ -83,8 +88,9 @@ const lang = useLangStore()
     bottom: calc(12px + env(safe-area-inset-bottom, 0px));
     left: 50%;
     transform: translateX(-50%);
-    width: auto;
-    max-width: 95vw;
+    width: max-content;
+    max-width: calc(100% - 16px);
+    gap: 6px;
     padding: 8px 12px;
     margin-top: 0;
   }

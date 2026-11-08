@@ -192,7 +192,7 @@ export type TranslationKey =
   | 'favorites_title' | 'favorites_subtitle'
   | 'dislikes_title' | 'dislikes_subtitle' | 'likes_tab' | 'dislikes_tab'
   | 'no_favorites' | 'empty_list' | 'add_favorites_hint' | 'error_load_favorites'
-  | 'settings_title' | 'settings_subtitle' | 'profile' | 'start_tags'
+  | 'style_title' | 'background_title' | 'bg_auto' | 'bg_dots' | 'bg_scan' | 'bg_rings' | 'bg_sparks' | 'bg_off' | 'settings_title' | 'settings_subtitle' | 'profile' | 'start_tags'
   | 'save_settings' | 'settings_saved'
   | 'api_keys_section' | 'api_key_unreadable' | 'search_params' | 'posts_limit' | 'search_interval' | 'search_timeout' | 'advanced_settings' | 'root_margin' | 'search_timeout_desc' | 'search_interval_desc'
   | 'keys_not_set' | 'keys_configured' | 'api_error'

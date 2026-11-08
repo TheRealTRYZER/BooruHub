@@ -1,5 +1,5 @@
 <template>
-  <div class="search-toolbar-container" :class="{ 'toolbar-hidden': isScrollingDown, 'is-sticky': isSticky }">
+  <div ref="toolbarEl" class="search-toolbar-container" :class="{ 'toolbar-hidden': isScrollingDown, 'is-stuck': isStuck }">
     <div class="search-bar">
       <div class="search-bar-row">
         <div v-show="!feed.isSplit" class="search-input-wrapper" @click="focusActualInput">
@@ -12,17 +12,23 @@
                  @blur="onSearchBlur"
                  @keydown.enter="triggerSearch"
                  @keydown.tab.prevent="onTabPress" />
+          <button class="search-submit" @click.stop="triggerSearch"
+                  :title="lang.t('search_btn')" :aria-label="lang.t('search_btn')">
+            <AppIcon name="search" :size="18" :stroke-width="2" />
+          </button>
         </div>
-               
+
         <div class="search-actions">
-          <button v-if="auth.isAuthenticated && !feed.isSplit" class="btn btn-secondary" @click="saveBookmark" :title="lang.t('save_to_bookmarks')" id="btn-bookmark">
-            🔖 <span class="btn-bookmark-text">{{ lang.t('save_to_bookmarks') }}</span>
+          <button v-if="auth.isAuthenticated && !feed.isSplit" class="btn btn-secondary search-icon-btn" @click="saveBookmark"
+                  :title="lang.t('save_to_bookmarks')" :aria-label="lang.t('save_to_bookmarks')" id="btn-bookmark">
+            <AppIcon name="bookmark" :size="18" />
           </button>
-          <button class="btn btn-secondary btn-icon" @click="feed.toggleSplit()" :title="lang.t('advanced_search')">
-            {{ feed.isSplit ? '⬅️ ' + lang.t('collapse') : '🔀 ' + lang.t('split_search') }}
-          </button>
-          <button class="btn btn-primary btn-search" @click="triggerSearch" v-show="!feed.isSplit">
-            🔍 {{ lang.t('search_btn') }}
+          <button class="btn btn-secondary search-icon-btn" :class="{ 'is-on': feed.isSplit }" @click="feed.toggleSplit()"
+                  :title="feed.isSplit ? lang.t('collapse') : lang.t('split_search')"
+                  :aria-label="feed.isSplit ? lang.t('collapse') : lang.t('split_search')"
+                  :aria-pressed="feed.isSplit" id="btn-split">
+            <AppIcon :name="feed.isSplit ? 'arrow-left' : 'split'" :size="18" />
+            <span v-if="feed.isSplit" class="split-label">{{ lang.t('collapse') }}</span>
           </button>
         </div>
       </div>
@@ -33,7 +39,7 @@
              class="search-suggestion-item" 
              :class="{ mapped: tagObj.is_mapped, frequent: (tagObj.search_count || 0) > 0 }"
              @mousedown.prevent="selectSuggestion(tagObj.tag)">
-          <span v-if="tagObj.is_mapped" class="mapped-star">⭐</span>
+          <span v-if="tagObj.is_mapped" class="mapped-star"><AppIcon name="star" :size="11" /></span>
           <span class="suggestion-text autocomplete-tag" :class="tagObj.category">{{ tagObj.tag.replace(/_/g, ' ') }}</span>
           <span v-if="tagObj.category && tagObj.category !== 'general'" class="autocomplete-badge" :class="tagObj.category">{{ tagObj.category }}</span>
           <span v-if="(tagObj.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ tagObj.search_count }}</span>
@@ -53,9 +59,9 @@
       <div class="search-suggestions" :class="{ visible: showHistory && searchHistory.length > 0 && !hasSuggestions }">
         <div v-for="q in searchHistory" :key="q" class="search-suggestion-item history-item"
              @mousedown.prevent="selectHistory(q)">
-          <span class="history-clock">🕐</span>
+          <span class="history-clock"><AppIcon name="clock" :size="14" /></span>
           <span class="history-query">{{ q }}</span>
-          <span class="history-remove" @mousedown.stop.prevent="removeHistory(q)">×</span>
+          <span class="history-remove" @mousedown.stop.prevent="removeHistory(q)"><AppIcon name="close" :size="14" /></span>
         </div>
       </div>
     </div>
@@ -84,7 +90,7 @@
                  class="search-suggestion-item" 
                  :class="{ mapped: tagObj.is_mapped, frequent: (tagObj.search_count || 0) > 0 }"
                  @mousedown.prevent="selectSplitSuggestion(site, tagObj.tag)">
-              <span v-if="tagObj.is_mapped" class="mapped-star">⭐</span>
+              <span v-if="tagObj.is_mapped" class="mapped-star"><AppIcon name="star" :size="11" /></span>
               <span class="suggestion-text autocomplete-tag" :class="tagObj.category">{{ tagObj.tag.replace(/_/g, ' ') }}</span>
               <span v-if="tagObj.category && tagObj.category !== 'general'" class="autocomplete-badge" :class="tagObj.category">{{ tagObj.category }}</span>
               <span v-if="(tagObj.search_count || 0) > 0" class="frequent-badge" :title="lang.t('frequent_tag_hint')">★{{ tagObj.search_count }}</span>
@@ -100,7 +106,10 @@
             </div>
           </div>
         </div>
-        <button class="btn btn-primary btn-sm" @click="triggerSearch">🔍</button>
+        <button class="btn btn-primary split-search-go" @click="triggerSearch"
+                :title="lang.t('search_btn')" :aria-label="lang.t('search_btn')">
+          <AppIcon name="search" :size="16" :stroke-width="2" />
+        </button>
         <div class="ratio-slider-container">
           <input type="range" class="ratio-slider"
                  min="0" max="10" step="1"
@@ -123,39 +132,22 @@
           {{ site }}
         </label>
       </div>
-
-      <div class="feed-controls">
-        <div class="feed-control-group">
-          <label class="feed-control-label"><span class="control-emoji" aria-hidden="true">🎚️</span>{{ lang.t('card_size') }}</label>
-          <input type="range" min="75" max="400" step="5" v-model.number="feed.cardSize" class="size-slider">
-          <span class="size-val">{{ feed.cardSize }}px</span>
-          <div class="col-select-dropdown">
-            <button class="col-select-btn" @click.stop="toggleColDropdown"
-                    :title="lang.t('posts_per_row')"
-                    :aria-label="lang.t('posts_per_row')"
-                    :aria-expanded="showColDropdown">
-              <span aria-hidden="true">🔢</span>
-              <span class="col-select-count">{{ currentColCount }}</span>
-              <span aria-hidden="true" class="col-select-caret">▼</span>
-            </button>
-            <div v-if="showColDropdown" class="col-dropdown-menu">
-              <div v-for="c in COL_OPTIONS" :key="c" 
-                   class="col-dropdown-item"
-                   :class="{ active: c === currentColCount }"
-                   @click.stop="selectColCount(c)">
-                {{ lang.t('posts_per_row_item', { count: c }) }}
-              </div>
-            </div>
+      <div class="col-select-dropdown">
+        <button class="col-select-btn" @click.stop="toggleColDropdown"
+                :title="lang.t('posts_per_row')"
+                :aria-label="lang.t('posts_per_row')"
+                :aria-expanded="showColDropdown">
+          <AppIcon name="columns" :size="16" />
+          <span class="col-select-count">{{ currentColCount }}</span>
+          <AppIcon name="chevron-down" :size="12" :stroke-width="2.2" class="col-select-caret" />
+        </button>
+        <div v-if="showColDropdown" class="col-dropdown-menu">
+          <div v-for="c in COL_OPTIONS" :key="c" 
+               class="col-dropdown-item"
+               :class="{ active: c === currentColCount }"
+               @click.stop="selectColCount(c)">
+            {{ lang.t('posts_per_row_item', { count: c }) }}
           </div>
-        </div>
-        
-        <div class="feed-control-group">
-          <label class="feed-control-label">🖼️ {{ lang.t('preview_quality') }}</label>
-          <select v-model="feed.previewQuality" class="quality-select">
-            <option value="thumbnail">{{ lang.t('quality_thumbnail') }}</option>
-            <option value="sample">{{ lang.t('quality_sample') }}</option>
-            <option value="full">{{ lang.t('quality_full') }}</option>
-          </select>
         </div>
       </div>
     </div>
@@ -175,10 +167,11 @@ import { useFeedStore } from '../stores/feed'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
 import { apiAddBookmark } from '../api'
+import { cardSizeForColumns, columnsForCardSize } from '../utils/gridLayout'
 import { useSearchHistory } from '../composables/useSearchHistory'
 import { useTagSuggestions } from '../composables/useTagSuggestions'
-import { cardSizeForColumns, columnsForCardSize } from '../utils/gridLayout'
 import type { SiteName } from '../types'
+import AppIcon from './AppIcon.vue'
 
 const auth = useAuthStore()
 const feed = useFeedStore()
@@ -245,29 +238,42 @@ watch(() => feed.tags, (newVal) => {
   }
 })
 
-const isSticky = ref(false)
+// The toolbar is always `position: sticky` with a fixed box, so scrolling never
+// changes layout. `isStuck` only paints the background and `isScrollingDown`
+// only slides it away with a transform. Neither touches the page height, which
+// used to feed back into the scroll position and make the toolbar flicker.
+const toolbarEl = ref<HTMLElement | null>(null)
+const isStuck = ref(false)
 const isScrollingDown = ref(false)
 let lastScrollY = typeof window !== 'undefined' ? window.scrollY : 0
+let scrollRaf = 0
 
-function handleScroll() {
-  const currentScrollY = window.scrollY
-  
-  isSticky.value = currentScrollY > 40
-  
-  if (currentScrollY < 40) {
+const STUCK_AFTER = 60
+const HIDE_DELTA = 12
+
+function updateOnScroll() {
+  scrollRaf = 0
+  const y = Math.max(0, window.scrollY)
+  isStuck.value = y > STUCK_AFTER
+
+  // Stay open while typing: the on-screen keyboard resizes the viewport and
+  // scrolls the page, which used to hide the field under the user's thumb.
+  const busy = !!toolbarEl.value?.contains(document.activeElement) ||
+    hasSuggestions.value || hasSplitSuggestions.value || showColDropdown.value
+  if (y <= STUCK_AFTER || busy) {
     isScrollingDown.value = false
-    lastScrollY = currentScrollY
+    lastScrollY = y
     return
   }
-  
-  if (Math.abs(currentScrollY - lastScrollY) < 6) return
 
-  if (currentScrollY > lastScrollY) {
-    isScrollingDown.value = true
-  } else {
-    isScrollingDown.value = false
-  }
-  lastScrollY = currentScrollY
+  const diff = y - lastScrollY
+  if (Math.abs(diff) < HIDE_DELTA) return
+  isScrollingDown.value = diff > 0
+  lastScrollY = y
+}
+
+function handleScroll() {
+  if (!scrollRaf) scrollRaf = requestAnimationFrame(updateOnScroll)
 }
 
 const showColDropdown = ref(false)
@@ -307,6 +313,7 @@ onMounted(() => {
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
+  if (scrollRaf) cancelAnimationFrame(scrollRaf)
   window.removeEventListener('resize', onViewportResize)
   document.removeEventListener('click', closeDropdowns)
   closeHistory()
@@ -467,38 +474,35 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
 
 <style scoped>
 .search-toolbar-container {
+  --tb-pad: 12px;
+  --tb-top: calc(64px + var(--inset-top) + 8px); /* just below the fixed navbar */
   display: flex;
   flex-direction: column;
   gap: 16px;
-  margin-bottom: 24px;
-  position: relative;
-  z-index: 100;
-  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.25s ease, background-color 0.3s, padding 0.3s, border-radius 0.3s, box-shadow 0.3s;
-}
-
-/* Sticky Glass Container when scrolled down */
-.search-toolbar-container.is-sticky {
   position: sticky;
-  top: 60px; /* Flush below the 60px navbar */
-  z-index: 100; /* Above grid, below modals */
-  /* Semi-transparent solid background instead of backdrop-filter blur: avoids
-     per-frame blur recomputation over the scrolling feed. */
-  background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
-  border: 1px solid rgba(255, 255, 255, 0.08);
+  top: var(--tb-top);
+  z-index: 100; /* above the grid, below the navbar and modals */
+  /* Constant box: padding is cancelled by the negative margin and the border is
+     always present (transparent until stuck), so nothing reflows on scroll. */
+  padding: var(--tb-pad);
+  margin: calc(-1 * var(--tb-pad)) calc(-1 * var(--tb-pad)) 16px;
+  border: 1px solid transparent;
   border-radius: var(--border-radius-lg);
-  padding: 16px 20px;
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  background: transparent;
+  will-change: transform;
+  transition: transform 0.25s cubic-bezier(0.2, 0.8, 0.2, 1), opacity 0.2s ease, background-color 0.2s, border-color 0.2s, box-shadow 0.2s;
 }
 
-[data-theme="light"] .search-toolbar-container.is-sticky {
-  background: color-mix(in srgb, var(--bg-secondary) 96%, transparent);
-  border-color: rgba(0, 0, 0, 0.08);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.12);
+/* Solid panel once the page has scrolled */
+.search-toolbar-container.is-stuck {
+  background: var(--bg-primary);
+  border-color: var(--border-color-hover);
+  box-shadow: var(--shadow-md);
 }
 
-/* Global scroll hide-on-down / show-on-up animation for all devices */
+/* Slide up and out of the way while scrolling down */
 .search-toolbar-container.toolbar-hidden {
-  transform: translateY(-115%);
+  transform: translateY(calc(-100% - var(--tb-top)));
   opacity: 0;
   pointer-events: none;
 }
@@ -514,29 +518,49 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
   display: flex;
   gap: 8px;
 }
-.btn-search {
-  padding: 0 24px;
+/* Search button lives inside the input, on its right edge. */
+.search-submit {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  margin-left: auto;
+  background: var(--accent);
+  color: var(--on-accent);
+  border-radius: calc(var(--border-radius-sm) - 2px);
+  transition: background-color 0.2s var(--ease-out), transform 0.2s var(--ease-out);
 }
+.search-submit:hover { background: var(--accent-hover); }
+.search-submit:active { transform: scale(0.94); }
+.search-icon-btn {
+  min-width: 48px;
+  height: 48px;
+  padding: 0 12px;
+}
+.search-icon-btn.is-on { border-color: var(--accent-text); color: var(--accent-text); }
+.split-label { font-size: 13px; }
+.split-search-go { width: 44px; height: 44px; padding: 0; flex: none; }
 .mapped-star {
+  display: inline-flex;
   margin-right: 6px;
-  font-size: 10px;
-}
-.search-suggestion-item.frequent {
-  background: linear-gradient(90deg, rgba(255, 215, 0, 0.10), transparent 60%);
+  color: var(--accent-text);
 }
 .frequent-badge {
   font-size: 10px;
   font-weight: 600;
-  color: #b8860b;
-  background: rgba(255, 215, 0, 0.18);
+  color: var(--warning);
+  border: 1px solid color-mix(in srgb, var(--warning) 40%, transparent);
   border-radius: 8px;
   padding: 1px 6px;
   margin-left: 6px;
   white-space: nowrap;
 }
 .history-clock {
+  display: inline-flex;
   margin-right: 8px;
-  opacity: 0.5;
+  opacity: 0.6;
 }
 .ratio-mixing-help {
   text-align: center;
@@ -554,44 +578,32 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
 .site-filters {
   margin-bottom: 0;
 }
-.feed-controls {
-  margin-bottom: 0;
-}
 @media (max-width: 768px) {
-  .search-toolbar-container.is-sticky {
-    top: 70px; /* Small gap on mobile below fixed navbar */
-    padding: 8px 12px;
+  .search-toolbar-container {
+    --tb-pad: 8px;
+    --tb-top: calc(64px + var(--inset-top) + 4px);
     border-radius: var(--border-radius);
-    background: color-mix(in srgb, var(--bg-card) 90%, transparent);
-    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
-  }
-  .search-toolbar-container.toolbar-hidden {
-    transform: translateY(-135%);
-    opacity: 0;
-    pointer-events: none;
   }
   .search-bar-row {
-    flex-wrap: wrap;
+    gap: 8px;
   }
-  .input-search {
-    min-width: 100%;
+  .search-input-wrapper {
+    min-width: 0;
   }
-  .search-actions {
-    width: 100%;
-    justify-content: flex-end;
+  .search-icon-btn {
+    min-width: 44px;
+    padding: 0 10px;
   }
+  .split-label { display: none; }
   .filter-controls-row {
-    flex-direction: column;
-    align-items: stretch;
+    flex-wrap: nowrap;
+    gap: 8px;
   }
   .site-filters {
-    width: 100%;
-  }
-  .feed-controls {
-    width: 100%;
+    flex-wrap: nowrap;
+    min-width: 0;
   }
 }
-
 .col-select-dropdown {
   position: relative;
   display: inline-block;
@@ -605,24 +617,28 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
   justify-content: center;
   gap: 4px;
   background: var(--bg-input);
-  border: 1px solid rgba(128,128,128,0.25);
+  border: 1px solid var(--border-color-hover);
   border-radius: var(--border-radius-sm);
   color: var(--text-primary);
   font-size: 13px;
+  font-family: var(--font-mono);
   cursor: pointer;
-  height: 32px;
+  height: 36px;
   /* Never let the control grow past the row it lives in on a 320px screen. */
   min-width: 0;
   max-width: 100%;
   padding: 0 10px;
   transition: background-color 0.2s;
 }
+@media (max-width: 768px) {
+  .col-select-btn { height: 44px; min-width: 44px; }
+}
 .col-select-count {
   font-weight: 700;
   font-variant-numeric: tabular-nums;
 }
 .col-select-caret {
-  font-size: 8px;
+  opacity: 0.7;
 }
 .col-select-btn:hover {
   background: var(--bg-card-hover);
@@ -633,9 +649,9 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
   right: 0;
   margin-top: 8px;
   background: var(--bg-secondary);
-  border: 1px solid rgba(128,128,128,0.25);
+  border: 1px solid var(--border-color-hover);
   border-radius: var(--border-radius-sm);
-  box-shadow: 0 8px 24px rgba(0,0,0,0.35);
+  box-shadow: var(--shadow-lg);
   z-index: 102;
   min-width: 130px;
   max-width: calc(100vw - 24px);
@@ -644,7 +660,7 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
   padding: 4px 0;
 }
 .col-dropdown-item {
-  padding: 8px 16px;
+  padding: 12px 16px;
   font-size: 13px;
   cursor: pointer;
   color: var(--text-secondary);
@@ -654,20 +670,10 @@ function selectSplitSuggestion(site: SiteName, tag: string) {
 }
 .col-dropdown-item:hover {
   background: var(--bg-card-hover);
-  color: var(--accent);
+  color: var(--accent-text);
 }
 .col-dropdown-item.active {
-  color: var(--accent);
+  color: var(--accent-text);
   font-weight: 600;
-}
-
-@media (max-width: 768px) {
-  .col-select-btn {
-    padding: 0 8px;
-  }
-  /* Reclaim the icon's width exactly where the row was overflowing. */
-  .control-emoji {
-    display: none;
-  }
 }
 </style>

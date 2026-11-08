@@ -1,0 +1,149 @@
+/* ==========================================================================
+   Animated backgrounds (the only per-style thing besides the palette).
+   Fonts, layout and shape are identical for all four styles.
+   ========================================================================== */
+
+/* ---------- Animated background (shared plumbing) ---------- */
+.app-bg {
+  position: fixed;
+  inset: 0;
+  z-index: 0;
+  overflow: hidden;
+  pointer-events: none;
+  contain: strict;
+}
+.app-bg > * { position: absolute; }
+
+/* Pause the loop while the lightbox covers the page (saves battery). */
+body:has(.lightbox-overlay) .app-bg * { animation-play-state: paused !important; }
+
+@media (prefers-reduced-motion: reduce) {
+  .app-bg * { animation: none !important; }
+}
+
+/* ---------- A · Graphite: dot grid + roaming spotlight ---------- */
+.bg-dots,
+.bg-spot {
+  inset: 0;
+  background-image: radial-gradient(circle, rgb(var(--fx) / var(--dot-a)) 1.3px, transparent 2.2px);
+  background-size: 20px 20px;
+}
+.bg-dots { --dot-a: 0.2; }
+.bg-spot {
+  --dot-a: 0.8;
+  -webkit-mask-image: radial-gradient(circle closest-side, #000 0%, transparent 100%);
+  mask-image: radial-gradient(circle closest-side, #000 0%, transparent 100%);
+  -webkit-mask-size: 480px 480px;
+  mask-size: 480px 480px;
+  -webkit-mask-repeat: no-repeat;
+  mask-repeat: no-repeat;
+  -webkit-mask-position: 0% 10%;
+  mask-position: 0% 10%;
+  animation: bgSpotDrift 18s ease-in-out infinite alternate;
+}
+@keyframes bgSpotDrift {
+  from { -webkit-mask-position: 0% 8%; mask-position: 0% 8%; }
+  50% { -webkit-mask-position: 70% 60%; mask-position: 70% 60%; }
+  to { -webkit-mask-position: 100% 92%; mask-position: 100% 92%; }
+}
+
+/* ---------- B · Signal: scanlines + sweeping band ---------- */
+.bg-scan {
+  inset: 0;
+  background: repeating-linear-gradient(to bottom, rgb(var(--fx) / 0.16) 0 1px, transparent 1px 3px);
+}
+.bg-sweep {
+  left: 0;
+  right: 0;
+  top: -280px;
+  height: 280px;
+  background: linear-gradient(to bottom, transparent 0%, rgb(var(--fx) / 0.12) 70%, rgb(var(--fx) / 0.3) 97%, rgb(var(--fx) / 0.65) 100%);
+  animation: bgSweep 7s linear infinite;
+  will-change: transform;
+}
+@keyframes bgSweep {
+  from { transform: translateY(0); }
+  to { transform: translateY(calc(100vh + 280px)); }
+}
+
+/* ---------- C · Volt: ripple rings from the bottom-right corner ---------- */
+@property --ph {
+  syntax: '<length>';
+  inherits: false;
+  initial-value: 0px;
+}
+.bg-rings {
+  inset: 0;
+  background: repeating-radial-gradient(
+    circle at 100% 100%,
+    transparent var(--ph, 0px),
+    transparent calc(var(--ph, 0px) + 44px),
+    rgb(var(--fx) / 0.45) calc(var(--ph, 0px) + 44px),
+    transparent calc(var(--ph, 0px) + 46px)
+  );
+  -webkit-mask-image: radial-gradient(circle at 100% 100%, #000 0%, transparent 85%);
+  mask-image: radial-gradient(circle at 100% 100%, #000 0%, transparent 85%);
+  animation: bgRipple 4s linear infinite;
+}
+@keyframes bgRipple {
+  from { --ph: 0px; }
+  to { --ph: 46px; }
+}
+
+/* ---------- D · Ember: rising sparks + breathing glow ---------- */
+.bg-glow {
+  left: -10%;
+  right: -10%;
+  bottom: -20vh;
+  height: 55vh;
+  background: radial-gradient(ellipse 50% 60% at 50% 100%, rgb(var(--fx) / 0.32), transparent 100%);
+  transform-origin: 50% 100%;
+  animation: bgBreathe 7s ease-in-out infinite alternate;
+}
+@keyframes bgBreathe {
+  from { opacity: 0.5; transform: scaleX(0.9); }
+  to { opacity: 1; transform: scaleX(1.12); }
+}
+.bg-spark {
+  bottom: -8px;
+  left: var(--x);
+  width: var(--s, 2px);
+  height: var(--s, 2px);
+  border-radius: 50%;
+  background: rgb(var(--fx) / 1);
+  opacity: 0;
+  animation: bgSpark var(--dur, 14s) linear var(--delay, 0s) infinite;
+}
+@keyframes bgSpark {
+  0% { transform: translate3d(0, 0, 0); opacity: 0; }
+  8% { opacity: 0.8; }
+  100% { transform: translate3d(var(--drift, 20px), -105vh, 0); opacity: 0; }
+}
+
+/* Light theme: overlay controls on photos stay dark glass */
+[data-theme="light"] .post-card-fav,
+[data-theme="light"] .post-card-dislike { background: rgba(0, 0, 0, 0.62); }
+
+/* ---------- Bolder accents (shared by every style) ---------- */
+.input:focus,
+.quality-select:focus { border-color: var(--accent-text); box-shadow: 0 0 0 1px var(--accent-text); }
+.search-input-wrapper:focus-within { border-color: var(--accent-text); box-shadow: 0 0 0 1px var(--accent-text); }
+.post-card:hover { border-color: var(--accent-text); box-shadow: 0 0 0 1px var(--accent-text); }
+.post-card.safe:hover { border-color: var(--rating-safe); box-shadow: 0 0 0 1px var(--rating-safe); }
+.post-card.questionable:hover { border-color: var(--rating-questionable); box-shadow: 0 0 0 1px var(--rating-questionable); }
+.post-card.explicit:hover { border-color: var(--rating-explicit); box-shadow: 0 0 0 1px var(--rating-explicit); }
+.settings-title { border-bottom: 2px solid var(--accent-2); }
+.site-filter:hover { border-color: var(--accent-2); }
+.site-filter.active { box-shadow: 0 0 0 1px var(--accent); }
+.nav-link.active { box-shadow: inset 0 -3px 0 color-mix(in srgb, var(--on-accent) 35%, transparent); }
+.nav-logo-icon { color: var(--accent-2); }
+.mapped-star { color: var(--accent-2) !important; }
+.size-slider, .ratio-slider { accent-color: var(--accent-2); }
+.search-suggestion-item.mapped { border-left-width: 4px; }
+.toast { border-left-width: 6px; }
+.loading-spinner { border-width: 4px; }
+.col-select-btn:hover,
+.btn-secondary:hover:not(:disabled) { border-color: var(--accent-text); }
+.btn-primary { box-shadow: 0 0 0 1px var(--accent); }
+.tab-btn.active,
+.style-option.active { box-shadow: 0 0 0 1px var(--accent-text); }

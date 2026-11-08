@@ -1,6 +1,6 @@
 <template>
   <Transition name="fade">
-    <div class="lightbox-overlay" role="dialog" aria-modal="true" aria-label="Image Details" @click.self="closeLightbox">
+    <div class="lightbox-overlay" role="dialog" aria-modal="true" aria-label="Image Details" @click="onOverlayClick">
       
       <!-- Dynamic Ambilight Theatre Backdrop -->
       <div class="ambient-glow-container">
@@ -8,14 +8,14 @@
       </div>
 
       <!-- Close Button -->
-      <button ref="closeBtnRef" class="lightbox-close-btn" @click="closeLightbox" :title="lang.t('close')">×</button>
+      <button ref="closeBtnRef" class="lightbox-close-btn" @click="closeLightbox" :title="lang.t('close')" :aria-label="lang.t('close')"><AppIcon name="close" :size="22" /></button>
 
       <!-- Left Navigation Arrow -->
       <button v-if="hasPrev" 
               class="lightbox-nav-btn left" 
               :class="{ 'shifted-right': relationshipPosts.length > 1 }"
               @click="prevPost" 
-              :title="lang.t('prev_title')">‹</button>
+              :title="lang.t('prev_title')" :aria-label="lang.t('prev_title')"><AppIcon name="arrow-left" :size="24" /></button>
 
       <!-- Scrollable content (relationships + media + sidebar). On desktop this wrapper is transparent (display: contents). -->
       <div class="lightbox-scroll-content">
@@ -27,10 +27,9 @@
         />
 
         <!-- Center Media Container (Perfect Center) -->
-        <div class="lightbox-content-wrapper" @click.self="closeLightbox">
+        <div class="lightbox-content-wrapper">
           <div class="lightbox-media-container" 
-               :class="{ 'lightbox-media-scrollable': !isVideo && isLong }"
-               @click.self="closeLightbox">
+               :class="{ 'lightbox-media-scrollable': !isVideo && isLong }">
             
             <!-- Video Player -->
             <video v-if="isVideo" 
@@ -76,7 +75,7 @@
       />
 
       <!-- Right Navigation Arrow -->
-      <button v-if="hasNext" class="lightbox-nav-btn right" @click="nextPost" :title="lang.t('next_title')">›</button>
+      <button v-if="hasNext" class="lightbox-nav-btn right" @click="nextPost" :title="lang.t('next_title')" :aria-label="lang.t('next_title')"><AppIcon name="arrow-right" :size="24" /></button>
 
       <!-- Dynamic Header Info (Glassmorphic) -->
       <LightboxHeader 
@@ -95,6 +94,8 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { replaceAfterOrderScore } from '../utils/tagQuery'
+import { useFeedStore } from '../stores/feed'
 import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
 import { apiAddFavorite, apiCheckFavorite, apiRemoveFavorite, apiSearch } from '../api'
@@ -106,6 +107,7 @@ import LightboxHeader from './LightboxHeader.vue'
 import LightboxSidebar from './LightboxSidebar.vue'
 import LightboxActions from './LightboxActions.vue'
 import LightboxRelationships from './LightboxRelationships.vue'
+import AppIcon from './AppIcon.vue'
 
 const props = defineProps<{
   post: Post
@@ -118,6 +120,7 @@ const emit = defineEmits<{
 
 const router = useRouter()
 const auth = useAuthStore()
+const feed = useFeedStore()
 const toast = useToastStore()
 const lang = useLangStore()
 
@@ -484,9 +487,19 @@ function openOriginal() {
   }
 }
 
+// Anything that is not the media, a control or a tag takes the user back to the feed.
+const INTERACTIVE = 'button, a, input, select, textarea, video, img, canvas, [role="button"], .tag-chip, .lightbox-media'
+
+function onOverlayClick(e: MouseEvent) {
+  const target = e.target as HTMLElement | null
+  if (target?.closest(INTERACTIVE)) return
+  closeLightbox()
+}
+
 function searchTag(tag: string) {
   closeLightbox()
-  router.push({ name: 'feed', query: { tags: tag } })
+  // `t` makes repeated clicks on the same tag still count as a navigation.
+  router.push({ name: 'feed', query: { tags: replaceAfterOrderScore(feed.tags, tag), t: Date.now() } })
 }
 
 // Accessibility dialog elements
@@ -574,7 +587,7 @@ onUnmounted(() => {
   top: 0; left: 0; right: 0; bottom: 0;
   width: 100%; height: 100vh;
   height: 100dvh;
-  background: rgba(8, 8, 10, 0.94);
+  background: rgba(0, 0, 0, 0.96);
   z-index: 99999;
   display: flex;
   align-items: center;
@@ -583,7 +596,7 @@ onUnmounted(() => {
 
 .lightbox-close-btn {
   position: absolute;
-  top: 20px; right: 24px;
+  top: calc(20px + var(--inset-top)); right: 24px;
   background: rgba(255, 255, 255, 0.08);
   border: 1px solid rgba(255, 255, 255, 0.1);
   color: #fff;
@@ -625,7 +638,6 @@ onUnmounted(() => {
 .lightbox-nav-btn:hover {
   background: rgba(255, 255, 255, 0.12);
   border-color: var(--accent);
-  box-shadow: 0 0 15px rgba(124, 58, 237, 0.35);
   transform: translateY(-50%) scale(1.06);
 }
 .lightbox-nav-btn.left { left: 32px; }
@@ -727,8 +739,8 @@ onUnmounted(() => {
     width: 100%;
     flex: 1 1 auto;
     min-height: 0;
-    padding-top: 64px;   /* leave room for the fixed header */
-    padding-bottom: calc(88px + env(safe-area-inset-bottom, 0px)); /* leave room for the fixed actions bar */
+    padding-top: calc(64px + var(--inset-top));   /* leave room for the fixed header */
+    padding-bottom: calc(88px + var(--inset-bottom)); /* leave room for the fixed actions bar */
     -webkit-overflow-scrolling: touch;
   }
   .lightbox-content-wrapper {
@@ -754,7 +766,7 @@ onUnmounted(() => {
     overflow: visible;
   }
   .lightbox-close-btn {
-    top: 10px; right: 12px;
+    top: calc(10px + var(--inset-top)); right: 12px;
     width: 38px; height: 38px;
     font-size: 24px;
   }

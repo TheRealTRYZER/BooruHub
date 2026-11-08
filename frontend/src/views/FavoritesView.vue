@@ -1,26 +1,26 @@
 <template>
   <div>
     <div v-if="!auth.isAuthenticated" class="empty-state">
-      <div class="empty-state-icon">🔒</div>
+      <div class="empty-state-icon"><AppIcon name="lock" :size="48" :stroke-width="1.4" /></div>
       <div class="empty-state-title">{{ lang.t('login') }}</div>
       <div class="empty-state-text">{{ lang.t('login_to_fav') }}</div>
       <button class="btn btn-primary" @click="$router.push('/login')" style="margin-top:16px;">{{ lang.t('login') }}</button>
     </div>
     <template v-else>
       <div class="page-header">
-        <h1 class="page-title">{{ showDislikes ? '💔' : '❤️' }} {{ showDislikes ? (lang.t('dislikes_title') || 'Dislikes') : lang.t('favorites_title') }}</h1>
+        <h1 class="page-title">{{ showDislikes ? (lang.t('dislikes_title') || 'Dislikes') : lang.t('favorites_title') }}</h1>
         <p class="page-subtitle">{{ showDislikes ? (lang.t('dislikes_subtitle') || 'Hidden from feed') : lang.t('favorites_subtitle') }}</p>
       </div>
 
       <div class="tabs">
-        <button class="tab-btn" :class="{active: !showDislikes}" @click="switchTab(false)">👍 {{ lang.t('likes_tab') || 'Likes' }}</button>
-        <button class="tab-btn" :class="{active: showDislikes}" @click="switchTab(true)">👎 {{ lang.t('dislikes_tab') || 'Dislikes' }}</button>
+        <button class="tab-btn" :class="{active: !showDislikes}" @click="switchTab(false)"><AppIcon name="heart" :size="16" /> {{ lang.t('likes_tab') || 'Likes' }}</button>
+        <button class="tab-btn" :class="{active: showDislikes}" @click="switchTab(true)"><AppIcon name="thumbs-down" :size="16" /> {{ lang.t('dislikes_tab') || 'Dislikes' }}</button>
       </div>
 
       <PostGrid :posts="posts" :skeletonCount="loading ? 15 : 0" @click-media="openLightbox" @favorite-changed="onFavoriteChanged" />
 
       <div v-if="!loading && posts.length === 0" class="empty-state">
-        <div class="empty-state-icon">💫</div>
+        <div class="empty-state-icon"><AppIcon name="sparkle" :size="48" :stroke-width="1.4" /></div>
         <div class="empty-state-title">{{ lang.t('empty_list') || 'Empty' }}</div>
       </div>
 
@@ -46,12 +46,14 @@
   display: flex; gap: 12px; margin-bottom: 24px;
 }
 .tab-btn {
-  padding: 8px 16px; background: var(--bg-input); border-radius: 20px;
-  color: var(--text-muted); font-weight: 600; font-size: 14px; transition: all 0.2s;
-  border: 1px solid rgba(128,128,128,0.1);
+  display: inline-flex; align-items: center; gap: 6px;
+  min-height: 44px;
+  padding: 8px 18px; background: var(--bg-input); border-radius: var(--radius-pill);
+  color: var(--text-secondary); font-weight: 600; font-size: 14px; transition: background-color 0.2s, color 0.2s;
+  border: 1px solid var(--border-color-hover);
 }
 .tab-btn.active {
-  background: var(--accent); color: #fff; box-shadow: 0 4px 12px rgba(139, 92, 246, 0.3);
+  background: var(--accent); color: var(--on-accent);
   border-color: var(--accent);
 }
 </style>
@@ -64,6 +66,7 @@ import { useLangStore } from '../stores/lang'
 import { apiGetFavorites } from '../api'
 import PostGrid from '../components/PostGrid.vue'
 import LightboxModal from '../components/LightboxModal.vue'
+import AppIcon from '../components/AppIcon.vue'
 import type { Post } from '../types'
 
 const auth = useAuthStore()

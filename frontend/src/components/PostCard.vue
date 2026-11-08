@@ -37,22 +37,22 @@
             {{ site === props.post.source_site ? site : '+ ' + site }}
           </span>
           <span class="post-card-rating" :class="ratingClass" :aria-label="'Rating: ' + ratingLabel">{{ ratingLabel }}</span>
-          <span v-if="isAnimated && !isFlash" class="post-card-badge" style="background:#ff4757;color:white;">▶</span>
-          <span v-if="isFlash" class="post-card-badge" style="background:#f1c40f;color:black;font-weight:bold;">FLASH</span>
+          <span v-if="isAnimated && !isFlash" class="post-card-badge flag-video"><AppIcon name="play" :size="10" filled /></span>
+          <span v-if="isFlash" class="post-card-badge flag-flash">FLASH</span>
           <span v-if="displayedPost.score !== undefined" class="post-card-score">★ {{ displayedPost.score }}</span>
         </div>
       </div>
       <button v-if="!isMobile" class="post-card-fav" :class="{ active: isFav }"
               @click.stop="toggleFav"
-              :title="lang.t('nav_favorites')">
-        {{ isFav ? '❤️' : '🤍' }}
+              :title="lang.t('nav_favorites')" :aria-label="lang.t('nav_favorites')">
+        <AppIcon name="heart" :size="15" :filled="isFav" />
       </button>
       <button v-if="!isMobile" class="post-card-dislike" :class="{ active: isDisliked }"
               @click.stop="doDislike"
-              :title="lang.t('dislikes_tab')">
-        👎
+              :title="lang.t('dislikes_tab')" :aria-label="lang.t('dislikes_tab')">
+        <AppIcon name="thumbs-down" :size="15" :filled="isDisliked" />
       </button>
-      <div v-if="showLikeAnimation" class="like-animation">❤️</div>
+      <div v-if="showLikeAnimation" class="like-animation"><AppIcon name="heart" :size="84" filled /></div>
     </template>
     <div v-else class="post-card-offscreen-placeholder" :style="mediaStyle"></div>
   </div>
@@ -70,6 +70,7 @@ import { useEventLogger } from '../composables/useEventLogger'
 import { useIsMobile } from '../composables/useIsMobile'
 import { RATING_MAP, RATING_LABELS } from '../types'
 import { sanitizeUrl } from '../utils/security'
+import AppIcon from './AppIcon.vue'
 import { getCroppedCanvas, requestCroppedCanvas, cropTargetWidth } from '../utils/cropCache'
 import type { Post, RatingClass, SiteName } from '../types'
 

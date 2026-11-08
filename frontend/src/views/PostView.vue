@@ -1,6 +1,6 @@
 <template>
   <div v-if="!displayedPost" class="empty-state">
-    <div class="empty-state-icon">❌</div>
+    <div class="empty-state-icon"><AppIcon name="close" :size="48" :stroke-width="1.4" /></div>
     <div class="empty-state-title">{{ lang.t('post_not_found') }}</div>
     <button class="btn btn-primary" @click="$router.push('/')">{{ lang.t('back_to_feed') }}</button>
   </div>
@@ -62,10 +62,10 @@
     <div class="post-detail-sidebar">
       <div class="post-detail-actions">
         <button class="btn" :class="isFav ? 'btn-danger' : 'btn-primary'" @click="toggleFavorite" style="flex:1;">
-          {{ isFav ? '💔 ' + lang.t('remove_from_fav') : '❤️ ' + lang.t('add_to_fav') }}
+          <AppIcon :name="isFav ? 'heart-broken' : 'heart'" :size="16" /> {{ isFav ? lang.t('remove_from_fav') : lang.t('add_to_fav') }}
         </button>
         <button class="btn btn-secondary" @click="openOriginal" style="flex:1;">
-          🔗 {{ lang.t('original') }}
+          <AppIcon name="link" :size="16" /> {{ lang.t('original') }}
         </button>
       </div>
       
@@ -135,6 +135,7 @@ import { useToastStore } from '../stores/toast'
 import { useLangStore } from '../stores/lang'
 import { useFeedStore } from '../stores/feed'
 import { apiCheckFavorite, apiAddFavorite, apiRemoveFavorite, apiSearch } from '../api'
+import AppIcon from '../components/AppIcon.vue'
 import { useEventLogger } from '../composables/useEventLogger'
 import TagChip from '../components/TagChip.vue'
 import { sanitizeUrl, escapeCssString } from '../utils/security'
@@ -308,14 +309,14 @@ const groupedTags = computed(() => {
   }
   
   const categoryTitles: Record<string, string> = {
-    artist: '👤 Artists',
-    character: '🎭 Characters',
-    copyright: '📚 Copyrights',
-    species: '🐾 Species',
-    general: '🏷️ General Tags',
-    metadata: '⚙️ Metadata',
-    lore: '📜 Lore',
-    invalid: '❌ Invalid'
+    artist: 'Artists',
+    character: 'Characters',
+    copyright: 'Copyrights',
+    species: 'Species',
+    general: 'General Tags',
+    metadata: 'Metadata',
+    lore: 'Lore',
+    invalid: 'Invalid'
   }
   
   return categoriesOrder

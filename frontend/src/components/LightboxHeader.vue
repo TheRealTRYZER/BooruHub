@@ -49,9 +49,8 @@ const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
 <style scoped>
 .lightbox-header {
   position: absolute;
-  top: 20px; left: 24px;
-  background: rgba(255, 255, 255, 0.05);
-  backdrop-filter: blur(12px);
+  top: calc(20px + var(--inset-top)); left: 24px;
+  background: rgba(0, 0, 0, 0.78);
   border: 1px solid rgba(255, 255, 255, 0.08);
   padding: 10px 18px;
   border-radius: 20px;
@@ -79,7 +78,7 @@ const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
 }
 .lightbox-site-badge.danbooru { background: var(--danbooru); color: #fff; }
 .lightbox-site-badge.e621 { background: var(--e621); color: #fff; }
-.lightbox-site-badge.rule34 { background: var(--rule34); color: #222; }
+.lightbox-site-badge.rule34 { background: var(--rule34); color: #04201c; }
 
 .lightbox-site-badge.interactive-badge {
   cursor: pointer;
@@ -90,7 +89,7 @@ const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
   filter: brightness(1.2);
 }
 .lightbox-site-badge.interactive-badge.active-site {
-  box-shadow: 0 0 0 2px rgba(15, 15, 20, 0.6), 0 0 0 3px var(--accent);
+  box-shadow: 0 0 0 2px rgba(0, 0, 0, 0.8), 0 0 0 3px #fff;
   transform: scale(1.1);
   font-weight: 800;
   z-index: 2;
@@ -103,9 +102,9 @@ const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
   border-radius: 4px;
   text-transform: uppercase;
 }
-.lightbox-rating.safe { background: rgba(52, 211, 153, 0.15); color: #6ee7b7; border: 1px solid rgba(52, 211, 153, 0.3); }
-.lightbox-rating.questionable { background: rgba(251, 146, 60, 0.15); color: #fdba74; border: 1px solid rgba(251, 146, 60, 0.3); }
-.lightbox-rating.explicit { background: rgba(244, 63, 94, 0.15); color: #fb7185; border: 1px solid rgba(244, 63, 94, 0.3); }
+.lightbox-rating.safe { background: transparent; color: var(--rating-safe); border: 1px solid var(--rating-safe); }
+.lightbox-rating.questionable { background: transparent; color: var(--rating-questionable); border: 1px solid var(--rating-questionable); }
+.lightbox-rating.explicit { background: transparent; color: var(--rating-explicit); border: 1px solid var(--rating-explicit); }
 .lightbox-rating.unknown { background: rgba(156, 163, 175, 0.15); color: #d1d5db; border: 1px solid rgba(156, 163, 175, 0.3); }
 
 .lightbox-score {
@@ -118,7 +117,7 @@ const ratingLabel = computed(() => RATING_LABELS[ratingClass.value] || '?')
 
 @media (max-width: 768px) {
   .lightbox-header {
-    top: 12px; left: 12px;
+    top: calc(12px + var(--inset-top)); left: 12px;
     padding: 6px 12px;
     font-size: 11px;
     gap: 12px;

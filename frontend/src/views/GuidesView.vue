@@ -92,7 +92,7 @@
             <p class="section-desc">Доступ к API позволяет увеличить лимит запросов и получать доступ к контенту, скрытому для гостей.</p>
             
             <div class="info-box highlight" style="margin-bottom:24px;">
-              <strong>🔐 Безопасность:</strong> Все ваши API-ключи хранятся в <strong>зашифрованном виде</strong> (AES-256) на стороне сервера. Мы никогда не передаем их третьим лицам и используем только для авторизации ваших запросов к Booru.
+              <strong>Безопасность:</strong> Все ваши API-ключи хранятся в <strong>зашифрованном виде</strong> (AES-256) на стороне сервера. Мы никогда не передаем их третьим лицам и используем только для авторизации ваших запросов к Booru.
             </div>
 
             <div class="step-card">
@@ -122,7 +122,7 @@
             <p class="section-desc">API access allows increasing request limits and accessing content hidden from guests.</p>
 
             <div class="info-box highlight" style="margin-bottom:24px;">
-              <strong>🔐 Security:</strong> All your API keys are stored in <strong>encrypted format</strong> (AES-256) on the server side. We never share them and only use them for authenticating your requests to Booru sites.
+              <strong>Security:</strong> All your API keys are stored in <strong>encrypted format</strong> (AES-256) on the server side. We never share them and only use them for authenticating your requests to Booru sites.
             </div>
 
             <div class="step-card">

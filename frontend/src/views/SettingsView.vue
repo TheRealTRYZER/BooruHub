@@ -15,6 +15,36 @@
     <div class="settings-layout">
       <div class="settings-col">
         <div class="settings-section">
+          <div class="settings-title"><AppIcon name="sparkle" :size="18" /> {{ lang.t('style_title') }}</div>
+          <div class="style-picker" role="radiogroup" :aria-label="lang.t('style_title')">
+            <button v-for="st in STYLE_META" :key="st.id" class="style-option"
+                    :class="{ active: themeStore.style === st.id }"
+                    role="radio" :aria-checked="themeStore.style === st.id"
+                    :data-style-option="st.id"
+                    @click="themeStore.setStyle(st.id)">
+              <span class="style-swatch" :style="{ background: st.swatch[0], borderColor: st.swatch[1] }">
+                <span class="style-swatch-dot" :style="{ background: st.swatch[1] }"></span>
+                <span class="style-swatch-dot" :style="{ background: st.swatch[2] }"></span>
+              </span>
+              <span class="style-name">{{ st.name }}</span>
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-section">
+          <div class="settings-title"><AppIcon name="image" :size="18" /> {{ lang.t('background_title') }}</div>
+          <div class="bg-picker" role="radiogroup" :aria-label="lang.t('background_title')">
+            <button v-for="b in BACKGROUND_CHOICES" :key="b" class="bg-option"
+                    :class="{ active: themeStore.background === b }"
+                    role="radio" :aria-checked="themeStore.background === b"
+                    :data-bg-option="b"
+                    @click="themeStore.setBackground(b)">
+              {{ lang.t(('bg_' + b) as TranslationKey) }}
+            </button>
+          </div>
+        </div>
+
+        <div class="settings-section">
           <div class="settings-title">👤 {{ lang.t('profile') }}</div>
           <div style="display:flex,align-items:center;gap:16px;margin-bottom:16px;">
             <div class="nav-avatar" style="width:48px;height:48px;font-size:1.2rem;">
@@ -258,9 +288,12 @@ import {
   apiDeleteHistory as apiDeleteHistoryFn, apiGetEventCount, apiUpdateConsent
 } from '../api'
 import { useTagSuggestions } from '../composables/useTagSuggestions'
-import type { TagMapping, BlacklistRule, ApiKeysStatus, ApiKeysUpdate } from '../types'
+import AppIcon from '../components/AppIcon.vue'
+import { useThemeStore, STYLE_META, BACKGROUND_CHOICES } from '../stores/theme'
+import type { TagMapping, BlacklistRule, ApiKeysStatus, ApiKeysUpdate, TranslationKey } from '../types'
 
 const auth = useAuthStore()
+const themeStore = useThemeStore()
 const toast = useToastStore()
 const lang = useLangStore()
 const feed = useFeedStore()

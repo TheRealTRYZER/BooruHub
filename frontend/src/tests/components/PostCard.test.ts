@@ -78,7 +78,7 @@ describe('PostCard.vue', () => {
     await wrapper.vm.$nextTick()
 
     const favBtn = wrapper.find('.post-card-fav')
-    expect(favBtn.text()).toBe('🤍')
+    expect(favBtn.find('svg.app-icon').attributes('fill')).toBe('none')
     await favBtn.trigger('click')
   })
 
