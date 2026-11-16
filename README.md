@@ -1,9 +1,5 @@
 # BooruHub
 
-**Live Demo:** [http://79.137.184.53:8080/](http://79.137.184.53:8080/)
-
----
-
 ## Features
 
 - **Multi-source Search**: Aggregate results from Danbooru, e621, Rule34, and others simultaneously.
